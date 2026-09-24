@@ -1,0 +1,311 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  overflow: hidden;
+}
+
+.app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+}
+
+/* TOP BAR */
+.topbar {
+  height: 55px;
+  min-height: 55px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+  background: #252525;
+  border-bottom: 1px solid #444;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: bold;
+  margin-right: 20px;
+  color: white;
+}
+
+.topbar button {
+  padding: 8px 14px;
+  color: white;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.topbar button:hover {
+  background: #444;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* MAIN */
+.main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* LEFT TOOLBAR */
+.toolbar {
+  width: 70px;
+  min-width: 70px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #252525;
+  border-right: 1px solid #444;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* TOOL BUTTON */
+.toolbar button {
+  width: 54px;
+  min-width: 54px;
+  height: 44px;
+  min-height: 44px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 4px;
+  margin: 0;
+
+  border: 1px solid #555;
+  background: #333;
+  color: white;
+
+  border-radius: 4px;
+  cursor: pointer;
+
+  font-size: 11px;
+  line-height: 1.1;
+
+  white-space: normal;
+  word-break: break-word;
+
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.toolbar button:hover {
+  background: #444;
+}
+
+.toolbar button.active {
+  background: #0078d4;
+  border-color: #0088ff;
+}
+
+/* WORKSPACE */
+.workspace {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: #111;
+}
+
+.grid {
+  position: absolute;
+  left: -10000000px;
+  top: -10000000px;
+
+  width: 20000000px;
+  height: 20000000px;
+
+  pointer-events: none;
+
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.08) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.08) 1px,
+      transparent 1px
+    );
+
+  background-size:
+    25px 25px;
+
+  background-position:
+    0 0;
+}
+.welcome {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+
+  transform: translate(-50%, -50%);
+
+  text-align: center;
+  color: white;
+
+  pointer-events: none;
+}
+
+.welcome h1 {
+  margin: 0;
+  font-size: 42px;
+}
+
+.welcome p {
+  color: #aaa;
+}
+
+/* STATUS BAR */
+.statusbar {
+  height: 32px;
+  min-height: 32px;
+
+  display: flex;
+  align-items: center;
+  gap: 25px;
+
+  padding: 0 15px;
+
+  background: #252525;
+  border-top: 1px solid #444;
+
+  color: #bbb;
+  font-size: 13px;
+}
+
+/* INFINITE CAD BACKGROUND */
+.workspace {
+  position: relative;
+  background-color: #111111;
+
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 25px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 25px
+    );
+
+  background-size: 25px 25px;
+  background-position: 0 0;
+}
+
+/* =========================
+   MOBILE CAD TOUCH
+========================= */
+
+.workspace {
+  touch-action: none;
+  overflow: hidden;
+}
+
+.workspace canvas {
+  touch-action: none;
+}
+
+/* =========================
+   MOBILE TOOLBAR
+========================= */
+
+@media (max-width: 768px) {
+  .toolbar {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 64px;
+
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    gap: 6px;
+    padding: 6px;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    z-index: 1000;
+
+    border-right: none;
+    border-top: 1px solid #333;
+  }
+
+  .toolbar button {
+    flex: 0 0 auto;
+    min-width: 52px;
+    height: 52px;
+    font-size: 18px;
+  }
+}
+
+/* =========================
+   MOBILE TOPBAR
+========================= */
+
+@media (max-width: 768px) {
+  .topbar {
+    height: 56px;
+    padding: 6px 8px;
+
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .topbar button {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .logo {
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .spacer {
+    display: none;
+  }
+}
+@media (max-width: 768px) {
+  button,
+  canvas {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
