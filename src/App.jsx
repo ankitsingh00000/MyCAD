@@ -16,6 +16,9 @@ import {
 import "./App.css";
 
 function App() {
+
+  const [commandText, setCommandText] =
+  useState("");
   const [tool, setTool] = useState("select");
 
   const [objects, setObjects] = useState([]);
@@ -16259,6 +16262,216 @@ return (
          
 
         </main>
+
+        <div className="mobile-command-bar">
+
+  <div className="mobile-command-status">
+    Specify next point or [Undo]
+  </div>
+
+  <div className="mobile-command-title">
+    <strong>
+      {tool === "select"
+        ? "SELECT"
+        : tool.toUpperCase()}
+    </strong>
+
+    <span>
+      {" "}Specify next point or
+    </span>
+  </div>
+
+  <div className="mobile-quick-actions">
+
+  <button
+    onClick={() =>
+      changeTool("select")
+    }
+  >
+    Select
+  </button>
+
+  <button
+    onClick={() => {
+      const query =
+        window.prompt(
+          "Find object type:",
+          "line"
+        );
+
+      if (
+        !query ||
+        !query.trim()
+      ) {
+        return;
+      }
+
+      const search =
+        query
+          .trim()
+          .toLowerCase();
+
+      const index =
+        objects.findIndex(
+          (object) =>
+            object.type
+              ?.toLowerCase()
+              .includes(search) ||
+            (
+              object.text || ""
+            )
+              .toLowerCase()
+              .includes(search)
+        );
+
+      if (index === -1) {
+        window.alert(
+          "Object not found."
+        );
+        return;
+      }
+
+      setSelectedIndex(index);
+
+      setSelectedIndexes([
+        index,
+      ]);
+
+      setTool("select");
+    }}
+  >
+    🔍 Find
+  </button>
+
+  <button
+    onClick={() =>
+      changeTool("measure")
+    }
+  >
+    📏 Measure
+  </button>
+
+  <button
+    onClick={() =>
+      changeTool("line")
+    }
+  >
+    🖊 Draw
+  </button>
+
+</div>
+
+  <div className="mobile-command-controls">
+
+    <button
+      onClick={undo}
+      disabled={past.length === 0}
+    >
+      Undo
+    </button>
+
+    <button
+      onClick={() =>
+        changeTool("select")
+      }
+    >
+      esc
+    </button>
+
+    <button
+  onClick={() => {
+    const query = window.prompt(
+      "Find object type:",
+      "line"
+    );
+
+    if (!query || !query.trim()) {
+      return;
+    }
+
+    const search = query.trim().toLowerCase();
+
+    const index = objects.findIndex(
+      (object) =>
+        object.type?.toLowerCase().includes(search) ||
+        (object.text || "")
+          .toLowerCase()
+          .includes(search)
+    );
+
+    if (index === -1) {
+      window.alert("Object not found.");
+      return;
+    }
+
+    setSelectedIndex(index);
+    setSelectedIndexes([index]);
+    setTool("select");
+  }}
+>
+  🔍 Find
+</button>
+
+    <input
+  type="text"
+  value={commandText}
+  onChange={(e) =>
+    setCommandText(e.target.value)
+  }
+  placeholder="Type a command"
+/>
+
+    <button>
+      Enter
+    </button>
+
+  </div>
+
+</div>
+
+{commandText.trim() !== "" && (
+  <div className="command-suggestions">
+
+    {[
+      "Find",
+      "Line",
+      "Circle",
+      "Rectangle",
+      "Polyline",
+      "Measure",
+    ]
+      .filter((command) =>
+        command
+          .toLowerCase()
+          .includes(
+            commandText
+              .trim()
+              .toLowerCase()
+          )
+      )
+      .map((command) => (
+        <button
+          key={command}
+          onClick={() => {
+            if (command === "Find") {
+              window.alert(
+                "Find command selected"
+              );
+            } else {
+              changeTool(
+                command.toLowerCase()
+              );
+            }
+
+            setCommandText("");
+          }}
+        >
+          {command}
+        </button>
+      ))}
+
+  </div>
+)}
 
       </div>
 
