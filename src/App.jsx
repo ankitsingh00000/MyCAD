@@ -3441,10 +3441,8 @@ if (tool === "polyline") {
     ...prev,
     newLine,
   ]);
-setLineStart({
-  x: finalX,
-  y: finalY,
-});
+ 
+  setLineStart(null);
 setPendingLinePoint(null);
 setLineLengthInput("");
 setShowLineInput(false);
@@ -3452,13 +3450,20 @@ setLinePreview(null);
 
 setSnapPoint(null);
 setSnapType("");
+
+setIsDrawing(false);
+
+actionStartRef.current = null;
+
 if (
   document.activeElement instanceof
   HTMLElement
 ) {
   document.activeElement.blur();
 }
-};
+
+/* LINE COMPLETE */
+setTool("select");
 
   /* =========================
      MOUSE DOWN
@@ -23376,6 +23381,20 @@ if (
   setIsDrawing(false);
 }
   setTool(newTool);
+  if (newTool === "line") {
+  const selectedUnit = window.prompt(
+    "Line unit choose karo:\nmm = millimeter\ninch = inch\nft-in = feet + inch",
+    unit
+  );
+
+  if (
+    selectedUnit === "mm" ||
+    selectedUnit === "inch" ||
+    selectedUnit === "ft-in"
+  ) {
+    setUnit(selectedUnit);
+  }
+}
 
   const drawingTools = [
   "line",
@@ -25410,8 +25429,8 @@ for (
       ]}
       stroke={
         isMajor
-          ? "#303b4a"
-          : "#202a35"
+          ? "#3d4652"
+: "#2a323d"
       }
       strokeWidth={
         1 / scale
@@ -25447,8 +25466,8 @@ for (
       ]}
       stroke={
         isMajor
-          ? "#303b4a"
-          : "#202a35"
+          ? "#3d4652"
+: "#2a323d"
       }
       strokeWidth={
         1 / scale
