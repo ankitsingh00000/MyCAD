@@ -4722,17 +4722,16 @@ return;
 }
 
 if (tool === "line") {
+  // =========================
+  // FIRST TAP = START POINT
+  // =========================
   if (!lineStart) {
     actionStartRef.current = {
       objects: [...objects],
       measurements: [...measurements],
     };
 
-    setLineStart({
-      x,
-      y,
-    });
-
+    setLineStart({ x, y });
     setIsDrawing(true);
 
     setLinePreview({
@@ -4745,60 +4744,86 @@ if (tool === "line") {
     return;
   }
 
+  // =========================
+  // SECOND TAP = FIX LINE
+  // =========================
+
   let finalX = x;
   let finalY = y;
 
+  // ORTHO
   if (orthoEnabled) {
-    const orthoPoint = applyOrtho(
-      lineStart.x,
-      lineStart.y,
-      finalX,
-      finalY
-    );
+    const dx = x - lineStart.x;
+    const dy = y - lineStart.y;
 
-    finalX = orthoPoint.x;
-    finalY = orthoPoint.y;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      finalX = x;
+      finalY = lineStart.y;
+    } else {
+      finalX = lineStart.x;
+      finalY = y;
+    }
   }
 
+  // POLAR
   if (polarEnabled) {
-    const polarPoint = applyPolar(
+    const dx = x - lineStart.x;
+    const dy = y - lineStart.y;
+
+    const distance = Math.sqrt(
+      dx * dx + dy * dy
+    );
+
+    const angle =
+      Math.atan2(dy, dx) * (180 / Math.PI);
+
+    const snappedAngle =
+      Math.round(angle / polarAngle) * polarAngle;
+
+    const radians =
+      snappedAngle * (Math.PI / 180);
+
+    finalX =
+      lineStart.x +
+      distance * Math.cos(radians);
+
+    finalY =
+      lineStart.y +
+      distance * Math.sin(radians);
+  }
+
+  const newLine = {
+    type: "line",
+    points: [
       lineStart.x,
       lineStart.y,
       finalX,
-      finalY
+      finalY,
+    ],
+    color: objectColor,
+    strokeWidth,
+    layerId: activeLayerId,
+  };
+
+  setObjects((prev) => [
+    ...prev,
+    newLine,
+  ]);
+
+  if (actionStartRef.current) {
+    saveHistory(
+      actionStartRef.current.objects,
+      actionStartRef.current.measurements
     );
-
-    finalX = polarPoint.x;
-    finalY = polarPoint.y;
   }
 
-  setPendingLinePoint({
-    x: finalX,
-    y: finalY,
-  });
+  // RESET DRAWING STATE
+  setLineStart(null);
+  setLinePreview(null);
+  setIsDrawing(false);
+  setSnapPoint(null);
 
-  const dx =
-    finalX - lineStart.x;
-
-  const dy =
-    finalY - lineStart.y;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
+  actionStartRef.current = null;
 
   return;
 }
