@@ -4733,79 +4733,74 @@ if (tool === "line") {
       y,
     });
 
+    setIsDrawing(true);
+
+    setLinePreview({
+      x1: x,
+      y1: y,
+      x2: x,
+      y2: y,
+    });
+
     return;
   }
 
- let finalX = x;
-let finalY = y;
+  let finalX = x;
+  let finalY = y;
 
-/* =========================
-   ORTHO FINAL POINT
-========================= */
+  if (orthoEnabled) {
+    const orthoPoint = applyOrtho(
+      lineStart.x,
+      lineStart.y,
+      finalX,
+      finalY
+    );
 
-if (orthoEnabled) {
-  const orthoPoint = applyOrtho(
-    lineStart.x,
-    lineStart.y,
-    finalX,
-    finalY
+    finalX = orthoPoint.x;
+    finalY = orthoPoint.y;
+  }
+
+  if (polarEnabled) {
+    const polarPoint = applyPolar(
+      lineStart.x,
+      lineStart.y,
+      finalX,
+      finalY
+    );
+
+    finalX = polarPoint.x;
+    finalY = polarPoint.y;
+  }
+
+  setPendingLinePoint({
+    x: finalX,
+    y: finalY,
+  });
+
+  const dx =
+    finalX - lineStart.x;
+
+  const dy =
+    finalY - lineStart.y;
+
+  const distance =
+    Math.hypot(dx, dy);
+
+  let angle =
+    Math.atan2(dy, dx) *
+    (180 / Math.PI);
+
+  if (angle < 0) {
+    angle += 360;
+  }
+
+  setLineLengthInput(
+    `${distance.toFixed(2)}<${angle.toFixed(1)}`
   );
 
-  finalX = orthoPoint.x;
-  finalY = orthoPoint.y;
-}
+  setShowLineInput(true);
 
-/* =========================
-   POLAR FINAL POINT
-========================= */
-
-if (polarEnabled) {
-  const polarPoint = applyPolar(
-    lineStart.x,
-    lineStart.y,
-    finalX,
-    finalY
-  );
-
-  finalX = polarPoint.x;
-  finalY = polarPoint.y;
-}
-
-const dx =
-  finalX - lineStart.x;
-
-const dy =
-  finalY - lineStart.y;
-
-const currentLength =
-  Math.hypot(
-    dx,
-    dy
-  );
-
-  /* =========================
-   SHOW ON-SCREEN LENGTH INPUT
-========================= */
-
-setPendingLinePoint({
-  x: finalX,
-  y: finalY,
-});
-
-let currentAngle =
-  Math.atan2(dy, dx) *
-  (180 / Math.PI);
-
-if (currentAngle < 0) {
-  currentAngle += 360;
-}
-
-setLineLengthInput(
-  `${Math.round(currentLength)}<${currentAngle.toFixed(1)}`
-);
-setShowLineInput(true);
-
-return;
+  return;
 }
 
     /* =========================
