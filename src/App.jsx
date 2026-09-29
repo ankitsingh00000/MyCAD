@@ -3463,7 +3463,7 @@ if (
 }
 
 /* LINE COMPLETE */
-setTool("select");
+setTool("select");}
 
   /* =========================
      MOUSE DOWN
