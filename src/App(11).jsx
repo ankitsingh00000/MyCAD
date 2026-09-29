@@ -70,118 +70,6 @@ const [activeLayerId, setActiveLayerId] =
   const [measurements, setMeasurements] =
     useState([]);
 
-    /* =========================
-   CIRCLE GRIP DRAG
-========================= */
-
-const handleCircleGripDragEnd = (
-  index,
-  gripType,
-  e
-) => {
-  const node = e.target;
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedObjects =
-    objects.map((object, objectIndex) => {
-      if (
-        objectIndex !== index ||
-        object.type !== "circle"
-      ) {
-        return object;
-      }
-
-      /* CENTER GRIP */
-      if (gripType === "center") {
-        return {
-          ...object,
-          x: node.x(),
-          y: node.y(),
-        };
-      }
-
-      /* RADIUS GRIP */
-      if (gripType === "radius") {
-        const dx =
-          node.x() - object.x;
-
-        const dy =
-          node.y() - object.y;
-
-        const newRadius =
-          Math.sqrt(
-            dx * dx +
-            dy * dy
-          );
-
-        if (newRadius < 1) {
-          return object;
-        }
-
-        return {
-          ...object,
-          radius: newRadius,
-        };
-      }
-
-      /* TRIM START ANGLE */
-      if (gripType === "trim-start") {
-        const dx =
-          node.x() - object.x;
-
-        const dy =
-          node.y() - object.y;
-
-        const angle =
-          Math.atan2(dy, dx);
-
-        return {
-          ...object,
-          trimStartAngle: angle,
-          trimEnabled: true,
-        };
-      }
-
-      /* TRIM END ANGLE */
-      if (gripType === "trim-end") {
-        const dx =
-          node.x() - object.x;
-
-        const dy =
-          node.y() - object.y;
-
-        const angle =
-          Math.atan2(dy, dx);
-
-        return {
-          ...object,
-          trimEndAngle: angle,
-          trimEnabled: true,
-        };
-      }
-
-      return object;
-    });
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(index);
-
-  setSelectedIndexes([
-    index,
-  ]);
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-};
-
 
     /* =========================
    ASSOCIATIVE CIRCLE DIMENSIONS
@@ -2015,78 +1903,6 @@ const getSnapType = (point) => {
       }
     }
 
-        /* =========================
-       HATCH
-    ========================= */
-    if (
-      object.type === "hatch" &&
-      Number.isFinite(object.x) &&
-      Number.isFinite(object.y) &&
-      Number.isFinite(object.width) &&
-      Number.isFinite(object.height)
-    ) {
-      const left = Math.min(
-        object.x,
-        object.x + object.width
-      );
-
-      const right = Math.max(
-        object.x,
-        object.x + object.width
-      );
-
-      const top = Math.min(
-        object.y,
-        object.y + object.height
-      );
-
-      const bottom = Math.max(
-        object.y,
-        object.y + object.height
-      );
-
-      const midX =
-        (left + right) / 2;
-
-      const midY =
-        (top + bottom) / 2;
-
-      const corners = [
-        { x: left, y: top },
-        { x: right, y: top },
-        { x: right, y: bottom },
-        { x: left, y: bottom },
-      ];
-
-      for (const corner of corners) {
-        if (isNear(point, corner)) {
-          return "CORNER";
-        }
-      }
-
-      const mids = [
-        { x: midX, y: top },
-        { x: midX, y: bottom },
-        { x: left, y: midY },
-        { x: right, y: midY },
-      ];
-
-      for (const mid of mids) {
-        if (isNear(point, mid)) {
-          return "MID";
-        }
-      }
-
-      if (
-        isNear(point, {
-          x: midX,
-          y: midY,
-        })
-      ) {
-        return "CENTER";
-      }
-    }
-
     /* =========================
        ARC
     ========================= */
@@ -2267,16 +2083,10 @@ const snapToObject = (
           Number.isFinite(px) &&
           Number.isFinite(py)
         ) {
-       snapPoints.push({
-  x: px,
-  y: py,
-  snapType:
-    i === 0
-      ? "START"
-      : i === points.length - 2
-        ? "END"
-        : "CORNER",
-});
+          snapPoints.push({
+            x: px,
+            y: py,
+          });
         }
       }
 
@@ -2433,99 +2243,6 @@ const snapToObject = (
       snapPoints.push({
         x: midX,
         y: midY,
-      });
-    }
-
-        /* =========================
-       HATCH
-    ========================= */
-
-    if (
-      object.type === "hatch" &&
-      Number.isFinite(object.x) &&
-      Number.isFinite(object.y) &&
-      Number.isFinite(object.width) &&
-      Number.isFinite(object.height)
-    ) {
-      const left = Math.min(
-        object.x,
-        object.x + object.width
-      );
-
-      const right = Math.max(
-        object.x,
-        object.x + object.width
-      );
-
-      const top = Math.min(
-        object.y,
-        object.y + object.height
-      );
-
-      const bottom = Math.max(
-        object.y,
-        object.y + object.height
-      );
-
-      const midX =
-        (left + right) / 2;
-
-      const midY =
-        (top + bottom) / 2;
-
-      /* CORNERS */
-      snapPoints.push(
-        {
-          x: left,
-          y: top,
-          snapType: "CORNER",
-        },
-        {
-          x: right,
-          y: top,
-          snapType: "CORNER",
-        },
-        {
-          x: right,
-          y: bottom,
-          snapType: "CORNER",
-        },
-        {
-          x: left,
-          y: bottom,
-          snapType: "CORNER",
-        }
-      );
-
-      /* MID POINTS */
-      snapPoints.push(
-        {
-          x: midX,
-          y: top,
-          snapType: "MID",
-        },
-        {
-          x: midX,
-          y: bottom,
-          snapType: "MID",
-        },
-        {
-          x: left,
-          y: midY,
-          snapType: "MID",
-        },
-        {
-          x: right,
-          y: midY,
-          snapType: "MID",
-        }
-      );
-
-      /* CENTER */
-      snapPoints.push({
-        x: midX,
-        y: midY,
-        snapType: "CENTER",
       });
     }
 
@@ -3130,11 +2847,10 @@ const redo = () => {
 };
 
 const parseCadDistance = (valueText) => {
-const value = valueText
-  .trim()
-  .toLowerCase()
-  .replace(/,/g, "")
-  .replace(/^@/, "");
+  const value = valueText
+    .trim()
+    .toLowerCase()
+    .replace(/,/g, "");
 
   let number = parseFloat(value);
 
@@ -3165,10 +2881,7 @@ const value = valueText
 const parseCadAngle = (valueText) => {
   const text = valueText
     .trim()
-    .toLowerCase()
-    .replace(/^@/, "")
-    .replace(/°/g, "")
-    .replace(/deg/g, "");
+    .toLowerCase();
 
   const parts = text.split("<");
 
@@ -3176,18 +2889,15 @@ const parseCadAngle = (valueText) => {
     return null;
   }
 
-  const angle = parseFloat(parts[1]);
+  const angle =
+    parseFloat(parts[1]);
 
   if (!Number.isFinite(angle)) {
     return null;
   }
 
-  const normalizedAngle =
-    ((angle % 360) + 360) % 360;
-
-  return normalizedAngle;
+  return angle;
 };
-
 
 /* =========================
    CONFIRM LINE LENGTH
@@ -3265,159 +2975,6 @@ if (angleInput !== null) {
     uy * length;
 }
 
-if (tool === "polyline") {
-  saveHistory(
-    [...objects],
-    [...measurements]
-  );
-
-  if (
-  isDrawing &&
-  !showLineInput
-) {
-  const currentPolyline =
-    objects[objects.length - 1];
-
-  if (
-    currentPolyline?.type === "polyline" &&
-    currentPolyline.points?.length >= 4
-  ) {
-    const firstX =
-      currentPolyline.points[0];
-
-    const firstY =
-      currentPolyline.points[1];
-
-    const distanceToStart =
-      Math.hypot(
-        x - firstX,
-        y - firstY
-      );
-
-    if (
-      distanceToStart <= snapDistance
-    ) {
-      const previousObjects = [
-        ...objects,
-      ];
-
-      setObjects((prev) => {
-        if (prev.length === 0) {
-          return prev;
-        }
-
-        const updated = [...prev];
-        const index = updated.length - 1;
-        const polyline = updated[index];
-
-        if (
-          !polyline ||
-          polyline.type !== "polyline"
-        ) {
-          return prev;
-        }
-
-        const lastX =
-          polyline.points[
-            polyline.points.length - 2
-          ];
-
-        const lastY =
-          polyline.points[
-            polyline.points.length - 1
-          ];
-
-        const alreadyClosed =
-          Math.abs(lastX - firstX) < 0.001 &&
-          Math.abs(lastY - firstY) < 0.001;
-
-        if (alreadyClosed) {
-          return prev;
-        }
-
-        updated[index] = {
-          ...polyline,
-          points: [
-            ...polyline.points,
-            firstX,
-            firstY,
-          ],
-        };
-
-        return updated;
-      });
-
-      saveHistory(
-        previousObjects,
-        [...measurements]
-      );
-
-      setIsDrawing(false);
-      setLineStart(null);
-      setPendingLinePoint(null);
-      setLinePreview(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-      setSnapPoint(null);
-      setSnapType("");
-      actionStartRef.current = null;
-
-      return;
-    }
-  }
-}
-
-  setObjects((prev) => {
-    if (prev.length === 0) {
-      return prev;
-    }
-
-    const updated = [...prev];
-    const lastIndex =
-      updated.length - 1;
-
-    const lastObject =
-      updated[lastIndex];
-
-    if (
-      !lastObject ||
-      lastObject.type !== "polyline"
-    ) {
-      return prev;
-    }
-
-    updated[lastIndex] = {
-      ...lastObject,
-      points: [
-        ...(lastObject.points || []),
-        finalX,
-        finalY,
-      ],
-    };
-
-    return updated;
-  });
-
-  setLineStart({
-    x: finalX,
-    y: finalY,
-  });
-
-  setPendingLinePoint(null);
-  setLineLengthInput("");
-  setShowLineInput(false);
-  setLinePreview(null);
-
-  if (
-    document.activeElement instanceof
-    HTMLElement
-  ) {
-    document.activeElement.blur();
-  }
-
-  return;
-}
-
   const newLine = {
     type: "line",
     points: [
@@ -3441,17 +2998,11 @@ if (tool === "polyline") {
     ...prev,
     newLine,
   ]);
-setLineStart({
-  x: finalX,
-  y: finalY,
-});
+setLineStart(null);
 setPendingLinePoint(null);
 setLineLengthInput("");
 setShowLineInput(false);
 setLinePreview(null);
-
-setSnapPoint(null);
-setSnapType("");
 if (
   document.activeElement instanceof
   HTMLElement
@@ -3465,17 +3016,6 @@ if (
   ========================= */
 
   const handleMouseDown = (e) => {
-
-    // =========================
-// DOUBLE CLICK = FINISH POLYLINE
-// =========================
-if (
-  tool === "polyline" &&
-  e.evt?.type === "dblclick"
-) {
-  finishPolyline();
-  return;
-}
 
     if (
   e.evt?.type === "mousedown" &&
@@ -3918,15 +3458,11 @@ const y =
 
   return;
 }
-
 if (tool === "polyline") {
   setObjects((prev) => {
     const lastObject =
       prev[prev.length - 1];
 
-    /* =========================
-       CONTINUE POLYLINE
-    ========================= */
     if (
       lastObject &&
       lastObject.type === "polyline" &&
@@ -3951,6 +3487,8 @@ if (tool === "polyline") {
           current.points.length - 1
         ];
 
+      /* POLAR */
+
       if (polarEnabled) {
         const polarPoint =
           applyPolar(
@@ -3960,9 +3498,16 @@ if (tool === "polyline") {
             y
           );
 
-        polyX = polarPoint.x;
-        polyY = polarPoint.y;
-      } else if (orthoEnabled) {
+        polyX =
+          polarPoint.x;
+
+        polyY =
+          polarPoint.y;
+      }
+
+      /* ORTHO */
+
+      else if (orthoEnabled) {
         const orthoPoint =
           applyOrtho(
             startX,
@@ -3971,25 +3516,26 @@ if (tool === "polyline") {
             y
           );
 
-        polyX = orthoPoint.x;
-        polyY = orthoPoint.y;
+        polyX =
+          orthoPoint.x;
+
+        polyY =
+          orthoPoint.y;
       }
 
-      updated[prev.length - 1] = {
-        ...current,
-        points: [
-          ...current.points,
-          polyX,
-          polyY,
-        ],
-      };
+      current.points = [
+        ...current.points,
+        polyX,
+        polyY,
+      ];
+
+      updated[
+        updated.length - 1
+      ] = current;
 
       return updated;
     }
 
-    /* =========================
-       START NEW POLYLINE
-    ========================= */
     return [
       ...prev,
       {
@@ -4008,18 +3554,9 @@ if (tool === "polyline") {
 
   setIsDrawing(true);
 
-  setLineStart({
-    x,
-    y,
-  });
-
-  setPendingLinePoint(null);
-  setLinePreview(null);
-  setShowLineInput(false);
-  setLineLengthInput("");
-
   return;
 }
+
 /* =========================
    DIAMETER DIMENSION
 ========================= */
@@ -4883,285 +4420,6 @@ if (tool === "hatch") {
   return;
 }
 
-/* =========================
-   HATCH PREVIEW / RESIZE
-========================= */
-
-if (tool === "hatch" && isDrawing) {
-  setObjects((prev) => {
-    if (prev.length === 0) {
-      return prev;
-    }
-
-    const lastIndex = prev.length - 1;
-    const hatch = prev[lastIndex];
-
-    if (!hatch || hatch.type !== "hatch") {
-      return prev;
-    }
-
-    const width = x - hatch.x;
-    const height = y - hatch.y;
-
-    return prev.map((object, index) =>
-      index === lastIndex
-        ? {
-            ...object,
-            width,
-            height,
-          }
-        : object
-    );
-  });
-
-  return;
-}
-
-/* =========================
-   HATCH
-========================= */
-if (object.type === "hatch") {
-  const x = object.x || 0;
-  const y = object.y || 0;
-
-  const width = object.width || 0;
-  const height = object.height || 0;
-
-  const left = Math.min(x, x + width);
-  const right = Math.max(x, x + width);
-  const top = Math.min(y, y + height);
-  const bottom = Math.max(y, y + height);
-
-  const spacing = Math.max(
-    4,
-    Number(object.hatchSpacing) || 12
-  );
-
-  const angle =
-  (
-    (Number(object.hatchAngle) || 45) +
-    (Number(object.rotation) || 0)
-  ) *
-  (Math.PI / 180);
-
-  const dirX = Math.cos(angle);
-  const dirY = Math.sin(angle);
-
-  const normalX = -dirY;
-  const normalY = dirX;
-
-  const centerX =
-    (left + right) / 2;
-
-  const centerY =
-    (top + bottom) / 2;
-
-  const diagonal =
-    Math.hypot(
-      right - left,
-      bottom - top
-    ) * 2 + spacing * 4;
-
-  const hatchLines = [];
-
-  for (
-    let offset = -diagonal;
-    offset <= diagonal;
-    offset += spacing
-  ) {
-    const cx =
-      centerX +
-      normalX * offset;
-
-    const cy =
-      centerY +
-      normalY * offset;
-
-    hatchLines.push(
-      <Line
-        key={`hatch-${index}-${Math.round(offset)}`}
-        points={[
-          cx - dirX * diagonal,
-          cy - dirY * diagonal,
-          cx + dirX * diagonal,
-          cy + dirY * diagonal,
-        ]}
-        stroke={
-          object.hatchColor ||
-          "#00aaff"
-        }
-        strokeWidth={
-          (object.strokeWidth || 1) /
-          scale
-        }
-        listening={false}
-      />
-    );
-  }
-
-  return (
-    <React.Fragment key={index}>
-      <Rect
-        {...commonProps}
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        rotation={object.rotation || 0}
-        fill="transparent"
-        stroke={
-          selectedIndex === index
-            ? "yellow"
-            : object.color || "#ffffff"
-        }
-        strokeWidth={
-          selectedIndex === index
-            ? 3
-            : object.strokeWidth || 1
-        }
-        hitStrokeWidth={15}
-      />
-
-      <Group
-        listening={false}
-        clipX={left}
-        clipY={top}
-        clipWidth={right - left}
-        clipHeight={bottom - top}
-      >
-        {hatchLines}
-      </Group>
-
-      {selectedIndex === index && (
-        <>
-          <Circle
-            x={x}
-            y={y}
-            radius={6}
-            fill="#00aaff"
-            stroke="white"
-            strokeWidth={2}
-            draggable
-            onMouseDown={(e) => {
-              e.cancelBubble = true;
-            }}
-            onDragEnd={(e) => {
-              const node = e.target;
-
-              const newX = node.x();
-              const newY = node.y();
-
-              const previousObjects = [
-                ...objects,
-              ];
-
-              setObjects(
-                objects.map(
-                  (item, itemIndex) =>
-                    itemIndex === index
-                      ? {
-                          ...item,
-                          x: newX,
-                          y: newY,
-                        }
-                      : item
-                )
-              );
-
-              saveHistory(
-                previousObjects,
-                [...measurements]
-              );
-            }}
-          />
-
-          <Circle
-            x={x + width}
-            y={y + height}
-            radius={6}
-            fill="#00aaff"
-            stroke="white"
-            strokeWidth={2}
-            draggable
-            onMouseDown={(e) => {
-              e.cancelBubble = true;
-            }}
-            onDragEnd={(e) => {
-              const node = e.target;
-
-              const newWidth =
-                node.x() - x;
-
-              const newHeight =
-                node.y() - y;
-
-              const previousObjects = [
-                ...objects,
-              ];
-
-              setObjects(
-                objects.map(
-                  (item, itemIndex) =>
-                    itemIndex === index
-                      ? {
-                          ...item,
-                          width: newWidth,
-                          height: newHeight,
-                        }
-                      : item
-                )
-              );
-
-              saveHistory(
-                previousObjects,
-                [...measurements]
-              );
-            }}
-          />
-        </>
-      )}
-    </React.Fragment>
-  );
-}
-
-/* =========================
-   HATCH FINISH
-========================= */
-
-if (tool === "hatch") {
-  const lastIndex = objects.length - 1;
-  const hatch = objects[lastIndex];
-
-  if (
-    hatch &&
-    hatch.type === "hatch"
-  ) {
-    if (
-      Math.abs(hatch.width) < 5 ||
-      Math.abs(hatch.height) < 5
-    ) {
-      setObjects((prev) =>
-        prev.filter(
-          (_, index) =>
-            index !== lastIndex
-        )
-      );
-    } else {
-      setSelectedIndex(lastIndex);
-      setSelectedIndexes([lastIndex]);
-
-      saveHistory(
-        actionStartRef.current?.objects ||
-          objects,
-        actionStartRef.current?.measurements ||
-          measurements
-      );
-    }
-  }
-
-  setIsDrawing(false);
-  return;
-}
 
   };
 
@@ -5268,7 +4526,7 @@ const snappedPoint =
    LINE LIVE PREVIEW
 ========================= */
 if (
-  (tool === "line" || tool === "polyline") &&
+  tool === "line" &&
   lineStart &&
   !showLineInput
 ) {
@@ -5314,79 +4572,6 @@ if (
     y2: previewY,
   });
   return;
-}
-
-{/* POLYLINE LIVE PREVIEW */}
-
-if (
-  tool === "polyline" &&
-  lineStart &&
-  !showLineInput &&
-  objects.length > 0
-) {
-  const lastObject =
-    objects[objects.length - 1];
-
-  if (
-    lastObject &&
-    lastObject.type === "polyline" &&
-    lastObject.points?.length >= 2
-  ) {
-    const startX =
-      lastObject.points[
-        lastObject.points.length - 2
-      ];
-
-    const startY =
-      lastObject.points[
-        lastObject.points.length - 1
-      ];
-
-    let previewX =
-      snappedPoint.x;
-
-    let previewY =
-      snappedPoint.y;
-
-    if (orthoEnabled) {
-      const orthoPoint =
-        applyOrtho(
-          startX,
-          startY,
-          previewX,
-          previewY
-        );
-
-      previewX =
-        orthoPoint.x;
-
-      previewY =
-        orthoPoint.y;
-    } else if (polarEnabled) {
-      const polarPoint =
-        applyPolar(
-          startX,
-          startY,
-          previewX,
-          previewY
-        );
-
-      previewX =
-        polarPoint.x;
-
-      previewY =
-        polarPoint.y;
-    }
-
-    setLinePreview({
-      x1: startX,
-      y1: startY,
-      x2: previewX,
-      y2: previewY,
-    });
-
-    return;
-  }
 }
 
 if (!isDrawing) {
@@ -5471,6 +4656,40 @@ if (current.type === "line") {
       if (
         current.type ===
         "rectangle"
+      ) {
+        const startX =
+          current.x;
+
+        const startY =
+          current.y;
+
+        current.x =
+          Math.min(
+            startX,
+            x
+          );
+
+        current.y =
+          Math.min(
+            startY,
+            y
+          );
+
+        current.width =
+          Math.abs(
+            x - startX
+          );
+
+        current.height =
+          Math.abs(
+            y - startY
+          );
+      }
+
+      /* HATCH */
+      if (
+        current.type ===
+        "hatch"
       ) {
         const startX =
           current.x;
@@ -5887,151 +5106,6 @@ const handleTextGripDragEnd = (
   );
 };
 
-const getObjectBounds = (object) => {
-  if (!object) return null;
-
-  /* LINE */
-  if (
-    object.type === "line" &&
-    object.points?.length >= 4
-  ) {
-    const xs = [
-      object.points[0],
-      object.points[2],
-    ];
-
-    const ys = [
-      object.points[1],
-      object.points[3],
-    ];
-
-    return {
-      left: Math.min(...xs),
-      right: Math.max(...xs),
-      top: Math.min(...ys),
-      bottom: Math.max(...ys),
-    };
-  }
-
-  /* POLYLINE */
-  if (
-    object.type === "polyline" &&
-    object.points?.length >= 2
-  ) {
-    const xs = [];
-    const ys = [];
-
-    for (
-      let i = 0;
-      i < object.points.length;
-      i += 2
-    ) {
-      xs.push(object.points[i]);
-      ys.push(object.points[i + 1]);
-    }
-
-    return {
-      left: Math.min(...xs),
-      right: Math.max(...xs),
-      top: Math.min(...ys),
-      bottom: Math.max(...ys),
-    };
-  }
-
-  /* CIRCLE */
-  if (object.type === "circle") {
-    const radius =
-      Number(object.radius) || 0;
-
-    return {
-      left: object.x - radius,
-      right: object.x + radius,
-      top: object.y - radius,
-      bottom: object.y + radius,
-    };
-  }
-
-  /* RECTANGLE */
-  if (object.type === "rectangle") {
-    return {
-      left: Math.min(
-        object.x,
-        object.x + object.width
-      ),
-      right: Math.max(
-        object.x,
-        object.x + object.width
-      ),
-      top: Math.min(
-        object.y,
-        object.y + object.height
-      ),
-      bottom: Math.max(
-        object.y,
-        object.y + object.height
-      ),
-    };
-  }
-
-  /* HATCH */
-  if (object.type === "hatch") {
-    return {
-      left: Math.min(
-        object.x,
-        object.x + object.width
-      ),
-      right: Math.max(
-        object.x,
-        object.x + object.width
-      ),
-      top: Math.min(
-        object.y,
-        object.y + object.height
-      ),
-      bottom: Math.max(
-        object.y,
-        object.y + object.height
-      ),
-    };
-  }
-
-  /* ARC */
-  if (object.type === "arc") {
-    const radius =
-      Math.max(
-        20,
-        Number(object.radius) || 0
-      );
-
-    return {
-      left: object.x - radius,
-      right: object.x + radius,
-      top: object.y - radius,
-      bottom: object.y + radius,
-    };
-  }
-
-  /* TEXT */
-  if (object.type === "text") {
-    const fontSize =
-      Number(object.fontSize) || 24;
-
-    const textWidth =
-      (object.text || "").length *
-      fontSize *
-      0.6;
-
-    return {
-      left: object.x,
-      right: object.x + textWidth,
-      top: object.y,
-      bottom: object.y + fontSize,
-    };
-  }
-
-  return null;
-};
-
   /* =========================
      MOUSE UP
   ========================= */
@@ -6132,6 +5206,56 @@ if (
   return;
 }
 
+/* =========================
+   FINISH HATCH
+========================= */
+if (tool === "hatch") {
+  const lastIndex =
+    objects.length - 1;
+
+  const hatch =
+    objects[lastIndex];
+
+  if (
+    hatch &&
+    hatch.type === "hatch"
+  ) {
+    if (
+      Math.abs(hatch.width) < 5 ||
+      Math.abs(hatch.height) < 5
+    ) {
+      setObjects((prev) =>
+        prev.filter(
+          (_, index) =>
+            index !== lastIndex
+        )
+      );
+    } else {
+      setSelectedIndex(
+        lastIndex
+      );
+
+      setSelectedIndexes([
+        lastIndex,
+      ]);
+
+      saveHistory(
+        actionStartRef.current?.objects ||
+          objects,
+        actionStartRef.current?.measurements ||
+          measurements
+      );
+    }
+  }
+
+  actionStartRef.current =
+    null;
+
+  setIsDrawing(false);
+  setSnapPoint(null);
+  return;
+}
+
   if (!isDrawing) return;
 
 
@@ -6156,11 +5280,6 @@ const finishPolyline = () => {
     lastObject.type !== "polyline"
   ) {
     setIsDrawing(false);
-    setLineStart(null);
-    setPendingLinePoint(null);
-    setLinePreview(null);
-    setLineLengthInput("");
-    setShowLineInput(false);
     actionStartRef.current = null;
     return;
   }
@@ -6173,11 +5292,6 @@ const finishPolyline = () => {
     );
 
     setIsDrawing(false);
-    setLineStart(null);
-    setPendingLinePoint(null);
-    setLinePreview(null);
-    setLineLengthInput("");
-    setShowLineInput(false);
     actionStartRef.current = null;
     return;
   }
@@ -6190,12 +5304,6 @@ const finishPolyline = () => {
   }
 
   setIsDrawing(false);
-
-  setLineStart(null);
-  setPendingLinePoint(null);
-  setLinePreview(null);
-  setLineLengthInput("");
-  setShowLineInput(false);
 
   actionStartRef.current = null;
 
@@ -6231,215 +5339,6 @@ const handleKeyDown = (e) => {
 
   const key =
     e.key.toLowerCase();
-
-    // =========================
-// U = UNDO LAST POLYLINE SEGMENT
-// =========================
-if (
-  key === "u" &&
-  !e.ctrlKey &&
-  tool === "polyline" &&
-  isDrawing &&
-  !showLineInput
-) {
-  e.preventDefault();
-
-  const lastIndex =
-    objects.length - 1;
-
-  const lastObject =
-    objects[lastIndex];
-
-  if (
-    !lastObject ||
-    lastObject.type !== "polyline" ||
-    !Array.isArray(lastObject.points)
-  ) {
-    return;
-  }
-
-  if (lastObject.points.length <= 2) {
-    return;
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  setObjects((prev) => {
-    if (prev.length === 0) {
-      return prev;
-    }
-
-    const updated = [...prev];
-    const index = updated.length - 1;
-    const polyline = updated[index];
-
-    if (
-      !polyline ||
-      polyline.type !== "polyline" ||
-      polyline.points.length <= 2
-    ) {
-      return prev;
-    }
-
-    updated[index] = {
-      ...polyline,
-      points:
-        polyline.points.slice(
-          0,
-          -2
-        ),
-    };
-
-    return updated;
-  });
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  const newLastObject =
-    objects[lastIndex];
-
-  if (
-    newLastObject?.points?.length >= 4
-  ) {
-    const newLastX =
-      newLastObject.points[
-        newLastObject.points.length - 4
-      ];
-
-    const newLastY =
-      newLastObject.points[
-        newLastObject.points.length - 3
-      ];
-
-    setLineStart({
-      x: newLastX,
-      y: newLastY,
-    });
-  }
-
-  setPendingLinePoint(null);
-  setLinePreview(null);
-
-  return;
-}
-
-    // =========================
-// C = CLOSE POLYLINE
-// =========================
-if (
-  key === "c" &&
-  !e.ctrlKey &&
-  tool === "polyline" &&
-  isDrawing &&
-  !showLineInput
-) {
-  e.preventDefault();
-
-  const lastIndex =
-    objects.length - 1;
-
-  const lastObject =
-    objects[lastIndex];
-
-  if (
-    !lastObject ||
-    lastObject.type !== "polyline" ||
-    !Array.isArray(lastObject.points) ||
-    lastObject.points.length < 4
-  ) {
-    finishPolyline();
-    return;
-  }
-
-  const firstX =
-    lastObject.points[0];
-
-  const firstY =
-    lastObject.points[1];
-
-  const lastX =
-    lastObject.points[
-      lastObject.points.length - 2
-    ];
-
-  const lastY =
-    lastObject.points[
-      lastObject.points.length - 1
-    ];
-
-  const alreadyClosed =
-    Math.abs(firstX - lastX) < 0.001 &&
-    Math.abs(firstY - lastY) < 0.001;
-
-  if (!alreadyClosed) {
-    saveHistory(
-      [...objects],
-      [...measurements]
-    );
-
-    setObjects((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-
-      const updated = [...prev];
-      const index = updated.length - 1;
-      const polyline = updated[index];
-
-      if (
-        !polyline ||
-        polyline.type !== "polyline"
-      ) {
-        return prev;
-      }
-
-      updated[index] = {
-        ...polyline,
-        points: [
-          ...polyline.points,
-          firstX,
-          firstY,
-        ],
-      };
-
-      return updated;
-    });
-  }
-
-  setIsDrawing(false);
-  setLineStart(null);
-  setPendingLinePoint(null);
-  setLinePreview(null);
-  setLineLengthInput("");
-  setShowLineInput(false);
-  setSnapPoint(null);
-  setSnapType("");
-  actionStartRef.current = null;
-
-  setSelectedIndex(lastIndex);
-  setSelectedIndexes([lastIndex]);
-
-  return;
-}
-
-    // =========================
-// ENTER = FINISH POLYLINE
-// =========================
-if (
-  e.key === "Enter" &&
-  tool === "polyline" &&
-  isDrawing &&
-  !showLineInput
-) {
-  e.preventDefault();
-  finishPolyline();
-  return;
-}
 
   /* =========================
      F8 = ORTHO
@@ -6807,19 +5706,9 @@ if (e.key === "F12") {
       setSelectionBox(null);
       return;
     }
-    if (showLineInput) {
-  setShowLineInput(false);
-  setPendingLinePoint(null);
-  setLineLengthInput("");
-  setLinePreview(null);
-  return;
-}
 
     /* CANCEL LINE COMMAND */
-if (
-  tool === "line" ||
-  tool === "polyline"
-) {
+if (tool === "line") {
   setLineStart(null);
   setLinePreview(null);
   setIsDrawing(false);
@@ -7045,35 +5934,6 @@ setSnapPoint(
   }
 
   /* =========================
-   EXTRA TOOL SHORTCUTS
-========================= */
-
-if (key === "c" && tool !== "polyline") {
-  changeTool("circle");
-  return;
-}
-
-if (key === "r" && tool !== "polyline") {
-  changeTool("rectangle");
-  return;
-}
-
-if (key === "t" && tool !== "polyline") {
-  changeTool("text");
-  return;
-}
-
-if (key === "d" && tool !== "polyline") {
-  changeTool("dimension");
-  return;
-}
-
-if (key === "b") {
-  changeTool("hatch");
-  return;
-}
-
-  /* =========================
      ENTER = FINISH POLYLINE
   ========================= */
 
@@ -7180,28 +6040,11 @@ if (tool === "trim") {
   const targetIndex =
     index;
 
-  const stage =
-  e.target.getStage();
+  trimObject(
+    boundaryIndex,
+    targetIndex
+  );
 
-const pointer =
-  stage?.getPointerPosition();
-
-const clickPoint = pointer
-  ? {
-      x:
-        (pointer.x - position.x) /
-        scale,
-      y:
-        (pointer.y - position.y) /
-        scale,
-    }
-  : null;
-
-trimObject(
-  boundaryIndex,
-  targetIndex,
-  clickPoint
-);
   setTrimFirstIndex(null);
 
   return;
@@ -8261,8 +7104,7 @@ const getLineArcIntersections = (
 
 const trimObject = (
   boundaryIndex,
-  targetIndex,
-  clickPoint = null
+  targetIndex
 ) => {
   const boundary =
     objects[boundaryIndex];
@@ -8404,2837 +7246,6 @@ if (
 
     return;
   }
-
-    /* =========================
-     HATCH BOUNDARY + HATCH TARGET
-  ========================= */
-
-  if (
-  boundary.type === "hatch" &&
-  target.type === "hatch"
-) {
-  const boundaryX = boundary.x || 0;
-  const boundaryY = boundary.y || 0;
-  const boundaryW = boundary.width || 0;
-  const boundaryH = boundary.height || 0;
-
-  const targetX = target.x || 0;
-  const targetY = target.y || 0;
-  const targetW = target.width || 0;
-  const targetH = target.height || 0;
-
-  const overlapLeft = Math.max(
-    boundaryX,
-    targetX
-  );
-
-  const overlapTop = Math.max(
-    boundaryY,
-    targetY
-  );
-
-  const overlapRight = Math.min(
-    boundaryX + boundaryW,
-    targetX + targetW
-  );
-
-  const overlapBottom = Math.min(
-    boundaryY + boundaryH,
-    targetY + targetH
-  );
-
-  if (
-    overlapLeft >= overlapRight ||
-    overlapTop >= overlapBottom
-  ) {
-    window.alert(
-      "The HATCH objects do not intersect."
-    );
-    return;
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedHatch = {
-    ...target,
-
-    trimEnabled: true,
-
-    trimStartPoint: {
-      x: overlapLeft,
-      y: overlapTop,
-    },
-
-    trimEndPoint: {
-      x: overlapRight,
-      y: overlapBottom,
-    },
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedHatch
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-    /* =========================
-     HATCH BOUNDARY + LINE TARGET
-  ========================= */
-
-  if (
-    boundary.type === "hatch" &&
-    target.type === "line"
-  ) {
-    const hx = boundary.x || 0;
-    const hy = boundary.y || 0;
-    const hw = boundary.width || 0;
-    const hh = boundary.height || 0;
-
-    const hatchLines = [
-      {
-        points: [
-          hx,
-          hy,
-          hx + hw,
-          hy,
-        ],
-      },
-      {
-        points: [
-          hx + hw,
-          hy,
-          hx + hw,
-          hy + hh,
-        ],
-      },
-      {
-        points: [
-          hx + hw,
-          hy + hh,
-          hx,
-          hy + hh,
-        ],
-      },
-      {
-        points: [
-          hx,
-          hy + hh,
-          hx,
-          hy,
-        ],
-      },
-    ];
-
-    const intersections = [];
-
-    hatchLines.forEach(
-      (hatchLine) => {
-        const intersection =
-          getLineIntersection(
-            hatchLine,
-            target
-          );
-
-        if (intersection) {
-          intersections.push(
-            intersection
-          );
-        }
-      }
-    );
-
-    if (
-      intersections.length === 0
-    ) {
-      window.alert(
-        "The line does not intersect the HATCH boundary."
-      );
-      return;
-    }
-
-    const x1 =
-      target.points[0];
-
-    const y1 =
-      target.points[1];
-
-    const x2 =
-      target.points[2];
-
-    const y2 =
-      target.points[3];
-
-    let selectedIntersection =
-      intersections[0];
-
-    let shortestDistance =
-      Math.min(
-        Math.hypot(
-          selectedIntersection.x -
-            x1,
-          selectedIntersection.y -
-            y1
-        ),
-        Math.hypot(
-          selectedIntersection.x -
-            x2,
-          selectedIntersection.y -
-            y2
-        )
-      );
-
-    intersections.forEach(
-      (point) => {
-        const distance =
-          Math.min(
-            Math.hypot(
-              point.x - x1,
-              point.y - y1
-            ),
-            Math.hypot(
-              point.x - x2,
-              point.y - y2
-            )
-          );
-
-        if (
-          distance <
-          shortestDistance
-        ) {
-          shortestDistance =
-            distance;
-
-          selectedIntersection =
-            point;
-        }
-      }
-    );
-
-    const previousObjects = [
-      ...objects,
-    ];
-
-    const distanceToStart =
-      Math.hypot(
-        selectedIntersection.x -
-          x1,
-        selectedIntersection.y -
-          y1
-      );
-
-    const distanceToEnd =
-      Math.hypot(
-        selectedIntersection.x -
-          x2,
-        selectedIntersection.y -
-          y2
-      );
-
-    const trimmedTarget =
-      distanceToStart <
-      distanceToEnd
-        ? {
-            ...target,
-
-            points: [
-              selectedIntersection.x,
-              selectedIntersection.y,
-              x2,
-              y2,
-            ],
-          }
-        : {
-            ...target,
-
-            points: [
-              x1,
-              y1,
-              selectedIntersection.x,
-              selectedIntersection.y,
-            ],
-          };
-
-    const updatedObjects =
-      objects.map(
-        (object, index) =>
-          index === targetIndex
-            ? trimmedTarget
-            : object
-      );
-
-    setObjects(
-      updatedObjects
-    );
-
-    setSelectedIndex(
-      targetIndex
-    );
-
-    setSelectedIndexes([
-      targetIndex,
-    ]);
-
-    setTrimFirstIndex(
-      null
-    );
-
-    saveHistory(
-      previousObjects,
-      [...measurements]
-    );
-
-    return;
-  }
-
-  /* =========================
-   HATCH BOUNDARY + CIRCLE TARGET
-========================= */
-
-if (
-  boundary.type === "hatch" &&
-  target.type === "circle"
-) {
-  const hx = boundary.x || 0;
-  const hy = boundary.y || 0;
-  const hw = boundary.width || 0;
-  const hh = boundary.height || 0;
-
-  const cx = target.x;
-  const cy = target.y;
-  const radius = target.radius;
-
-  const edges = [
-    { x1: hx, y1: hy, x2: hx + hw, y2: hy },
-    { x1: hx + hw, y1: hy, x2: hx + hw, y2: hy + hh },
-    { x1: hx + hw, y1: hy + hh, x2: hx, y2: hy + hh },
-    { x1: hx, y1: hy + hh, x2: hx, y2: hy },
-  ];
-
-  const intersections = [];
-
-  edges.forEach((edge) => {
-    const dx = edge.x2 - edge.x1;
-    const dy = edge.y2 - edge.y1;
-
-    const fx = edge.x1 - cx;
-    const fy = edge.y1 - cy;
-
-    const a = dx * dx + dy * dy;
-    const b = 2 * (fx * dx + fy * dy);
-    const c =
-      fx * fx +
-      fy * fy -
-      radius * radius;
-
-    const discriminant =
-      b * b - 4 * a * c;
-
-    if (discriminant < 0) {
-      return;
-    }
-
-    const sqrtD =
-      Math.sqrt(discriminant);
-
-    const t1 =
-      (-b - sqrtD) / (2 * a);
-
-    const t2 =
-      (-b + sqrtD) / (2 * a);
-
-    if (t1 >= 0 && t1 <= 1) {
-      intersections.push({
-        x: edge.x1 + t1 * dx,
-        y: edge.y1 + t1 * dy,
-      });
-    }
-
-    if (
-      t2 >= 0 &&
-      t2 <= 1 &&
-      Math.abs(t2 - t1) > 0.0001
-    ) {
-      intersections.push({
-        x: edge.x1 + t2 * dx,
-        y: edge.y1 + t2 * dy,
-      });
-    }
-  });
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(p.x - point.x) < 0.001 &&
-            Math.abs(p.y - point.y) < 0.001
-        ) === index
-    );
-
-  if (uniqueIntersections.length < 2) {
-    window.alert(
-      "The circle does not cross the HATCH boundary at two points."
-    );
-    return;
-  }
-
-  const angles =
-    uniqueIntersections.map((point) =>
-      Math.atan2(
-        point.y - cy,
-        point.x - cx
-      )
-    );
-
-  const normalizeAngle = (angle) => {
-    let value =
-      angle % (Math.PI * 2);
-
-    if (value < 0) {
-      value += Math.PI * 2;
-    }
-
-    return value;
-  };
-
-  const a1 =
-    normalizeAngle(angles[0]);
-
-  const a2 =
-    normalizeAngle(angles[1]);
-
-    let trimStart = a1;
-let trimEnd = a2;
-
-if (clickPoint) {
-  const clickAngle = normalizeAngle(
-    Math.atan2(
-      clickPoint.y - cy,
-      clickPoint.x - cx
-    )
-  );
-
-  const angleOnArc = (
-    angle,
-    start,
-    end
-  ) => {
-    const full =
-      Math.PI * 2;
-
-    const normalizedStart =
-      normalizeAngle(start);
-
-    const normalizedEnd =
-      normalizeAngle(end);
-
-    const normalizedAngle =
-      normalizeAngle(angle);
-
-    const span =
-      (normalizedEnd -
-        normalizedStart +
-        full) %
-      full;
-
-    const fromStart =
-      (normalizedAngle -
-        normalizedStart +
-        full) %
-      full;
-
-    return fromStart <= span;
-  };
-
-  if (
-    angleOnArc(
-      clickAngle,
-      a1,
-      a2
-    )
-  ) {
-    trimStart = a2;
-    trimEnd = a1;
-  }
-}
-
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedCircle = {
-  ...target,
-  trimStartAngle: trimStart,
-  trimEndAngle: trimEnd,
-  trimEnabled: true,
-};
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedCircle
-          : object
-    );
-
-  setObjects(updatedObjects);
-
-  setSelectedIndex(targetIndex);
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(null);
-
-  // HATCH TRIM DATA - CIRCLE
-if (
-  boundary.type === "hatch" &&
-  target.type === "circle" &&
-  clickPoint
-) {
-  const updatedHatch = {
-    ...boundary,
-    trimEnabled: true,
-    trimStartPoint: {
-      x: clickPoint.x - 20,
-      y: clickPoint.y - 20,
-    },
-    trimEndPoint: {
-      x: clickPoint.x + 20,
-      y: clickPoint.y + 20,
-    },
-  };
-
-  updatedObjects[boundaryIndex] = updatedHatch;
-}
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-/* =========================
-   HATCH BOUNDARY + ARC TARGET
-========================= */
-
-if (
-  boundary.type === "hatch" &&
-  target.type === "arc"
-) {
-  const hx = boundary.x || 0;
-  const hy = boundary.y || 0;
-  const hw = boundary.width || 0;
-  const hh = boundary.height || 0;
-
-  const cx =
-    target.x ??
-    target.centerX ??
-    0;
-
-  const cy =
-    target.y ??
-    target.centerY ??
-    0;
-
-  const radius =
-    target.radius || 0;
-
-  if (radius <= 0) {
-    window.alert(
-      "Invalid ARC radius."
-    );
-    return;
-  }
-
-  const hatchEdges = [
-    {
-      x1: hx,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy,
-    },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const intersections = [];
-
-  hatchEdges.forEach(
-    (edge) => {
-      const dx =
-        edge.x2 - edge.x1;
-
-      const dy =
-        edge.y2 - edge.y1;
-
-      const fx =
-        edge.x1 - cx;
-
-      const fy =
-        edge.y1 - cy;
-
-      const a =
-        dx * dx +
-        dy * dy;
-
-      const b =
-        2 *
-        (fx * dx + fy * dy);
-
-      const c =
-        fx * fx +
-        fy * fy -
-        radius * radius;
-
-      const discriminant =
-        b * b -
-        4 * a * c;
-
-      if (
-        discriminant < 0
-      ) {
-        return;
-      }
-
-      const sqrtD =
-        Math.sqrt(
-          discriminant
-        );
-
-      const t1 =
-        (-b - sqrtD) /
-        (2 * a);
-
-      const t2 =
-        (-b + sqrtD) /
-        (2 * a);
-
-      [t1, t2].forEach(
-        (t) => {
-          if (
-            t >= 0 &&
-            t <= 1
-          ) {
-            intersections.push({
-              x:
-                edge.x1 +
-                t * dx,
-
-              y:
-                edge.y1 +
-                t * dy,
-            });
-          }
-        }
-      );
-    }
-  );
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(
-              p.x - point.x
-            ) < 0.001 &&
-            Math.abs(
-              p.y - point.y
-            ) < 0.001
-        ) === index
-    );
-
-  if (
-    uniqueIntersections.length <
-    2
-  ) {
-    window.alert(
-      "The ARC does not have enough intersections with the HATCH boundary."
-    );
-    return;
-  }
-
-  const normalizeAngle =
-    (angle) =>
-      (
-        angle +
-        Math.PI * 2
-      ) %
-      (Math.PI * 2);
-
-  const arcStart =
-    normalizeAngle(
-      target.angleStart ??
-        target.startAngle ??
-        0
-    );
-
-  const arcEnd =
-    normalizeAngle(
-      target.angleEnd ??
-        target.endAngle ??
-        Math.PI * 2
-    );
-
-  const full =
-    Math.PI * 2;
-
-  const arcSpan =
-    (
-      arcEnd -
-      arcStart +
-      full
-    ) % full;
-
-  const angleOnArc =
-    (angle) => {
-      const a =
-        normalizeAngle(
-          angle
-        );
-
-      const fromStart =
-        (
-          a -
-          arcStart +
-          full
-        ) % full;
-
-      return (
-        fromStart <=
-        arcSpan + 0.0001
-      );
-    };
-
-  const arcIntersections =
-    uniqueIntersections
-      .map(
-        (point) => ({
-          ...point,
-          angle:
-            normalizeAngle(
-              Math.atan2(
-                point.y - cy,
-                point.x - cx
-              )
-            ),
-        })
-      )
-      .filter(
-        (point) =>
-          angleOnArc(
-            point.angle
-          )
-      );
-
-  if (
-    arcIntersections.length <
-    2
-  ) {
-    window.alert(
-      "The HATCH boundary does not cut the ARC."
-    );
-    return;
-  }
-
-  let first =
-    arcIntersections[0];
-
-  let second =
-    arcIntersections[1];
-
-  if (clickPoint) {
-    const sorted =
-      [...arcIntersections].sort(
-        (a, b) =>
-          Math.hypot(
-            a.x -
-              clickPoint.x,
-            a.y -
-              clickPoint.y
-          ) -
-          Math.hypot(
-            b.x -
-              clickPoint.x,
-            b.y -
-              clickPoint.y
-          )
-      );
-
-    first = sorted[0];
-    second = sorted[1];
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedArc = {
-    ...target,
-
-    trimStartAngle:
-      first.angle,
-
-    trimEndAngle:
-      second.angle,
-
-    trimEnabled:
-      true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedArc
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  // HATCH TRIM DATA - ARC
-if (
-  boundary.type === "hatch" &&
-  target.type === "arc" &&
-  clickPoint
-) {
-  const updatedHatch = {
-    ...boundary,
-    trimEnabled: true,
-    trimStartPoint: {
-      x: clickPoint.x - 20,
-      y: clickPoint.y - 20,
-    },
-    trimEndPoint: {
-      x: clickPoint.x + 20,
-      y: clickPoint.y + 20,
-    },
-  };
-
-  updatedObjects[boundaryIndex] = updatedHatch;
-}
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-  /* =========================
-     RESPECT EXISTING ARC RANGE
-  ========================= */
-
-  const originalStart =
-    target.angleStart ??
-    target.startAngle ??
-    0;
-
-  const originalEnd =
-    target.angleEnd ??
-    target.endAngle ??
-    Math.PI * 2;
-
-  const isAngleOnArc = (
-    angle,
-    start,
-    end
-  ) => {
-    const full =
-      Math.PI * 2;
-
-    const s =
-      normalizeAngle(start);
-
-    const e =
-      normalizeAngle(end);
-
-    const a =
-      normalizeAngle(angle);
-
-    const span =
-      (e - s + full) %
-      full;
-
-    const fromStart =
-      (a - s + full) %
-      full;
-
-    return (
-      fromStart <=
-      span + 0.0001
-    );
-  };
-
-  const validAngles =
-    angles.filter(
-      (angle) =>
-        isAngleOnArc(
-          angle,
-          originalStart,
-          originalEnd
-        )
-    );
-
-  if (
-    validAngles.length < 2
-  ) {
-    window.alert(
-      "The HATCH boundary does not cross the visible ARC."
-    );
-    return;
-  }
-
-  a1 = validAngles[0];
-  a2 = validAngles[1];
-
-  /* =========================
-     CLICK SIDE
-  ========================= */
-
-  let trimStart =
-    a1;
-
-  let trimEnd =
-    a2;
-
-  if (clickPoint) {
-    const clickAngle =
-      normalizeAngle(
-        Math.atan2(
-          clickPoint.y - cy,
-          clickPoint.x - cx
-        )
-      );
-
-    const full =
-      Math.PI * 2;
-
-    const span =
-      (a2 - a1 + full) %
-      full;
-
-    const fromStart =
-      (clickAngle - a1 + full) %
-      full;
-
-    if (
-      fromStart <=
-      span
-    ) {
-      trimStart =
-        a2;
-
-      trimEnd =
-        a1;
-    }
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedArc = {
-    ...target,
-
-    trimStartAngle:
-      trimStart,
-
-    trimEndAngle:
-      trimEnd,
-
-    trimEnabled:
-      true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedArc
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-
-
-/* =========================
-   HATCH BOUNDARY + RECTANGLE TARGET
-========================= */
-
-if (
-  boundary.type === "hatch" &&
-  target.type === "rectangle"
-) {
-  const hx = boundary.x || 0;
-  const hy = boundary.y || 0;
-  const hw = boundary.width || 0;
-  const hh = boundary.height || 0;
-
-  const rx = target.x || 0;
-  const ry = target.y || 0;
-  const rw = target.width || 0;
-  const rh = target.height || 0;
-
-  const hatchEdges = [
-    { x1: hx, y1: hy, x2: hx + hw, y2: hy },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const rectEdges = [
-    { x1: rx, y1: ry, x2: rx + rw, y2: ry },
-    {
-      x1: rx + rw,
-      y1: ry,
-      x2: rx + rw,
-      y2: ry + rh,
-    },
-    {
-      x1: rx + rw,
-      y1: ry + rh,
-      x2: rx,
-      y2: ry + rh,
-    },
-    {
-      x1: rx,
-      y1: ry + rh,
-      x2: rx,
-      y2: ry,
-    },
-  ];
-
-  const lineIntersection = (
-    a,
-    b,
-    c,
-    d
-  ) => {
-    const denominator =
-      (d.y - c.y) *
-        (b.x - a.x) -
-      (d.x - c.x) *
-        (b.y - a.y);
-
-    if (
-      Math.abs(denominator) <
-      0.000001
-    ) {
-      return null;
-    }
-
-    const ua =
-      (
-        (d.x - c.x) *
-          (a.y - c.y) -
-        (d.y - c.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    const ub =
-      (
-        (b.x - a.x) *
-          (a.y - c.y) -
-        (b.y - a.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    if (
-      ua < 0 ||
-      ua > 1 ||
-      ub < 0 ||
-      ub > 1
-    ) {
-      return null;
-    }
-
-    return {
-      x:
-        a.x +
-        ua * (b.x - a.x),
-
-      y:
-        a.y +
-        ua * (b.y - a.y),
-    };
-  };
-
-  const intersections = [];
-
-  hatchEdges.forEach(
-    (hatchEdge) => {
-      rectEdges.forEach(
-        (rectEdge) => {
-          const hit =
-            lineIntersection(
-              {
-                x: hatchEdge.x1,
-                y: hatchEdge.y1,
-              },
-              {
-                x: hatchEdge.x2,
-                y: hatchEdge.y2,
-              },
-              {
-                x: rectEdge.x1,
-                y: rectEdge.y1,
-              },
-              {
-                x: rectEdge.x2,
-                y: rectEdge.y2,
-              }
-            );
-
-          if (hit) {
-            intersections.push(hit);
-          }
-        }
-      );
-    }
-  );
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(
-              p.x - point.x
-            ) < 0.001 &&
-            Math.abs(
-              p.y - point.y
-            ) < 0.001
-        ) === index
-    );
-
-  if (
-    uniqueIntersections.length === 0
-  ) {
-    window.alert(
-      "The RECTANGLE does not intersect the HATCH boundary."
-    );
-    return;
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  /*
-   * Rectangle and HATCH are both
-   * closed rectangular boundaries.
-   *
-   * Store the intersection point so
-   * the trim state remains associated
-   * with the selected rectangle.
-   */
-
-  let trimPoint =
-    uniqueIntersections[0];
-
-  if (clickPoint) {
-    trimPoint =
-      [...uniqueIntersections].sort(
-        (a, b) =>
-          Math.hypot(
-            a.x - clickPoint.x,
-            a.y - clickPoint.y
-          ) -
-          Math.hypot(
-            b.x - clickPoint.x,
-            b.y - clickPoint.y
-          )
-      )[0];
-  }
-
-  const updatedRectangle = {
-    ...target,
-
-    trimPoint: {
-      x: trimPoint.x,
-      y: trimPoint.y,
-    },
-
-    trimEnabled: true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedRectangle
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  // HATCH TRIM DATA
-if (
-  boundary.type === "hatch" &&
-  target.type === "rectangle" &&
-  clickPoint
-) {
-  const updatedHatch = {
-    ...boundary,
-    trimEnabled: true,
-    trimStartPoint: {
-      x: clickPoint.x - 20,
-      y: clickPoint.y - 20,
-    },
-    trimEndPoint: {
-      x: clickPoint.x + 20,
-      y: clickPoint.y + 20,
-    },
-  };
-
-  updatedObjects[boundaryIndex] = updatedHatch;
-}
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-/* =========================
-   RECTANGLE BOUNDARY + HATCH TARGET
-========================= */
-
-if (
-  boundary.type === "rectangle" &&
-  target.type === "hatch"
-) {
-  const rx = boundary.x || 0;
-  const ry = boundary.y || 0;
-  const rw = boundary.width || 0;
-  const rh = boundary.height || 0;
-
-  const hx = target.x || 0;
-  const hy = target.y || 0;
-  const hw = target.width || 0;
-  const hh = target.height || 0;
-
-  const rectangleEdges = [
-    {
-      x1: rx,
-      y1: ry,
-      x2: rx + rw,
-      y2: ry,
-    },
-    {
-      x1: rx + rw,
-      y1: ry,
-      x2: rx + rw,
-      y2: ry + rh,
-    },
-    {
-      x1: rx + rw,
-      y1: ry + rh,
-      x2: rx,
-      y2: ry + rh,
-    },
-    {
-      x1: rx,
-      y1: ry + rh,
-      x2: rx,
-      y2: ry,
-    },
-  ];
-
-  const hatchEdges = [
-    {
-      x1: hx,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy,
-    },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const lineIntersection = (
-    a,
-    b,
-    c,
-    d
-  ) => {
-    const denominator =
-      (d.y - c.y) *
-        (b.x - a.x) -
-      (d.x - c.x) *
-        (b.y - a.y);
-
-    if (
-      Math.abs(denominator) <
-      0.000001
-    ) {
-      return null;
-    }
-
-    const ua =
-      (
-        (d.x - c.x) *
-          (a.y - c.y) -
-        (d.y - c.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    const ub =
-      (
-        (b.x - a.x) *
-          (a.y - c.y) -
-        (b.y - a.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    if (
-      ua < 0 ||
-      ua > 1 ||
-      ub < 0 ||
-      ub > 1
-    ) {
-      return null;
-    }
-
-    return {
-      x:
-        a.x +
-        ua * (b.x - a.x),
-
-      y:
-        a.y +
-        ua * (b.y - a.y),
-    };
-  };
-
-  const intersections = [];
-
-  rectangleEdges.forEach(
-    (rectEdge) => {
-      hatchEdges.forEach(
-        (hatchEdge) => {
-          const hit =
-            lineIntersection(
-              {
-                x: rectEdge.x1,
-                y: rectEdge.y1,
-              },
-              {
-                x: rectEdge.x2,
-                y: rectEdge.y2,
-              },
-              {
-                x: hatchEdge.x1,
-                y: hatchEdge.y1,
-              },
-              {
-                x: hatchEdge.x2,
-                y: hatchEdge.y2,
-              }
-            );
-
-          if (hit) {
-            intersections.push(hit);
-          }
-        }
-      );
-    }
-  );
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(
-              p.x - point.x
-            ) < 0.001 &&
-            Math.abs(
-              p.y - point.y
-            ) < 0.001
-        ) === index
-    );
-
-  if (
-    uniqueIntersections.length === 0
-  ) {
-    window.alert(
-      "The RECTANGLE does not intersect the HATCH boundary."
-    );
-    return;
-  }
-
-  let trimPoint =
-    uniqueIntersections[0];
-
-  if (clickPoint) {
-    trimPoint =
-      [...uniqueIntersections].sort(
-        (a, b) =>
-          Math.hypot(
-            a.x - clickPoint.x,
-            a.y - clickPoint.y
-          ) -
-          Math.hypot(
-            b.x - clickPoint.x,
-            b.y - clickPoint.y
-          )
-      )[0];
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedHatch = {
-    ...target,
-
-    trimPoint: {
-      x: trimPoint.x,
-      y: trimPoint.y,
-    },
-
-    trimEnabled: true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedHatch
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  // =========================
-// RECTANGLE -> HATCH TRIM
-// =========================
-if (
-  boundary.type === "rectangle" &&
-  target.type === "hatch" &&
-  clickPoint
-) {
-  const updatedHatch = {
-    ...target,
-    trimEnabled: true,
-    trimStartPoint: {
-      x: clickPoint.x - 20,
-      y: clickPoint.y - 20,
-    },
-    trimEndPoint: {
-      x: clickPoint.x + 20,
-      y: clickPoint.y + 20,
-    },
-  };
-
-  updatedObjects[targetIndex] = updatedHatch;
-}
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-/* =========================
-   ARC BOUNDARY + HATCH TARGET
-========================= */
-
-if (
-  boundary.type === "arc" &&
-  target.type === "hatch"
-) {
-  const cx =
-    boundary.x ??
-    boundary.centerX ??
-    0;
-
-  const cy =
-    boundary.y ??
-    boundary.centerY ??
-    0;
-
-  const radius =
-    boundary.radius || 0;
-
-  if (radius <= 0) {
-    window.alert(
-      "Invalid ARC radius."
-    );
-    return;
-  }
-
-  const hx = target.x || 0;
-  const hy = target.y || 0;
-  const hw = target.width || 0;
-  const hh = target.height || 0;
-
-  const hatchEdges = [
-    {
-      x1: hx,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy,
-    },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const normalizeAngle =
-    (angle) =>
-      (
-        angle +
-        Math.PI * 2
-      ) %
-      (Math.PI * 2);
-
-  const arcStart =
-    normalizeAngle(
-      boundary.angleStart ??
-        boundary.startAngle ??
-        0
-    );
-
-  const arcEnd =
-    normalizeAngle(
-      boundary.angleEnd ??
-        boundary.endAngle ??
-        Math.PI * 2
-    );
-
-  const full =
-    Math.PI * 2;
-
-  const arcSpan =
-    (
-      arcEnd -
-      arcStart +
-      full
-    ) % full;
-
-  const angleOnArc =
-    (angle) => {
-      const a =
-        normalizeAngle(
-          angle
-        );
-
-      const fromStart =
-        (
-          a -
-          arcStart +
-          full
-        ) % full;
-
-      return (
-        fromStart <=
-        arcSpan + 0.0001
-      );
-    };
-
-  const intersections = [];
-
-  hatchEdges.forEach(
-    (edge) => {
-      const dx =
-        edge.x2 - edge.x1;
-
-      const dy =
-        edge.y2 - edge.y1;
-
-      const fx =
-        edge.x1 - cx;
-
-      const fy =
-        edge.y1 - cy;
-
-      const a =
-        dx * dx +
-        dy * dy;
-
-      const b =
-        2 *
-        (fx * dx +
-          fy * dy);
-
-      const c =
-        fx * fx +
-        fy * fy -
-        radius * radius;
-
-      const discriminant =
-        b * b -
-        4 * a * c;
-
-      if (
-        discriminant < 0
-      ) {
-        return;
-      }
-
-      const sqrtD =
-        Math.sqrt(
-          discriminant
-        );
-
-      const t1 =
-        (-b - sqrtD) /
-        (2 * a);
-
-      const t2 =
-        (-b + sqrtD) /
-        (2 * a);
-
-      [t1, t2].forEach(
-        (t) => {
-          if (
-            t >= 0 &&
-            t <= 1
-          ) {
-            const x =
-              edge.x1 +
-              t * dx;
-
-            const y =
-              edge.y1 +
-              t * dy;
-
-            const angle =
-              normalizeAngle(
-                Math.atan2(
-                  y - cy,
-                  x - cx
-                )
-              );
-
-            if (
-              angleOnArc(angle)
-            ) {
-              intersections.push({
-                x,
-                y,
-                angle,
-              });
-            }
-          }
-        }
-      );
-    }
-  );
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(
-              p.x - point.x
-            ) < 0.001 &&
-            Math.abs(
-              p.y - point.y
-            ) < 0.001
-        ) === index
-    );
-
-  if (
-    uniqueIntersections.length <
-    2
-  ) {
-    window.alert(
-      "The ARC does not intersect the HATCH boundary at two points."
-    );
-    return;
-  }
-
-  let first =
-    uniqueIntersections[0];
-
-  let second =
-    uniqueIntersections[1];
-
-  if (clickPoint) {
-    const sorted =
-      [...uniqueIntersections].sort(
-        (a, b) =>
-          Math.hypot(
-            a.x -
-              clickPoint.x,
-            a.y -
-              clickPoint.y
-          ) -
-          Math.hypot(
-            b.x -
-              clickPoint.x,
-            b.y -
-              clickPoint.y
-          )
-      );
-
-    first = sorted[0];
-    second = sorted[1];
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedHatch = {
-    ...target,
-
-    trimStartPoint: {
-      x: first.x,
-      y: first.y,
-    },
-
-    trimEndPoint: {
-      x: second.x,
-      y: second.y,
-    },
-
-    trimEnabled: true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedHatch
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  // =========================
-// ARC -> HATCH TRIM
-// =========================
-if (
-  boundary.type === "arc" &&
-  target.type === "hatch" &&
-  clickPoint
-) {
-  const updatedHatch = {
-    ...target,
-    trimEnabled: true,
-    trimStartPoint: {
-      x: clickPoint.x - 20,
-      y: clickPoint.y - 20,
-    },
-    trimEndPoint: {
-      x: clickPoint.x + 20,
-      y: clickPoint.y + 20,
-    },
-  };
-
-  updatedObjects[targetIndex] = updatedHatch;
-}
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-/* =========================
-   POLYLINE BOUNDARY + HATCH TARGET
-========================= */
-
-if (
-  boundary.type === "polyline" &&
-  target.type === "hatch"
-) {
-  const hx = target.x || 0;
-  const hy = target.y || 0;
-  const hw = target.width || 0;
-  const hh = target.height || 0;
-
-  const hatchEdges = [
-    {
-      x1: hx,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy,
-    },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const intersections = [];
-
-  for (
-    let i = 0;
-    i < boundary.points.length - 2;
-    i += 2
-  ) {
-    const polyA = {
-      x: boundary.points[i],
-      y: boundary.points[i + 1],
-    };
-
-    const polyB = {
-      x: boundary.points[i + 2],
-      y: boundary.points[i + 3],
-    };
-
-    hatchEdges.forEach(
-      (edge) => {
-        const hit =
-          getLineIntersection(
-            {
-              points: [
-                polyA.x,
-                polyA.y,
-                polyB.x,
-                polyB.y,
-              ],
-            },
-            {
-              points: [
-                edge.x1,
-                edge.y1,
-                edge.x2,
-                edge.y2,
-              ],
-            }
-          );
-
-        if (hit) {
-          intersections.push(hit);
-        }
-      }
-    );
-  }
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(
-              p.x - point.x
-            ) < 0.001 &&
-            Math.abs(
-              p.y - point.y
-            ) < 0.001
-        ) === index
-    );
-
-  if (
-    uniqueIntersections.length === 0
-  ) {
-    window.alert(
-      "The POLYLINE does not intersect the HATCH boundary."
-    );
-    return;
-  }
-
-  let trimPoint =
-    uniqueIntersections[0];
-
-  if (clickPoint) {
-    trimPoint =
-      [...uniqueIntersections].sort(
-        (a, b) =>
-          Math.hypot(
-            a.x - clickPoint.x,
-            a.y - clickPoint.y
-          ) -
-          Math.hypot(
-            b.x - clickPoint.x,
-            b.y - clickPoint.y
-          )
-      )[0];
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedHatch = {
-    ...target,
-
-    trimPoint: {
-      x: trimPoint.x,
-      y: trimPoint.y,
-    },
-
-    trimEnabled: true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedHatch
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
-/* =========================
-   HATCH BOUNDARY + POLYLINE TARGET
-========================= */
-
-if (
-  boundary.type === "hatch" &&
-  target.type === "polyline"
-) {
-  const hx = boundary.x || 0;
-  const hy = boundary.y || 0;
-  const hw = boundary.width || 0;
-  const hh = boundary.height || 0;
-
-  const hatchEdges = [
-    {
-      x1: hx,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy,
-    },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const lineIntersection = (
-    a,
-    b,
-    c,
-    d
-  ) => {
-    const denominator =
-      (d.y - c.y) *
-        (b.x - a.x) -
-      (d.x - c.x) *
-        (b.y - a.y);
-
-    if (
-      Math.abs(denominator) <
-      0.000001
-    ) {
-      return null;
-    }
-
-    const ua =
-      (
-        (d.x - c.x) *
-          (a.y - c.y) -
-        (d.y - c.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    const ub =
-      (
-        (b.x - a.x) *
-          (a.y - c.y) -
-        (b.y - a.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    if (
-      ua < 0 ||
-      ua > 1 ||
-      ub < 0 ||
-      ub > 1
-    ) {
-      return null;
-    }
-
-    return {
-      x:
-        a.x +
-        ua * (b.x - a.x),
-      y:
-        a.y +
-        ua * (b.y - a.y),
-      segmentT: ua,
-    };
-  };
-
-  const intersections = [];
-
-  for (
-    let i = 0;
-    i < target.points.length - 2;
-    i += 2
-  ) {
-    const polyA = {
-      x: target.points[i],
-      y: target.points[i + 1],
-    };
-
-    const polyB = {
-      x: target.points[i + 2],
-      y: target.points[i + 3],
-    };
-
-    hatchEdges.forEach((edge) => {
-      const hit =
-        lineIntersection(
-          polyA,
-          polyB,
-          {
-            x: edge.x1,
-            y: edge.y1,
-          },
-          {
-            x: edge.x2,
-            y: edge.y2,
-          }
-        );
-
-      if (hit) {
-        intersections.push({
-          ...hit,
-          segmentIndex: i / 2,
-        });
-      }
-    });
-  }
-
-  if (
-    intersections.length === 0
-  ) {
-    window.alert(
-      "The POLYLINE does not intersect the HATCH boundary."
-    );
-    return;
-  }
-
-  const uniqueIntersections =
-    intersections.filter(
-      (point, index, arr) =>
-        arr.findIndex(
-          (p) =>
-            Math.abs(
-              p.x - point.x
-            ) < 0.001 &&
-            Math.abs(
-              p.y - point.y
-            ) < 0.001
-        ) === index
-    );
-
-  if (
-    uniqueIntersections.length <
-    2
-  ) {
-    window.alert(
-      "At least two HATCH intersections are required."
-    );
-    return;
-  }
-
-  let firstPoint =
-    uniqueIntersections[0];
-
-  let secondPoint =
-    uniqueIntersections[1];
-
-  if (clickPoint) {
-    const sorted =
-      [...uniqueIntersections].sort(
-        (a, b) =>
-          Math.hypot(
-            a.x - clickPoint.x,
-            a.y - clickPoint.y
-          ) -
-          Math.hypot(
-            b.x - clickPoint.x,
-            b.y - clickPoint.y
-          )
-      );
-
-    firstPoint = sorted[0];
-
-    secondPoint =
-      sorted[1];
-  }
-
-  const firstSegment =
-    firstPoint.segmentIndex;
-
-  const secondSegment =
-    secondPoint.segmentIndex;
-
-  if (
-    firstSegment === secondSegment
-  ) {
-    const points = [
-      ...target.points,
-    ];
-
-    const segmentStart =
-      firstSegment * 2;
-
-    const ax =
-      points[segmentStart];
-
-    const ay =
-      points[segmentStart + 1];
-
-    const bx =
-      points[segmentStart + 2];
-
-    const by =
-      points[segmentStart + 3];
-
-    const t1 =
-      Math.min(
-        firstPoint.segmentT,
-        secondPoint.segmentT
-      );
-
-    const t2 =
-      Math.max(
-        firstPoint.segmentT,
-        secondPoint.segmentT
-      );
-
-    const newPoints = [
-      ...points.slice(
-        0,
-        segmentStart
-      ),
-
-      ax,
-      ay,
-
-      ax +
-        (bx - ax) * t1,
-      ay +
-        (by - ay) * t1,
-
-      ax +
-        (bx - ax) * t2,
-      ay +
-        (by - ay) * t2,
-
-      bx,
-      by,
-
-      ...points.slice(
-        segmentStart + 4
-      ),
-    ];
-
-    const previousObjects = [
-      ...objects,
-    ];
-
-    const updatedObjects =
-      objects.map(
-        (object, index) =>
-          index === targetIndex
-            ? {
-                ...target,
-                points: newPoints,
-              }
-            : object
-      );
-
-    setObjects(
-      updatedObjects
-    );
-
-    setSelectedIndex(
-      targetIndex
-    );
-
-    setSelectedIndexes([
-      targetIndex,
-    ]);
-
-    setTrimFirstIndex(
-      null
-    );
-
-    // HATCH TRIM DATA - POLYLINE
-if (
-  boundary.type === "hatch" &&
-  target.type === "polyline" &&
-  clickPoint
-) {
-  const updatedHatch = {
-    ...boundary,
-    trimEnabled: true,
-    trimStartPoint: {
-      x: clickPoint.x - 20,
-      y: clickPoint.y - 20,
-    },
-    trimEndPoint: {
-      x: clickPoint.x + 20,
-      y: clickPoint.y + 20,
-    },
-  };
-
-  updatedObjects[boundaryIndex] = updatedHatch;
-}
-
-    saveHistory(
-      previousObjects,
-      [...measurements]
-    );
-
-    return;
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedPoints = [
-    ...target.points,
-  ];
-
-  const removeStart =
-    Math.min(
-      firstSegment,
-      secondSegment
-    );
-
-  const removeEnd =
-    Math.max(
-      firstSegment,
-      secondSegment
-    );
-
-  const startPoint =
-    firstSegment <= secondSegment
-      ? firstPoint
-      : secondPoint;
-
-  const endPoint =
-    firstSegment <= secondSegment
-      ? secondPoint
-      : firstPoint;
-
-  const newPoints = [];
-
-  newPoints.push(
-    target.points[0],
-    target.points[1]
-  );
-
-  for (
-    let i = 0;
-    i < target.points.length - 2;
-    i += 2
-  ) {
-    const segmentIndex =
-      i / 2;
-
-    if (
-      segmentIndex <
-      removeStart
-    ) {
-      newPoints.push(
-        target.points[i + 2],
-        target.points[i + 3]
-      );
-      continue;
-    }
-
-    if (
-      segmentIndex ===
-      removeStart
-    ) {
-      newPoints.push(
-        startPoint.x,
-        startPoint.y
-      );
-      continue;
-    }
-
-    if (
-      segmentIndex ===
-      removeEnd
-    ) {
-      newPoints.push(
-        endPoint.x,
-        endPoint.y
-      );
-
-      newPoints.push(
-        target.points[i + 2],
-        target.points[i + 3]
-      );
-
-      continue;
-    }
-
-    if (
-      segmentIndex >
-      removeEnd
-    ) {
-      newPoints.push(
-        target.points[i + 2],
-        target.points[i + 3]
-      );
-    }
-  }
-
-  const cleanedPoints =
-    newPoints.filter(
-      (point, index, arr) =>
-        index < 2 ||
-        point !== arr[index - 2]
-    );
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? {
-              ...target,
-              points: cleanedPoints,
-            }
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
-
- /* =========================
-   LINE BOUNDARY + HATCH TARGET
-========================= */
-
-if (
-  boundary.type === "line" &&
-  target.type === "hatch"
-) {
-  const bx1 = boundary.points[0];
-  const by1 = boundary.points[1];
-
-  const bx2 = boundary.points[2];
-  const by2 = boundary.points[3];
-
-  const hx = target.x || 0;
-  const hy = target.y || 0;
-  const hw = target.width || 0;
-  const hh = target.height || 0;
-
-  const hatchEdges = [
-    {
-      x1: hx,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy,
-    },
-    {
-      x1: hx + hw,
-      y1: hy,
-      x2: hx + hw,
-      y2: hy + hh,
-    },
-    {
-      x1: hx + hw,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy + hh,
-    },
-    {
-      x1: hx,
-      y1: hy + hh,
-      x2: hx,
-      y2: hy,
-    },
-  ];
-
-  const lineIntersection = (
-    a,
-    b,
-    c,
-    d
-  ) => {
-    const denominator =
-      (d.y - c.y) *
-        (b.x - a.x) -
-      (d.x - c.x) *
-        (b.y - a.y);
-
-    if (
-      Math.abs(denominator) <
-      0.000001
-    ) {
-      return null;
-    }
-
-    const ua =
-      (
-        (d.x - c.x) *
-          (a.y - c.y) -
-        (d.y - c.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    const ub =
-      (
-        (b.x - a.x) *
-          (a.y - c.y) -
-        (b.y - a.y) *
-          (a.x - c.x)
-      ) / denominator;
-
-    if (
-      ua < 0 ||
-      ua > 1 ||
-      ub < 0 ||
-      ub > 1
-    ) {
-      return null;
-    }
-
-    return {
-      x:
-        a.x +
-        ua * (b.x - a.x),
-
-      y:
-        a.y +
-        ua * (b.y - a.y),
-
-      t: ub,
-    };
-  };
-
-  const intersections = [];
-
-  hatchEdges.forEach(
-    (edge) => {
-      const hit =
-        lineIntersection(
-          {
-            x: bx1,
-            y: by1,
-          },
-          {
-            x: bx2,
-            y: by2,
-          },
-          {
-            x: edge.x1,
-            y: edge.y1,
-          },
-          {
-            x: edge.x2,
-            y: edge.y2,
-          }
-        );
-
-      if (hit) {
-        intersections.push(hit);
-      }
-    }
-  );
-
-  if (
-    intersections.length === 0
-  ) {
-    window.alert(
-      "The LINE does not intersect the HATCH boundary."
-    );
-    return;
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  /*
-   * HATCH is stored as a rectangular
-   * boundary. For a single LINE
-   * intersection, use the intersection
-   * to create the trimmed hatch side.
-   */
-
-  const point =
-    clickPoint ||
-    intersections[0];
-
-  const distanceToStart =
-    Math.hypot(
-      point.x - bx1,
-      point.y - by1
-    );
-
-  const distanceToEnd =
-    Math.hypot(
-      point.x - bx2,
-      point.y - by2
-    );
-
-  const keepFromStart =
-    distanceToStart <
-    distanceToEnd;
-
-  const trimX =
-    Math.max(
-      hx,
-      Math.min(
-        hx + hw,
-        point.x
-      )
-    );
-
-  const trimY =
-    Math.max(
-      hy,
-      Math.min(
-        hy + hh,
-        point.y
-      )
-    );
-
-  let updatedHatch = {
-    ...target,
-  };
-
-  if (
-    Math.abs(
-      bx2 - bx1
-    ) >
-    Math.abs(
-      by2 - by1
-    )
-  ) {
-    updatedHatch = {
-      ...target,
-      x: Math.min(
-        trimX,
-        hx + hw
-      ),
-      width:
-        Math.max(
-          0,
-          Math.max(
-            hx,
-            hx + hw
-          ) -
-            Math.min(
-              trimX,
-              hx + hw
-            )
-        ),
-    };
-  } else {
-    updatedHatch = {
-      ...target,
-      y: Math.min(
-        trimY,
-        hy + hh
-      ),
-      height:
-        Math.max(
-          0,
-          Math.max(
-            hy,
-            hy + hh
-          ) -
-            Math.min(
-              trimY,
-              hy + hh
-            )
-        ),
-    };
-  }
-
-  if (
-    updatedHatch.width <= 0 ||
-    updatedHatch.height <= 0
-  ) {
-    window.alert(
-      "TRIM would remove the entire HATCH."
-    );
-    return;
-  }
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedHatch
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-}
 
   /* =========================
      LINE BOUNDARY + ARC TARGET
@@ -12331,8 +8342,7 @@ const offsetObject = (index) => {
           objects[i].type === "line" ||
           objects[i].type === "rectangle" ||
           objects[i].type === "circle" ||
-          objects[i].type === "arc" ||
-          objects[i].type === "hatch"
+          objects[i].type === "arc"
         )
     );
 
@@ -12340,8 +8350,7 @@ const offsetObject = (index) => {
     validIndexes.length === 0
   ) {
     window.alert(
-     "Offset is currently available for Line, Rectangle, Circle, Arc and Hatch."
-
+      "Offset is currently available for Line, Rectangle, Circle and Arc."
     );
     return;
   }
@@ -12519,39 +8528,6 @@ const offsetObject = (index) => {
           radius:
             original.radius +
             distance,
-        };
-      }
-
-            /* HATCH OFFSET */
-
-      else if (
-        original.type ===
-        "hatch"
-      ) {
-        newObject = {
-          ...original,
-          locked: false,
-          hidden: false,
-
-          x:
-            original.x -
-            distance,
-
-          y:
-            original.y -
-            distance,
-
-          width:
-            Math.abs(
-              original.width
-            ) +
-            distance * 2,
-
-          height:
-            Math.abs(
-              original.height
-            ) +
-            distance * 2,
         };
       }
 
@@ -13913,30 +9889,6 @@ const scaleObject = (index) => {
           factor;
       }
 
-            /* HATCH */
-      else if (
-        original.type ===
-        "hatch"
-      ) {
-        copy.x =
-          original.x * factor;
-
-        copy.y =
-          original.y * factor;
-
-        copy.width =
-          original.width *
-          factor;
-
-        copy.height =
-          original.height *
-          factor;
-
-        copy.hatchSpacing =
-          (original.hatchSpacing ||
-            12) * factor;
-      }
-
       /* ARC */
       else if (
         original.type ===
@@ -14197,44 +10149,6 @@ const mirrorObject = (index) => {
             : original.y;
       }
 
-            /* =========================
-         HATCH
-      ========================= */
-
-      else if (
-        original.type ===
-        "hatch"
-      ) {
-        copy.x =
-          axis === "V"
-            ? -original.x -
-              original.width
-            : original.x;
-
-        copy.y =
-          axis === "H"
-            ? -original.y -
-              original.height
-            : original.y;
-
-        copy.width =
-          original.width;
-
-        copy.height =
-          original.height;
-
-        copy.rotation =
-          axis === "V"
-            ? -(
-                original.rotation ||
-                0
-              )
-            : -(
-                original.rotation ||
-                0
-              );
-      }
-
       /* =========================
          ARC
       ========================= */
@@ -14455,105 +10369,6 @@ const explodeObject = (index) => {
           strokeWidth:
             original.strokeWidth ||
             2,
-          layerId:
-            original.layerId ||
-            activeLayerId,
-          locked: false,
-          hidden: false,
-        };
-
-        const lines = [
-          {
-            type: "line",
-            points: [
-              x,
-              y,
-              x + width,
-              y,
-            ],
-            ...common,
-          },
-
-          {
-            type: "line",
-            points: [
-              x + width,
-              y,
-              x + width,
-              y + height,
-            ],
-            ...common,
-          },
-
-          {
-            type: "line",
-            points: [
-              x + width,
-              y + height,
-              x,
-              y + height,
-            ],
-            ...common,
-          },
-
-          {
-            type: "line",
-            points: [
-              x,
-              y + height,
-              x,
-              y,
-            ],
-            ...common,
-          },
-        ];
-
-        const startIndex =
-          newObjects.length;
-
-        newObjects.push(
-          ...lines
-        );
-
-        for (
-          let i = 0;
-          i < lines.length;
-          i++
-        ) {
-          newSelectedIndexes.push(
-            startIndex + i
-          );
-        }
-
-        return;
-      }
-
-            /* HATCH → 4 BOUNDARY LINES */
-
-      if (
-        original.type ===
-        "hatch"
-      ) {
-        const x =
-          original.x || 0;
-
-        const y =
-          original.y || 0;
-
-        const width =
-          original.width || 0;
-
-        const height =
-          original.height || 0;
-
-        const common = {
-          rotation: 0,
-          color:
-            original.color ||
-            "#ffffff",
-          strokeWidth:
-            original.strokeWidth ||
-            1,
           layerId:
             original.layerId ||
             activeLayerId,
@@ -16801,20 +12616,18 @@ const updateSelectedObject = (
 
   let finalValue = value;
 
- if (
-  property === "strokeWidth" ||
-  property === "rotation" ||
-  property === "radius" ||
-  property === "width" ||
-  property === "height" ||
-  property === "x" ||
-  property === "y" ||
-  property === "fontSize" ||
-  property === "hatchSpacing" ||
-  property === "hatchAngle"
-) {
-  finalValue = Number(value);
-}
+  if (
+    property === "strokeWidth" ||
+    property === "rotation" ||
+    property === "radius" ||
+    property === "width" ||
+    property === "height" ||
+    property === "x" ||
+    property === "y" ||
+    property === "fontSize"
+  ) {
+    finalValue = Number(value);
+  }
 
   const updateSet =
     new Set(editableIndexes);
@@ -17086,20 +12899,14 @@ const handleWheel = (e) => {
   /*
     Zoom limits
   */
- /* =========================
-   INFINITE CAD ZOOM
-========================= */
+  newScale = Math.max(
+    0.2,
+    Math.min(
+      20,
+      newScale
+    )
+  );
 
-const MIN_ZOOM = 0.001;
-const MAX_ZOOM = 100000;
-
-newScale = Math.max(
-  MIN_ZOOM,
-  Math.min(
-    MAX_ZOOM,
-    newScale
-  )
-);
   /*
     Mouse ke neeche same world point
     maintain rahe
@@ -17175,24 +12982,23 @@ newScale = Math.max(
         });
       }
 
-     if (
-  object.type === "rectangle" ||
-  object.type === "hatch"
-) {
-  points.push({
-    x: object.x,
-    y: object.y,
-  });
+      if (
+        object.type === "rectangle"
+      ) {
+        points.push({
+          x: object.x,
+          y: object.y,
+        });
 
-  points.push({
-    x:
-      object.x +
-      object.width,
-    y:
-      object.y +
-      object.height,
-  });
-}
+        points.push({
+          x:
+            object.x +
+            object.width,
+          y:
+            object.y +
+            object.height,
+        });
+      }
 
       if (
         object.type === "text"
@@ -19246,7 +15052,6 @@ const deselectAllObjects = () => {
    ZOOM TO ALL SELECTED
 ========================= */
 
-
 const zoomToAllSelected = () => {
   const indexes =
     selectedIndexes.length > 0
@@ -19256,215 +15061,89 @@ const zoomToAllSelected = () => {
         : [];
 
   if (indexes.length === 0) {
-    window.alert(
-      "Select at least one object."
-    );
+    window.alert("Select at least one object.");
     return;
   }
 
-  const selectedObjects =
-    indexes
-      .map(
-        (index) =>
-          objects[index]
-      )
-      .filter(Boolean);
+  const selectedObjects = indexes
+    .map((index) => objects[index])
+    .filter(Boolean);
 
   const points = [];
 
-  selectedObjects.forEach(
-    (object) => {
-
-      /* LINE / POLYLINE */
-      if (
-        Array.isArray(
-          object.points
-        )
+  selectedObjects.forEach((object) => {
+    if (Array.isArray(object.points)) {
+      for (
+        let i = 0;
+        i < object.points.length;
+        i += 2
       ) {
-        for (
-          let i = 0;
-          i <
-          object.points.length;
-          i += 2
-        ) {
-          points.push({
-            x: object.points[i],
-            y:
-              object.points[i + 1],
-          });
-        }
-      }
-
-      /* CIRCLE / ARC */
-      if (
-        Number.isFinite(object.x) &&
-        Number.isFinite(object.y)
-      ) {
-        const radius =
-          Number(
-            object.radius
-          ) || 0;
-
         points.push({
-          x:
-            object.x - radius,
-          y:
-            object.y - radius,
-        });
-
-        points.push({
-          x:
-            object.x + radius,
-          y:
-            object.y + radius,
-        });
-      }
-
-      /* RECTANGLE / HATCH */
-      if (
-        (
-          object.type ===
-            "rectangle" ||
-          object.type ===
-            "hatch"
-        ) &&
-        Number.isFinite(object.x) &&
-        Number.isFinite(object.y)
-      ) {
-        const width =
-          Number(
-            object.width
-          ) || 0;
-
-        const height =
-          Number(
-            object.height
-          ) || 0;
-
-        points.push({
-          x: Math.min(
-            object.x,
-            object.x + width
-          ),
-          y: Math.min(
-            object.y,
-            object.y + height
-          ),
-        });
-
-        points.push({
-          x: Math.max(
-            object.x,
-            object.x + width
-          ),
-          y: Math.max(
-            object.y,
-            object.y + height
-          ),
-        });
-      }
-
-      /* TEXT */
-      if (
-        object.type === "text"
-      ) {
-        const fontSize =
-          Number(
-            object.fontSize
-          ) || 24;
-
-        points.push({
-          x: object.x || 0,
-          y: object.y || 0,
-        });
-
-        points.push({
-          x:
-            (object.x || 0) +
-            fontSize * 5,
-          y:
-            (object.y || 0) +
-            fontSize,
+          x: object.points[i],
+          y: object.points[i + 1],
         });
       }
     }
-  );
+
+    if (
+      Number.isFinite(object.x) &&
+      Number.isFinite(object.y)
+    ) {
+      const radius =
+        Number(object.radius) || 0;
+
+      points.push({
+        x: object.x - radius,
+        y: object.y - radius,
+      });
+
+      points.push({
+        x: object.x + radius,
+        y: object.y + radius,
+      });
+    }
+
+    if (
+      object.type === "rectangle" &&
+      Number.isFinite(object.x) &&
+      Number.isFinite(object.y)
+    ) {
+      points.push({
+        x: object.x,
+        y: object.y,
+      });
+
+      points.push({
+        x:
+          object.x +
+          (Number(object.width) || 0),
+        y:
+          object.y +
+          (Number(object.height) || 0),
+      });
+    }
+  });
 
   if (points.length === 0) {
-    window.alert(
-      "Selected object has no valid bounds."
-    );
+    zoomToSelected();
     return;
   }
 
   const minX = Math.min(
-    ...points.map(
-      (point) => point.x
-    )
+    ...points.map((point) => point.x)
   );
 
   const maxX = Math.max(
-    ...points.map(
-      (point) => point.x
-    )
+    ...points.map((point) => point.x)
   );
 
   const minY = Math.min(
-    ...points.map(
-      (point) => point.y
-    )
+    ...points.map((point) => point.y)
   );
 
   const maxY = Math.max(
-    ...points.map(
-      (point) => point.y
-    )
+    ...points.map((point) => point.y)
   );
-
-  const drawingWidth =
-    Math.max(
-      100,
-      maxX - minX
-    );
-
-  const drawingHeight =
-    Math.max(
-      100,
-      maxY - minY
-    );
-
-  const canvasWidth =
-    window.innerWidth <= 768
-      ? window.innerWidth
-      : window.innerWidth - 298;
-
-  const canvasHeight =
-    window.innerWidth <= 768
-      ? window.innerHeight -
-        120
-      : window.innerHeight - 87;
-
-  const padding = 100;
-
-  const scaleX =
-    (canvasWidth - padding) /
-    drawingWidth;
-
-  const scaleY =
-    (canvasHeight - padding) /
-    drawingHeight;
-
-  const newScale =
-    Math.max(
-      0.2,
-      Math.min(
-        5,
-        Math.min(
-          scaleX,
-          scaleY
-        )
-      )
-    );
 
   const centerX =
     (minX + maxX) / 2;
@@ -19472,18 +15151,14 @@ const zoomToAllSelected = () => {
   const centerY =
     (minY + maxY) / 2;
 
-  setScale(
-    newScale
-  );
-
   setPosition({
     x:
-      canvasWidth / 2 -
-      centerX * newScale,
+      window.innerWidth / 2 -
+      centerX * scale,
 
     y:
-      canvasHeight / 2 -
-      centerY * newScale,
+      (window.innerHeight - 290) / 2 -
+      centerY * scale,
   });
 };
 
@@ -21466,254 +17141,6 @@ useEffect(() => {
         }
       }
 
-            /* =========================
-         LWPOLYLINE
-      ========================= */
-
-      if (
-        code === "0" &&
-        value === "LWPOLYLINE"
-      ) {
-        const points = [];
-
-        let currentX = null;
-
-        for (
-          let j = i + 2;
-          j < values.length - 1;
-          j += 2
-        ) {
-          const groupCode =
-            values[j];
-
-          const groupValue =
-            values[j + 1];
-
-          /* Next DXF entity start */
-          if (
-            groupCode === "0"
-          ) {
-            break;
-          }
-
-          if (
-            groupCode === "10"
-          ) {
-            currentX =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "20" &&
-            Number.isFinite(
-              currentX
-            )
-          ) {
-            const currentY =
-              parseFloat(
-                groupValue
-              );
-
-            if (
-              Number.isFinite(
-                currentY
-              )
-            ) {
-              points.push(
-                currentX,
-                currentY
-              );
-            }
-
-            currentX = null;
-          }
-        }
-
-        if (
-          points.length >= 4
-        ) {
-          importedObjects.push({
-            type: "polyline",
-
-            points,
-
-            rotation: 0,
-
-            color:
-              "#ffffff",
-
-            strokeWidth: 2,
-
-            layerId:
-              activeLayerId,
-
-            locked: false,
-
-            hidden: false,
-          });
-        }
-      }
-
-      /* =========================
-   HATCH
-========================= */
-
-if (
-  code === "0" &&
-  value === "HATCH"
-) {
-  const hatchPoints = [];
-
-  let hatchAngle = 45;
-  let hatchSpacing = 12;
-
-  for (
-    let j = i + 2;
-    j < values.length - 1;
-    j += 2
-  ) {
-    const groupCode =
-      values[j];
-
-    const groupValue =
-      values[j + 1];
-
-    /* Next DXF entity */
-    if (
-      groupCode === "0"
-    ) {
-      break;
-    }
-
-    /* Boundary X */
-    if (
-      groupCode === "10"
-    ) {
-      const x =
-        parseFloat(groupValue);
-
-      const nextCode =
-        values[j + 2];
-
-      const nextValue =
-        values[j + 3];
-
-      if (
-        Number.isFinite(x) &&
-        nextCode === "20"
-      ) {
-        const y =
-          parseFloat(nextValue);
-
-        if (
-          Number.isFinite(y)
-        ) {
-          hatchPoints.push({
-            x,
-            y,
-          });
-        }
-      }
-    }
-
-    /* Pattern angle */
-    if (
-      groupCode === "52"
-    ) {
-      const parsedAngle =
-        parseFloat(groupValue);
-
-      if (
-        Number.isFinite(
-          parsedAngle
-        )
-      ) {
-        hatchAngle =
-          parsedAngle;
-      }
-    }
-
-    /* Pattern spacing */
-    if (
-      groupCode === "41"
-    ) {
-      const parsedSpacing =
-        parseFloat(groupValue);
-
-      if (
-        Number.isFinite(
-          parsedSpacing
-        ) &&
-        parsedSpacing > 0
-      ) {
-        hatchSpacing =
-          parsedSpacing;
-      }
-    }
-  }
-
-  if (
-    hatchPoints.length >= 4
-  ) {
-    const xs =
-      hatchPoints.map(
-        (point) => point.x
-      );
-
-    const ys =
-      hatchPoints.map(
-        (point) => point.y
-      );
-
-    const minX =
-      Math.min(...xs);
-
-    const maxX =
-      Math.max(...xs);
-
-    const minY =
-      Math.min(...ys);
-
-    const maxY =
-      Math.max(...ys);
-
-    importedObjects.push({
-      type: "hatch",
-
-      x: minX,
-      y: minY,
-
-      width:
-        maxX - minX,
-
-      height:
-        maxY - minY,
-
-      rotation: 0,
-
-      color: "#ffffff",
-
-      strokeWidth: 1,
-
-      hatchColor:
-        "#00aaff",
-
-      hatchSpacing,
-
-      hatchAngle,
-
-      layerId:
-        activeLayerId,
-
-      locked: false,
-
-      hidden: false,
-    });
-  }
-}
-
       /* =========================
          CIRCLE
       ========================= */
@@ -21804,247 +17231,12 @@ if (
         }
       }
     }
-    
-/* =========================
- ARC
-========================= */
 
-      if (
-        code === "0" &&
-        value === "ARC"
-      ) {
-        let x = null;
-        let y = null;
-        let radius = null;
-        let startAngle = null;
-        let endAngle = null;
-
-        for (
-          let j = i + 2;
-          j <
-          Math.min(
-            i + 30,
-            values.length - 1
-          );
-          j += 2
-        ) {
-          const groupCode =
-            values[j];
-
-          const groupValue =
-            values[j + 1];
-
-          if (
-            groupCode === "10"
-          ) {
-            x =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "20"
-          ) {
-            y =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "40"
-          ) {
-            radius =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "50"
-          ) {
-            startAngle =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "51"
-          ) {
-            endAngle =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            x !== null &&
-            y !== null &&
-            radius !== null &&
-            startAngle !== null &&
-            endAngle !== null
-          ) {
-            break;
-          }
-        }
-
-        if (
-          Number.isFinite(x) &&
-          Number.isFinite(y) &&
-          Number.isFinite(radius) &&
-          Number.isFinite(startAngle) &&
-          Number.isFinite(endAngle)
-        ) {
-          importedObjects.push({
-            type: "arc",
-
-            x,
-            y,
-            radius,
-
-            angleStart:
-              startAngle *
-              (Math.PI / 180),
-
-            angleEnd:
-              endAngle *
-              (Math.PI / 180),
-
-            rotation: 0,
-
-            color:
-              "#ffffff",
-
-            strokeWidth: 2,
-
-            layerId:
-              activeLayerId,
-
-            locked: false,
-
-            hidden: false,
-          });
-        }
-      }
-
-            /* =========================
-         TEXT
-      ========================= */
-
-      if (
-        code === "0" &&
-        value === "TEXT"
-      ) {
-        let x = null;
-        let y = null;
-        let fontSize = null;
-        let rotation = 0;
-        let textValue = "";
-
-        for (
-          let j = i + 2;
-          j <
-          Math.min(
-            i + 30,
-            values.length - 1
-          );
-          j += 2
-        ) {
-          const groupCode =
-            values[j];
-
-          const groupValue =
-            values[j + 1];
-
-          if (
-            groupCode === "10"
-          ) {
-            x =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "20"
-          ) {
-            y =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "40"
-          ) {
-            fontSize =
-              parseFloat(
-                groupValue
-              );
-          }
-
-          if (
-            groupCode === "50"
-          ) {
-            rotation =
-              parseFloat(
-                groupValue
-              ) || 0;
-          }
-
-          if (
-            groupCode === "1"
-          ) {
-            textValue =
-              String(
-                groupValue || ""
-              );
-          }
-        }
-
-        if (
-          Number.isFinite(x) &&
-          Number.isFinite(y)
-        ) {
-          importedObjects.push({
-            type: "text",
-
-            x,
-            y,
-
-            text:
-              textValue,
-
-            fontSize:
-              Number.isFinite(
-                fontSize
-              )
-                ? fontSize
-                : 24,
-
-            rotation,
-
-            color:
-              "#ffffff",
-
-            strokeWidth: 2,
-
-            layerId:
-              activeLayerId,
-
-            locked: false,
-
-            hidden: false,
-          });
-        }
-      }
     if (
       importedObjects.length === 0
     ) {
       window.alert(
-        "No supported LINE, CIRCLE, RECTANGLE, POLYLINE, ARC or TEXT objects found in this DXF."
+        "No supported LINE or CIRCLE objects found in this DXF."
       );
       return;
     }
@@ -22389,85 +17581,28 @@ const clearAutoSave = () => {
       dxf += `40\n${object.radius}\n`;
     }
 
-        if (
+    if (
       object.type === "rectangle" &&
       Number.isFinite(object.x) &&
       Number.isFinite(object.y) &&
       Number.isFinite(object.width) &&
       Number.isFinite(object.height)
     ) {
-      const x =
-        Number(object.x);
+      const x = object.x;
+      const y = object.y;
+      const w = object.width;
+      const h = object.height;
 
-      const y =
-        Number(object.y);
-
-      const w =
-        Number(object.width);
-
-      const h =
-        Number(object.height);
-
-      const rotation =
-        (Number(object.rotation) || 0) *
-        (Math.PI / 180);
-
-      const centerX =
-        x + w / 2;
-
-      const centerY =
-        y + h / 2;
-
-      const corners = [
+      const points = [
         [x, y],
         [x + w, y],
         [x + w, y + h],
         [x, y + h],
       ];
 
-      const rotatedPoints =
-        corners.map(
-          ([px, py]) => {
-            const dx =
-              px - centerX;
-
-            const dy =
-              py - centerY;
-
-            return [
-              centerX +
-                dx *
-                  Math.cos(rotation) -
-                dy *
-                  Math.sin(rotation),
-
-              centerY +
-                dx *
-                  Math.sin(rotation) +
-                dy *
-                  Math.cos(rotation),
-            ];
-          }
-        );
-
-      for (
-        let i = 0;
-        i < rotatedPoints.length;
-        i++
-      ) {
-        const [
-          x1,
-          y1,
-        ] = rotatedPoints[i];
-
-        const [
-          x2,
-          y2,
-        ] =
-          rotatedPoints[
-            (i + 1) %
-            rotatedPoints.length
-          ];
+      for (let i = 0; i < points.length; i++) {
+        const [x1, y1] = points[i];
+        const [x2, y2] = points[(i + 1) % points.length];
 
         dxf += "0\nLINE\n";
         dxf += "8\n0\n";
@@ -22478,164 +17613,24 @@ const clearAutoSave = () => {
       }
     }
 
-/* =========================
- HATCH
-========================= */
-
     if (
-      object.type === "hatch" &&
-      Number.isFinite(object.x) &&
-      Number.isFinite(object.y) &&
-      Number.isFinite(object.width) &&
-      Number.isFinite(object.height)
-    ) {
-      const x =
-        Number(object.x) || 0;
-
-      const y =
-        Number(object.y) || 0;
-
-      const width =
-        Math.abs(Number(object.width)) || 0;
-
-      const height =
-        Math.abs(Number(object.height)) || 0;
-
-      const hatchAngle =
-        Number(object.hatchAngle) || 45;
-
-      const hatchSpacing =
-        Math.max(
-          1,
-          Number(object.hatchSpacing) || 12
-        );
-
-      const minX = Math.min(
-        x,
-        x + Number(object.width)
-      );
-
-      const minY = Math.min(
-        y,
-        y + Number(object.height)
-      );
-
-      dxf += "0\nHATCH\n";
-      dxf += "8\n0\n";
-
-      /* Pattern name */
-      dxf += "2\nUSERHATCH\n";
-
-      /* Solid fill flag = 0 */
-      dxf += "70\n0\n";
-
-      /* Associative = 0 */
-      dxf += "71\n0\n";
-
-      /* One boundary path */
-      dxf += "91\n1\n";
-
-      /* External + polyline boundary */
-      dxf += "92\n18\n";
-
-      /* Bulge flag */
-      dxf += "72\n0\n";
-
-      /* Closed polyline */
-      dxf += "73\n1\n";
-
-      /* 4 rectangle vertices */
-      dxf += "93\n4\n";
-
-      dxf += `10\n${minX}\n`;
-      dxf += `20\n${minY}\n`;
-
-      dxf += `10\n${minX + width}\n`;
-      dxf += `20\n${minY}\n`;
-
-      dxf += `10\n${minX + width}\n`;
-      dxf += `20\n${minY + height}\n`;
-
-      dxf += `10\n${minX}\n`;
-      dxf += `20\n${minY + height}\n`;
-
-      /* No source boundary path */
-      dxf += "97\n0\n";
-
-      /* Hatch style */
-      dxf += "75\n0\n";
-
-      /* User-defined pattern */
-      dxf += "76\n0\n";
-
-      /* Pattern angle */
-      dxf += `52\n${hatchAngle}\n`;
-
-      /* Pattern scale = spacing */
-      dxf += `41\n${hatchSpacing}\n`;
-
-      /* Double hatch off */
-      dxf += "77\n0\n";
-
-      /* One pattern line */
-      dxf += "78\n1\n";
-
-      dxf += `53\n${hatchAngle}\n`;
-      dxf += `43\n0\n`;
-      dxf += `44\n0\n`;
-      dxf += `45\n${hatchSpacing}\n`;
-      dxf += "46\n0\n";
-      dxf += "79\n0\n";
-    }
-
-        if (
       object.type === "polyline" &&
       Array.isArray(object.points) &&
       object.points.length >= 4
     ) {
-      dxf += "0\nLWPOLYLINE\n";
-      dxf += "8\n0\n";
+      for (let i = 0; i < object.points.length - 2; i += 2) {
+        const x1 = object.points[i];
+        const y1 = object.points[i + 1];
+        const x2 = object.points[i + 2];
+        const y2 = object.points[i + 3];
 
-      const vertexCount =
-        object.points.length / 2;
-
-      dxf += `90\n${vertexCount}\n`;
-
-      dxf += "70\n0\n";
-
-      for (
-        let i = 0;
-        i < object.points.length;
-        i += 2
-      ) {
-        dxf += `10\n${object.points[i]}\n`;
-        dxf += `20\n${object.points[i + 1]}\n`;
+        dxf += "0\nLINE\n";
+        dxf += "8\n0\n";
+        dxf += `10\n${x1}\n`;
+        dxf += `20\n${y1}\n`;
+        dxf += `11\n${x2}\n`;
+        dxf += `21\n${y2}\n`;
       }
-    }
-
-
-        if (
-      object.type === "text" &&
-      Number.isFinite(object.x) &&
-      Number.isFinite(object.y)
-    ) {
-      const textValue =
-        String(object.text || "")
-          .replace(/\r?\n/g, " ");
-
-      const fontSize =
-        Number(object.fontSize) || 24;
-
-      const rotation =
-        Number(object.rotation) || 0;
-
-      dxf += "0\nTEXT\n";
-      dxf += "8\n0\n";
-      dxf += `10\n${object.x}\n`;
-      dxf += `20\n${object.y}\n`;
-      dxf += `40\n${fontSize}\n`;
-      dxf += `1\n${textValue}\n`;
-      dxf += `50\n${rotation}\n`;
     }
   });
 
@@ -22691,51 +17686,16 @@ const clearAutoSave = () => {
         }
       }
 
-     if (
-  object.type === "circle" ||
-  object.type === "arc"
-) {
-  const radius =
-    Number(object.radius) || 0;
-
-  points.push({
-    x:
-      (object.x || 0) -
-      radius,
-    y:
-      (object.y || 0) -
-      radius,
-  });
-
-  points.push({
-    x:
-      (object.x || 0) +
-      radius,
-    y:
-      (object.y || 0) +
-      radius,
-  });
-}
-
-if (object.type === "text") {
-  const fontSize =
-    Number(object.fontSize) || 24;
-
-  points.push({
-    x: object.x || 0,
-    y: object.y || 0,
-  });
-
-  points.push({
-    x:
-      (object.x || 0) +
-      fontSize * 5,
-    y:
-      (object.y || 0) +
-      fontSize,
-  });
-}
-
+      if (
+        object.type === "circle" ||
+        object.type === "arc" ||
+        object.type === "text"
+      ) {
+        points.push({
+          x: object.x || 0,
+          y: object.y || 0,
+        });
+      }
 
       if (
         object.type === "rectangle"
@@ -22897,107 +17857,6 @@ if (object.type === "text") {
               stroke="${stroke}"
               stroke-width="${strokeWidth}"
               fill="none"
-            />`
-          );
-        }
-
-                if (
-          object.type ===
-          "hatch"
-        ) {
-          const hatchWidth =
-            Math.abs(
-              Number(object.width) || 0
-            );
-
-          const hatchHeight =
-            Math.abs(
-              Number(object.height) || 0
-            );
-
-          const hatchSpacing =
-            Math.max(
-              4,
-              Number(
-                object.hatchSpacing
-              ) || 12
-            );
-
-          const hatchAngle =
-            Number(
-              object.hatchAngle
-            ) || 45;
-
-          const patternId =
-            `hatch-pattern-${index}`;
-
-          const hatchX =
-            Math.min(
-              object.x || 0,
-              (object.x || 0) +
-                (object.width || 0)
-            );
-
-          const hatchY =
-            Math.min(
-              object.y || 0,
-              (object.y || 0) +
-                (object.height || 0)
-            );
-
-          const centerX =
-            hatchX +
-            hatchWidth / 2;
-
-          const centerY =
-            hatchY +
-            hatchHeight / 2;
-
-          const hatchRotation =
-            hatchAngle +
-            (Number(
-              object.rotation
-            ) || 0);
-
-          svgElements.push(
-            `<defs>
-              <pattern
-                id="${patternId}"
-                width="${hatchSpacing}"
-                height="${hatchSpacing}"
-                patternUnits="userSpaceOnUse"
-                patternTransform="rotate(${hatchRotation})"
-              >
-                <line
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="${hatchSpacing}"
-                  stroke="${
-                    object.hatchColor ||
-                    "#00aaff"
-                  }"
-                  stroke-width="${
-                    object.strokeWidth ||
-                    1
-                  }"
-                />
-              </pattern>
-            </defs>
-
-            <rect
-              x="${hatchX + offsetX}"
-              y="${hatchY + offsetY}"
-              width="${hatchWidth}"
-              height="${hatchHeight}"
-              fill="url(#${patternId})"
-              stroke="${stroke}"
-              stroke-width="${strokeWidth}"
-              transform="rotate(${rotation} ${
-                centerX + offsetX
-              } ${
-                centerY + offsetY
-              })"
             />`
           );
         }
@@ -23212,11 +18071,8 @@ if (object.type === "text") {
   /* =========================
    CANCEL ACTIVE LINE
 ========================= */
-if (
-  (tool === "line" || tool === "polyline") &&
-  newTool !== "line" &&
-  newTool !== "polyline"
-) {
+
+if (tool === "line" && newTool !== "line") {
   setLineStart(null);
   setLinePreview(null);
   setIsDrawing(false);
@@ -23296,40 +18152,6 @@ setArcPoints([]);
     <div className="app">
 
       {/* TOP BAR */}
-
-      <div className="mobile-topbar">
-  <button onClick={() => changeTool("select")}>✕</button>
-
-  <button onClick={undo}>↶</button>
-
-  <button onClick={redo}>↷</button>
-
-  <button onClick={saveDrawing}>💾</button>
-
-  <button onClick={zoomFit}>⌗</button>
-
-  <button
-    onClick={() => {
-      setScale(1);
-      setPosition({
-        x: 0,
-        y: 0,
-      });
-    }}
-  >
-    ⛶
-  </button>
-
-  <button
-    onClick={() => {
-      setShowMobileProperties(
-        (prev) => !prev
-      );
-    }}
-  >
-    ⋮
-  </button>
-</div>
 
       <header className="topbar">
 
@@ -23411,11 +18233,10 @@ setArcPoints([]);
 
     undo();
   }}
-disabled={
-  tool !== "line" &&
-  tool !== "polyline" &&
-  past.length === 0
-}
+  disabled={
+    tool !== "line" &&
+    past.length === 0
+  }
 >
   Undo
 </button>
@@ -24814,130 +19635,7 @@ disabled={
                 </>
               )}
 
-              {/* HATCH PROPERTIES */}
-
-{selectedObject?.type === "hatch" && (
-  <>
-    <div
-      style={{
-        marginTop: "10px",
-      }}
-    >
-      <label
-        style={{
-          display: "block",
-          fontSize: "12px",
-          marginBottom: "4px",
-          color: "#aaa",
-        }}
-      >
-        Hatch Angle
-      </label>
-
-      <input
-        type="number"
-        min="0"
-        max="360"
-        value={
-          selectedObject.hatchAngle ?? 45
-        }
-        onChange={(event) =>
-          updateSelectedObject(
-            "hatchAngle",
-            event.target.value
-          )
-        }
-        style={{
-          width: "100%",
-          boxSizing: "border-box",
-          padding: "6px",
-          background: "#222",
-          color: "#fff",
-          border: "1px solid #444",
-        }}
-      />
-    </div>
-
-    <div
-      style={{
-        marginTop: "10px",
-      }}
-    >
-      <label
-        style={{
-          display: "block",
-          fontSize: "12px",
-          marginBottom: "4px",
-          color: "#aaa",
-        }}
-      >
-        Hatch Spacing
-      </label>
-
-      <input
-        type="number"
-        min="4"
-        value={
-          selectedObject.hatchSpacing ?? 12
-        }
-        onChange={(event) =>
-          updateSelectedObject(
-            "hatchSpacing",
-            event.target.value
-          )
-        }
-        style={{
-          width: "100%",
-          boxSizing: "border-box",
-          padding: "6px",
-          background: "#222",
-          color: "#fff",
-          border: "1px solid #444",
-        }}
-      />
-    </div>
-
-    <div
-      style={{
-        marginTop: "10px",
-      }}
-    >
-      <label
-        style={{
-          display: "block",
-          fontSize: "12px",
-          marginBottom: "4px",
-          color: "#aaa",
-        }}
-      >
-        Hatch Color
-      </label>
-
-      <input
-        type="color"
-        value={
-          selectedObject.hatchColor ||
-          "#00aaff"
-        }
-        onChange={(event) =>
-          updateSelectedObject(
-            "hatchColor",
-            event.target.value
-          )
-        }
-        style={{
-          width: "100%",
-          height: "35px",
-          padding: 0,
-          background: "#222",
-          border: "1px solid #444",
-        }}
-      />
-    </div>
-  </>
-)}
-
-{/* TEXT PROPERTIES */}
+                            {/* TEXT PROPERTIES */}
 
               {selectedObject?.type ===
                 "text" && (
@@ -25106,12 +19804,6 @@ disabled={
             onMouseUp={
               handleMouseUp
             }
-            onDblClick={(e) => {
-  if (tool === "polyline") {
-    e.cancelBubble = true;
-    finishPolyline();
-  }
-}}
             onWheel={
               handleWheel
             }
@@ -25189,15 +19881,6 @@ const gridSteps = [
   baseGrid * 200,
   baseGrid * 500,
   baseGrid * 1000,
-  baseGrid * 2000,
-  baseGrid * 5000,
-  baseGrid * 10000,
-  baseGrid * 20000,
-  baseGrid * 50000,
-  baseGrid * 100000,
-  baseGrid * 200000,
-  baseGrid * 500000,
-  baseGrid * 1000000,
 ];
 
 let gridStep = baseGrid;
@@ -25432,7 +20115,7 @@ stroke="#ffd54f"
 {/* LINE LIVE PREVIEW */}
 
 {linePreview &&
-  (tool === "line" || tool === "polyline") &&
+  tool === "line" &&
   !showLineInput && (
   <Line
     points={[
@@ -25448,7 +20131,7 @@ stroke="#ffd54f"
   />
 )}
 
-{(tool === "line" || tool === "polyline") &&
+{tool === "line" &&
   linePreview &&
   !showLineInput && (
     <Group
@@ -25552,7 +20235,7 @@ stroke="#ffd54f"
    AUTOCAD CROSSHAIR
 ========================= */}
 
-{(tool === "line" || tool === "polyline") && (
+{tool === "line" && (
   <>
     <Line
       points={[
@@ -25599,329 +20282,9 @@ stroke="#ffd54f"
   </>
 )}
 
-{tool === "line" && !showLineInput && (
-  <Group
-    x={mousePosition.x + 12 / scale}
-    y={mousePosition.y - 42 / scale}
-    onMouseDown={(e) => {
-  e.cancelBubble = true;
-
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
-
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-
-onTouchStart={(e) => {
-  e.cancelBubble = true;
-
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
-
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-
-  >
-    <Rect
-      width={38 / scale}
-      height={22 / scale}
-      fill="#111"
-      cornerRadius={4 / scale}
-    />
-
-    <Text
-      x={7 / scale}
-      y={4 / scale}
-      text="Tap"
-      fontSize={12 / scale}
-      fill="#ffffff"
-    />
-  </Group>
-)}
-
 {tool === "line" &&
-  linePreview &&
-  !showLineInput && (
-    <>
-      {/* DISTANCE BOX */}
-      <Group
-        x={
-          linePreview.x2 -
-          95 / scale
-        }
-        y={
-          linePreview.y2 +
-          25 / scale
-        }
-       onMouseDown={(e) => {
-  e.cancelBubble = true;
-
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
-
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-onTouchStart={(e) => {
-  e.cancelBubble = true;
-
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
-
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-
-      >
-        <Rect
-          width={145 / scale}
-          height={32 / scale}
-          fill="#555"
-          cornerRadius={3 / scale}
-        />
-
-        <Text
-          x={8 / scale}
-          y={7 / scale}
-          text="⌨"
-          fontSize={16 / scale}
-          fill="white"
-        />
-
-        <Text
-          x={32 / scale}
-          y={7 / scale}
-          text={`${Math.hypot(
-            linePreview.x2 -
-              linePreview.x1,
-            linePreview.y2 -
-              linePreview.y1
-          ).toFixed(2)}`}
-          fontSize={13 / scale}
-          fill="white"
-        />
-      </Group>
-
-      {/* ANGLE BOX */}
-      <Group
-        x={
-          linePreview.x2 +
-          20 / scale
-        }
-        y={
-          linePreview.y2 +
-          25 / scale
-        }
-       onMouseDown={(e) => {
-  e.cancelBubble = true;
-
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
-
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-onTouchStart={(e) => {
-  e.cancelBubble = true;
-
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
-
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
-
-  if (angle < 0) {
-    angle += 360;
-  }
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-      >
-        <Rect
-          width={70 / scale}
-          height={32 / scale}
-          fill="#555"
-          cornerRadius={3 / scale}
-        />
-
-        <Text
-          x={7 / scale}
-          y={7 / scale}
-          text="⌨"
-          fontSize={16 / scale}
-          fill="white"
-        />
-
-        <Text
-          x={32 / scale}
-          y={7 / scale}
-          text={`${(() => {
-            let a =
-              Math.atan2(
-                linePreview.y2 -
-                  linePreview.y1,
-                linePreview.x2 -
-                  linePreview.x1
-              ) *
-              (180 / Math.PI);
-
-            if (a < 0) {
-              a += 360;
-            }
-
-            return `${a.toFixed(0)}°`;
-          })()}`}
-          fontSize={13 / scale}
-          fill="white"
-        />
-      </Group>
-    </>
-  )}
-
-{(tool === "line" || tool === "polyline") && 
-  polarEnabled && 
-  lineStart && 
-  !showLineInput && (
+  polarEnabled &&
+  lineStart && (
     <>
       <Line
         points={[
@@ -26037,16 +20400,14 @@ onTouchStart={(e) => {
       listening={false}
     />
   )}
-
 {/* =========================
    LIVE LINE INFO
 ========================= */}
 
 {dynamicInputEnabled &&
-  (tool === "line" || tool === "polyline") &&
+  tool === "line" &&
   lineStart &&
   linePreview &&
-  !showLineInput &&
   (() => {
     const dx =
       linePreview.x2 -
@@ -26077,35 +20438,7 @@ onTouchStart={(e) => {
       <Group
         x={boxX}
         y={boxY}
-       onMouseDown={(e) => {
-  e.cancelBubble = true;
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
-
-onTouchStart={(e) => {
-  e.cancelBubble = true;
-
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
-
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
-
-  setShowLineInput(true);
-}}
+        listening={false}
       >
 
         {/* BACKGROUND */}
@@ -27772,209 +22105,97 @@ if (
   return (
     <React.Fragment key={index}>
 
-  {object.trimStartAngle !== undefined &&
-object.trimEndAngle !== undefined ? (
-  <Arc
-    {...commonProps}
-    x={object.x}
-    y={object.y}
-    innerRadius={object.radius}
-    outerRadius={object.radius}
-   angle={
-  object.trimEnabled
-    ? (
-        (
-          object.trimEndAngle -
-          object.trimStartAngle +
-          Math.PI * 2
-        ) %
-          (Math.PI * 2)
-      ) *
-      (180 / Math.PI)
-    : 360
-}
-rotation={
-  object.trimEnabled
-    ? (object.rotation || 0) +
-      object.trimStartAngle *
-        (180 / Math.PI)
-    : object.rotation || 0
-}
-    stroke={
-      selectedIndex === index
-        ? "yellow"
-        : object.color || "#ffffff"
-    }
-    strokeWidth={
-      selectedIndex === index
-        ? 4
-        : object.strokeWidth || 2
-    }
-  />
-) : (
-  <Circle
-    {...commonProps}
-    x={object.x}
-    y={object.y}
-    radius={object.radius}
-    stroke={
-      selectedIndex === index
-        ? "yellow"
-        : object.color || "#ffffff"
-    }
-    strokeWidth={
-      selectedIndex === index
-        ? 4
-        : object.strokeWidth || 2
-    }
-    rotation={
-      object.rotation || 0
-    }
-  />
-)}
+      <Circle
+        {...commonProps}
+        x={
+          object.x
+        }
+        y={
+          object.y
+        }
+        radius={
+          object.radius
+        }
+        stroke={
+          selectedIndex === index
+            ? "yellow"
+            : object.color ||
+              "#ffffff"
+        }
+        strokeWidth={
+          selectedIndex === index
+            ? 4
+            : object.strokeWidth ||
+              2
+        }
+        rotation={
+          object.rotation ||
+          0
+        }
+      />
 
+      {/* CIRCLE GRIPS */}
 
-   {/* =========================
-   CIRCLE GRIPS — TRIMMED ARC
-========================= */}
+      {selectedIndex === index && (
+        <>
+          {/* CENTER GRIP */}
+          <Circle
+            x={object.x}
+            y={object.y}
+            radius={6}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2}
+            draggable
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) =>
+              handleCircleGripDragEnd(
+                index,
+                "center",
+                e
+              )
+            }
+          />
 
-{selectedIndex === index && (
-  <>
-    {/* CENTER GRIP */}
-    <Circle
-      x={object.x}
-      y={object.y}
-      radius={6}
-      fill="#00aaff"
-      stroke="white"
-      strokeWidth={2}
-      draggable
-      onMouseDown={(e) => {
-        e.cancelBubble = true;
-      }}
-      onDragEnd={(e) =>
-        handleCircleGripDragEnd(
-          index,
-          "center",
-          e
-        )
-      }
-    />
+          {/* RADIUS GRIP */}
+          <Circle
+            x={
+              object.x +
+              object.radius
+            }
+            y={object.y}
+            radius={6}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2}
+            draggable
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) =>
+              handleCircleGripDragEnd(
+                index,
+                "radius",
+                e
+              )
+            }
+          />
+        </>
+      )}
 
-    {/* RADIUS GRIP */}
-    <Circle
-      x={
-        object.x +
-        object.radius *
-          Math.cos(
-            object.trimEndAngle !== undefined
-              ? object.trimEndAngle
-              : 0
-          )
-      }
-      y={
-        object.y +
-        object.radius *
-          Math.sin(
-            object.trimEndAngle !== undefined
-              ? object.trimEndAngle
-              : 0
-          )
-      }
-      radius={6}
-      fill="#00aaff"
-      stroke="white"
-      strokeWidth={2}
-      draggable
-      onMouseDown={(e) => {
-        e.cancelBubble = true;
-      }}
-      onDragEnd={(e) =>
-        handleCircleGripDragEnd(
-          index,
-          "radius",
-          e
-        )
-      }
-    />
-  </>
-)}
-
-  </React.Fragment>
+    </React.Fragment>
   );
 }
-
-{/* TRIM ANGLE GRIP */}
-
-{object.trimEnabled && (
-  <>
-    {/* START ANGLE GRIP */}
-    <Circle
-      x={
-        object.x +
-        object.radius *
-          Math.cos(object.trimStartAngle)
-      }
-      y={
-        object.y +
-        object.radius *
-          Math.sin(object.trimStartAngle)
-      }
-      radius={6}
-      fill="#ff9900"
-      stroke="white"
-      strokeWidth={2}
-      draggable
-      onMouseDown={(e) => {
-        e.cancelBubble = true;
-      }}
-      onDragEnd={(e) =>
-        handleCircleGripDragEnd(
-          index,
-          "trim-start",
-          e
-        )
-      }
-    />
-
-    {/* END ANGLE GRIP */}
-    <Circle
-      x={
-        object.x +
-        object.radius *
-          Math.cos(object.trimEndAngle)
-      }
-      y={
-        object.y +
-        object.radius *
-          Math.sin(object.trimEndAngle)
-      }
-      radius={6}
-      fill="#ff9900"
-      stroke="white"
-      strokeWidth={2}
-      draggable
-      onMouseDown={(e) => {
-        e.cancelBubble = true;
-      }}
-      onDragEnd={(e) =>
-        handleCircleGripDragEnd(
-          index,
-          "trim-end",
-          e
-        )
-      }
-    />
-  </>
-)}
 
 /* =========================
    RECTANGLE
 ========================= */
+
 if (
   object.type === "rectangle"
 ) {
-
   return (
     <React.Fragment key={index}>
 
@@ -28215,78 +22436,80 @@ if (
 /* =========================
    HATCH
 ========================= */
-if (
-  object.type === "hatch"
-) {
-  const hatchSpacing =
-    Math.max(
-      4,
-      Number(object.hatchSpacing) || 12
-    );
+if (object.type === "hatch") {
+  const x = object.x || 0;
+  const y = object.y || 0;
+  const width = Math.abs(
+    object.width || 0
+  );
+  const height = Math.abs(
+    object.height || 0
+  );
 
-  const hatchAngle =
-    Number(object.hatchAngle) || 45;
+  const spacing = Math.max(
+    4,
+    object.hatchSpacing || 12
+  );
 
-  const hatchColor =
-    object.hatchColor || "#00aaff";
+  const angle =
+    ((object.hatchAngle ?? 45) *
+      Math.PI) /
+    180;
+
+  const centerX =
+    x + width / 2;
+  const centerY =
+    y + height / 2;
+
+  const diagonal =
+    Math.hypot(width, height) * 1.5;
+
+  const normalX =
+    -Math.sin(angle);
+  const normalY =
+    Math.cos(angle);
+
+  const directionX =
+    Math.cos(angle);
+  const directionY =
+    Math.sin(angle);
 
   const hatchLines = [];
 
-  const width =
-    Math.abs(Number(object.width) || 0);
-
-  const height =
-    Math.abs(Number(object.height) || 0);
-
-  const x =
-    Math.min(
-      Number(object.x) || 0,
-      (Number(object.x) || 0) +
-        Number(object.width || 0)
-    );
-
-  const y =
-    Math.min(
-      Number(object.y) || 0,
-      (Number(object.y) || 0) +
-        Number(object.height || 0)
-    );
-
-  const diagonal =
-    Math.sqrt(
-      width * width +
-      height * height
-    );
-
-  const count =
-    Math.ceil(
-      (diagonal * 2) /
-        hatchSpacing
-    );
-
   for (
-    let i = -count;
-    i <= count;
-    i++
+    let offset = -diagonal;
+    offset <= diagonal;
+    offset += spacing
   ) {
-    const offset =
-      i * hatchSpacing;
+    const cx =
+      centerX +
+      normalX * offset;
+
+    const cy =
+      centerY +
+      normalY * offset;
 
     hatchLines.push(
       <Line
-        key={`hatch-${index}-${i}`}
+        key={`hatch-${index}-${offset}`}
         points={[
-          x - diagonal + offset,
-          y + diagonal,
-          x + diagonal + offset,
-          y - diagonal,
+          cx -
+            directionX * diagonal,
+          cy -
+            directionY * diagonal,
+          cx +
+            directionX * diagonal,
+          cy +
+            directionY * diagonal,
         ]}
-        stroke={hatchColor}
+        stroke={
+          object.hatchColor ||
+          "#00aaff"
+        }
         strokeWidth={
           (object.strokeWidth || 1) /
           scale
         }
-        rotation={hatchAngle}
         listening={false}
       />
     );
@@ -28300,211 +22523,130 @@ if (
         y={y}
         width={width}
         height={height}
+        rotation={
+          object.rotation || 0
+        }
         fill="transparent"
         stroke={
           selectedIndex === index
             ? "yellow"
-            : object.color || "#ffffff"
+            : object.color ||
+              "#ffffff"
         }
         strokeWidth={
           selectedIndex === index
-            ? 4
-            : object.strokeWidth || 2
+            ? 3
+            : object.strokeWidth || 1
         }
+        hitStrokeWidth={15}
+      />
+
+      <Group
+        listening={false}
+        clipX={x}
+        clipY={y}
+        clipWidth={width}
+        clipHeight={height}
         rotation={
           object.rotation || 0
         }
-      />
+        x={0}
+        y={0}
+      >
+        {hatchLines}
+      </Group>
 
-  <Group
-  clipFunc={(ctx) => {
-    ctx.beginPath();
+      {selectedIndex === index && (
+        <>
+          {/* MOVE GRIP */}
+          <Circle
+            x={x}
+            y={y}
+            radius={6}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2}
+            draggable
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) => {
+              const node = e.target;
+              const newX = node.x();
+              const newY = node.y();
+              const previousObjects = [
+                ...objects,
+              ];
 
-    // HATCH BOUNDARY
-    ctx.rect(
-      x,
-      y,
-      width,
-      height
-    );
+              const updatedObjects =
+                objects.map(
+                  (item, itemIndex) =>
+                    itemIndex === index
+                      ? {
+                          ...item,
+                          x: newX,
+                          y: newY,
+                        }
+                      : item
+                );
 
-    // HATCH TRIM
-    if (
-      object.trimEnabled &&
-      object.trimStartPoint &&
-      object.trimEndPoint
-    ) {
-      const start = object.trimStartPoint;
-      const end = object.trimEndPoint;
+              setObjects(
+                updatedObjects
+              );
 
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
+              saveHistory(
+                previousObjects,
+                [...measurements]
+              );
+            }}
+          />
 
-      const length = Math.sqrt(
-        dx * dx + dy * dy
-      );
+          {/* SIZE GRIP */}
+          <Circle
+            x={x + width}
+            y={y + height}
+            radius={6}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2}
+            draggable
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) => {
+              const node = e.target;
+              const newWidth =
+                node.x() - x;
+              const newHeight =
+                node.y() - y;
+              const previousObjects = [
+                ...objects,
+              ];
 
-      if (length > 0) {
-        const cutSize = 10;
+              const updatedObjects =
+                objects.map(
+                  (item, itemIndex) =>
+                    itemIndex === index
+                      ? {
+                          ...item,
+                          width: newWidth,
+                          height: newHeight,
+                        }
+                      : item
+                );
 
-        const nx =
-          (-dy / length) * cutSize;
+              setObjects(
+                updatedObjects
+              );
 
-        const ny =
-          (dx / length) * cutSize;
-
-        ctx.moveTo(
-          start.x + nx,
-          start.y + ny
-        );
-
-        ctx.lineTo(
-          end.x + nx,
-          end.y + ny
-        );
-
-        ctx.lineTo(
-          end.x - nx,
-          end.y - ny
-        );
-
-        ctx.lineTo(
-          start.x - nx,
-          start.y - ny
-        );
-
-        ctx.closePath();
-      }
-    }
-
-    ctx.closePath();
-  }}
->
-  {hatchLines}
-</Group>
-
-      {/* =========================
-    HATCH GRIPS
-========================= */}
-
-{selectedIndex === index && (
-  <>
-    <Circle
-      x={x}
-      y={y}
-      radius={5 / scale}
-      fill="yellow"
-      stroke="#000000"
-      strokeWidth={1 / scale}
-      draggable
-      onDragEnd={(e) => {
-        const newX = e.target.x();
-        const newY = e.target.y();
-
-        setObjects((prev) =>
-          prev.map((item, i) =>
-            i === index
-              ? {
-                  ...item,
-                  x: newX,
-                  y: newY,
-                  width:
-                    item.width +
-                    (item.x - newX),
-                  height:
-                    item.height +
-                    (item.y - newY),
-                }
-              : item
-          )
-        );
-
-        e.target.position({
-          x: newX,
-          y: newY,
-        });
-      }}
-    />
-
-    <Circle
-      x={x + width}
-      y={y}
-      radius={5 / scale}
-      fill="yellow"
-      stroke="#000000"
-      strokeWidth={1 / scale}
-      draggable
-      onDragEnd={(e) => {
-        const newX = e.target.x();
-
-        setObjects((prev) =>
-          prev.map((item, i) =>
-            i === index
-              ? {
-                  ...item,
-                  width:
-                    newX - item.x,
-                }
-              : item
-          )
-        );
-      }}
-    />
-
-    <Circle
-      x={x}
-      y={y + height}
-      radius={5 / scale}
-      fill="yellow"
-      stroke="#000000"
-      strokeWidth={1 / scale}
-      draggable
-      onDragEnd={(e) => {
-        const newY = e.target.y();
-
-        setObjects((prev) =>
-          prev.map((item, i) =>
-            i === index
-              ? {
-                  ...item,
-                  height:
-                    newY - item.y,
-                }
-              : item
-          )
-        );
-      }}
-    />
-
-    <Circle
-      x={x + width}
-      y={y + height}
-      radius={5 / scale}
-      fill="yellow"
-      stroke="#000000"
-      strokeWidth={1 / scale}
-      draggable
-      onDragEnd={(e) => {
-        const newX = e.target.x();
-        const newY = e.target.y();
-
-        setObjects((prev) =>
-          prev.map((item, i) =>
-            i === index
-              ? {
-                  ...item,
-                  width:
-                    newX - item.x,
-                  height:
-                    newY - item.y,
-                }
-              : item
-          )
-        );
-      }}
-    />
-  </>
-)}
+              saveHistory(
+                previousObjects,
+                [...measurements]
+              );
+            }}
+          />
+        </>
+      )}
     </React.Fragment>
   );
 }
@@ -30643,160 +24785,67 @@ const y = snappedPoint.y;
         "0 4px 20px rgba(0,0,0,0.4)",
     }}
   >
-    {/* DISTANCE */}
-    <div
+    <input
+      type="text"
+      value={lineLengthInput}
+      autoFocus
+      onChange={(e) =>
+        setLineLengthInput(
+          e.target.value
+        )
+      }
+      placeholder="Length"
       style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "4px",
-      }}
-    >
-      <span
-        style={{
-          color: "#aaa",
-          fontSize: "11px",
-        }}
-      >
-        Distance
-      </span>
-
-      <input
-        type="text"
-        inputMode="decimal"
-        value={
-          lineLengthInput.includes("<")
-            ? lineLengthInput.split("<")[0]
-            : lineLengthInput
-        }
-        autoFocus
-        onFocus={(e) => e.target.select()}
-        onChange={(e) => {
-          const angle =
-            lineLengthInput.includes("<")
-              ? lineLengthInput.split("<")[1]
-              : "0";
-
-          setLineLengthInput(
-            `${e.target.value}<${angle}`
-          );
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            confirmLineInput();
-          }
-        }}
-        style={{
-          width: "110px",
-          padding: "10px",
-          background: "#111",
-          color: "#fff",
-          border: "1px solid #666",
-          borderRadius: "6px",
-          outline: "none",
-          fontSize: "16px",
-        }}
-      />
-    </div>
-
-    {/* ANGLE */}
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "4px",
-      }}
-    >
-      <span
-        style={{
-          color: "#aaa",
-          fontSize: "11px",
-        }}
-      >
-        Angle
-      </span>
-
-      <input
-        type="text"
-        inputMode="decimal"
-        onFocus={(e) => e.target.select()}
-        value={
-          lineLengthInput.includes("<")
-            ? lineLengthInput.split("<")[1]
-            : "0"
-        }
-        onChange={(e) => {
-          const distance =
-            lineLengthInput.includes("<")
-              ? lineLengthInput.split("<")[0]
-              : lineLengthInput;
-
-          setLineLengthInput(
-            `${distance}<${e.target.value}`
-          );
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            confirmLineInput();
-          }
-        }}
-        style={{
-          width: "80px",
-          padding: "10px",
-          background: "#111",
-          color: "#fff",
-          border: "1px solid #666",
-          borderRadius: "6px",
-          outline: "none",
-          fontSize: "16px",
-        }}
-      />
-    </div>
-
-    {/* CANCEL */}
-    <button
-      type="button"
-      onClick={() => {
-        setLineStart(null);
-        setLinePreview(null);
-        setPendingLinePoint(null);
-        setLineLengthInput("");
-        setShowLineInput(false);
-        setIsDrawing(false);
-        actionStartRef.current = null;
-      }}
-      style={{
-        marginTop: "16px",
-        padding: "10px 14px",
-        background: "#333",
+        width: "120px",
+        padding: "10px 12px",
+        background: "#111",
         color: "#fff",
-        border: "1px solid #555",
+        border: "1px solid #666",
         borderRadius: "6px",
-        cursor: "pointer",
+        outline: "none",
+        fontSize: "16px",
       }}
-    >
-      ✕
-    </button>
+    />
 
-    {/* CONFIRM */}
+   <button
+  type="button"
+  onClick={() => {
+    setLineStart(null);
+    setLinePreview(null);
+    setPendingLinePoint(null);
+    setLineLengthInput("");
+    setShowLineInput(false);
+    setIsDrawing(false);
+
+    actionStartRef.current = null;
+  }}
+  style={{
+    padding: "10px 14px",
+    background: "#333",
+    color: "#fff",
+    border: "1px solid #555",
+    borderRadius: "6px",
+    cursor: "pointer",
+  }}
+>
+  ✕
+</button>
+
     <button
-      type="button"
-      onClick={confirmLineInput}
-      style={{
-        marginTop: "16px",
-        padding: "10px 16px",
-        background: "#1687ff",
-        color: "#fff",
-        border: "none",
-        borderRadius: "6px",
-        cursor: "pointer",
-        fontSize: "18px",
-        fontWeight: "bold",
-      }}
-    >
-      ✓
-    </button>
+  type="button"
+  onClick={confirmLineInput}
+  style={{
+    padding: "10px 14px",
+    background: "#1687ff",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "18px",
+  }}
+>
+  ✓
+</button>
   </div>
 )}
          
@@ -30804,60 +24853,6 @@ const y = snappedPoint.y;
         </main>
 
         <div className="mobile-command-bar">
-
-          <button
-  type="button"
-  onClick={(e) => {
-    const bar =
-      e.currentTarget.parentElement;
-
-    const collapsed =
-      bar.dataset.collapsed === "true";
-
-    if (collapsed) {
-      bar.style.setProperty(
-        "height",
-        "170px",
-        "important"
-      );
-      bar.style.setProperty(
-        "min-height",
-        "170px",
-        "important"
-      );
-      bar.dataset.collapsed = "false";
-      e.currentTarget.textContent = "⌃";
-    } else {
-      bar.style.setProperty(
-        "height",
-        "46px",
-        "important"
-      );
-      bar.style.setProperty(
-        "min-height",
-        "46px",
-        "important"
-      );
-      bar.dataset.collapsed = "true";
-      e.currentTarget.textContent = "⌄";
-    }
-  }}
-  style={{
-    position: "fixed",
-    right: "10px",
-    bottom: "180px",
-    zIndex: 12001,
-    width: "42px",
-    height: "42px",
-    background: "#fff",
-    border: "1px solid #ccc",
-    borderRadius: "4px",
-    fontSize: "22px",
-    color: "#333",
-  }}
->
-  ⌃
-</button>
 
           {showMobileLayers && (
   <div
@@ -30998,8 +24993,8 @@ const y = snappedPoint.y;
 
   <div className="mobile-command-status">
   {showLineInput ? (
-   "Specify distance / angle"
-  ) : (tool === "line" || tool === "polyline") && linePreview ? (
+    "Specify distance"
+  ) : tool === "line" && linePreview ? (
     (() => {
       const dx =
         linePreview.x2 -
@@ -31078,7 +25073,7 @@ const y = snappedPoint.y;
         : tool.toUpperCase()}
   </strong>
 
-  {(tool === "line" || tool === "polyline") && (
+  {tool === "line" && (
     <span>
       {showLineInput
         ? " Enter exact length"
@@ -31435,15 +25430,6 @@ const y = snappedPoint.y;
   }}
 >
   🔗 Join
-</button>
-
-<button
-  type="button"
-  onClick={() => {
-    changeTool("hatch");
-  }}
->
-  ▧ Hatch
 </button>
 
 {/* OSNAP */}
@@ -31991,8 +25977,7 @@ const y = snappedPoint.y;
     🖊 Draw
   </button>
 
- {(tool === "line" || tool === "polyline") &&
-  !showLineInput && (
+  {tool === "line" && (
   <button
     type="button"
     onClick={() => {
@@ -32817,144 +26802,12 @@ const y = snappedPoint.y;
 
   <div className="mobile-command-controls">
 
-{(
-  ((tool === "line" || tool === "polyline") && lineStart) ||
-  (tool === "hatch" && isDrawing)
-) && (
-  <button
-    type="button"
-    onClick={() => {
-
-      if (tool === "hatch" && isDrawing) {
-        setObjects((prev) => {
-          const lastIndex = prev.length - 1;
-          const lastObject = prev[lastIndex];
-
-          if (
-            lastObject &&
-            lastObject.type === "hatch"
-          ) {
-            return prev.slice(0, -1);
-          }
-
-          return prev;
-        });
-      }
-
-      setLineStart(null);
-      setLinePreview(null);
-      setPendingLinePoint(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-      setIsDrawing(false);
-
-      actionStartRef.current = null;
-      setSnapPoint(null);
-      setSnapType("");
-
-      changeTool("select");
-    }}
-  >
-    Close
-  </button>
-
-)}
-
- <button
-  type="button"
-  onClick={() => {
-
-    // POLYLINE: last segment remove
-    if (
-      tool === "polyline" &&
-      isDrawing &&
-      !showLineInput
-    ) {
-      const lastObject = objects[objects.length - 1];
-
-      if (
-        lastObject &&
-        lastObject.type === "polyline" &&
-        Array.isArray(lastObject.points) &&
-        lastObject.points.length >= 4
-      ) {
-        saveHistory(
-          [...objects],
-          [...measurements]
-        );
-
-        setObjects((prev) => {
-          const updated = [...prev];
-          const index = updated.length - 1;
-          const current = updated[index];
-
-          if (
-            !current ||
-            current.type !== "polyline" ||
-            !Array.isArray(current.points) ||
-            current.points.length < 4
-          ) {
-            return prev;
-          }
-
-          updated[index] = {
-            ...current,
-            points: current.points.slice(0, -2),
-          };
-
-          return updated;
-        });
-
-        const newLength =
-          lastObject.points.length - 2;
-
-        setLineStart({
-          x: lastObject.points[newLength - 2],
-          y: lastObject.points[newLength - 1],
-        });
-
-        setLinePreview(null);
-        setPendingLinePoint(null);
-        setLineLengthInput("");
-        setShowLineInput(false);
-        setSnapPoint(null);
-
-        return;
-      }
-    }
-
-    // LINE: current drawing cancel
-    if (
-      tool === "line" &&
-      (
-        lineStart ||
-        showLineInput ||
-        pendingLinePoint
-      )
-    ) {
-      setLinePreview(null);
-      setPendingLinePoint(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-      setIsDrawing(false);
-
-      return;
-    }
-
-    // NORMAL UNDO
-    undo();
-  }}
-  disabled={
-    tool === "line"
-      ? false
-      : tool === "polyline" && isDrawing
-        ? false
-        : past.length === 0
-  }
->
-  Undo
-</button>
-
+    <button
+      onClick={undo}
+      disabled={past.length === 0}
+    >
+      Undo
+    </button>
 
     <button
   type="button"
@@ -33036,8 +26889,11 @@ setShowMobileLayers(false);
 
 <input
   type="text"
-inputMode="text"
-
+  inputMode={
+  showLineInput
+    ? "decimal"
+    : "text"
+}
   value={
     showLineInput
       ? lineLengthInput
@@ -33156,6 +27012,7 @@ onKeyDown={(e) => {
     : "Type a command"
 }
 />
+
 <button
   type="button"
   onClick={() => {
@@ -33164,85 +27021,8 @@ onKeyDown={(e) => {
       return;
     }
 
-    const command = commandText
-      .trim()
-      .toLowerCase();
-
-    if (!command) {
-      return;
-    }
-
-    const toolMap = {
-      select: "select",
-      line: "line",
-      circle: "circle",
-      rectangle: "rectangle",
-      polyline: "polyline",
-      arc: "arc",
-      text: "text",
-      measure: "measure",
-      dimension: "dimension",
-      angulardimension: "angularDimension",
-      radiusdimension: "radiusDimension",
-      diameterdimension: "diameterDimension",
-      move: "move",
-      copy: "copy",
-      rotate: "rotate",
-      trim: "trim",
-      extend: "extend",
-      stretch: "stretch",
-      offset: "offset",
-      fillet: "fillet",
-      chamfer: "chamfer",
-      array: "array",
-      mirror: "mirror",
-      scale: "scale",
-      explode: "explode",
-      join: "join",
-      hatch: "hatch",
-    };
-
-    if (command === "find") {
-      const searchText = window.prompt(
-        "Find object (Line, Circle, Rectangle, Text, Arc, etc.):"
-      );
-
-      if (searchText && searchText.trim()) {
-        const query = searchText
-          .trim()
-          .toLowerCase();
-
-        const foundIndex = objects.findIndex(
-          (object) =>
-            object?.type?.toLowerCase() === query
-        );
-
-        if (foundIndex !== -1) {
-          setSelectedIndexes([foundIndex]);
-          setSelectedIndex(foundIndex);
-          changeTool("select");
-        } else {
-          window.alert(
-            `No "${searchText}" object found.`
-          );
-        }
-      }
-
-      setCommandText("");
-      return;
-    }
-
-    const selectedTool = toolMap[command];
-
-    if (!selectedTool) {
-      window.alert(
-        `Unknown command: ${command}`
-      );
-      return;
-    }
-
-    changeTool(selectedTool);
-    setCommandText("");
+    // yahan tumhara existing
+    // command Enter logic rahega
   }}
 >
   {showLineInput ? "✓" : "Enter"}
@@ -33293,230 +27073,131 @@ onKeyDown={(e) => {
               .toLowerCase()
           )
       )
-  .map((command) => (
-  <button
-    key={command}
-    onClick={() => {
+      .map((command) => (
+        <button
+          key={command}
+          onClick={() => {
+          if (command === "Find") {
 
-      if (command === "Find") {
+  const searchText = window.prompt(
+    "Find object (Line, Circle, Rectangle, Text, Arc, etc.):"
+  );
 
-        const searchText = window.prompt(
-          "Find object (Line, Circle, Rectangle, Text, Arc, etc.):"
-        );
+  if (searchText && searchText.trim()) {
 
-        if (searchText && searchText.trim()) {
+    const query = searchText
+      .trim()
+      .toLowerCase();
 
-          const query = searchText
-            .trim()
-            .toLowerCase();
+    const foundIndex = objects.findIndex(
+      (object) =>
+        object?.type?.toLowerCase() === query
+    );
 
-          const foundIndex = objects.findIndex(
-            (object) =>
-              object?.type?.toLowerCase() === query
-          );
+    if (foundIndex !== -1) {
 
-          if (foundIndex !== -1) {
+      setSelectedIndexes([
+        foundIndex,
+      ]);
 
-            setSelectedIndexes([foundIndex]);
-            setSelectedIndex(foundIndex);
+      setSelectedIndex(
+        foundIndex
+      );
 
-            const object = objects[foundIndex];
+      const object =
+        objects[foundIndex];
 
-            /* =========================
-               FIND LINE
-            ========================= */
+      if (
+        object?.type === "line"
+      ) {
 
-            if (object?.type === "line") {
+        const x1 =
+          object.points[0];
 
-              const x1 = object.points[0];
-              const y1 = object.points[1];
+        const y1 =
+          object.points[1];
 
-              const x2 = object.points[2];
-              const y2 = object.points[3];
+        const x2 =
+          object.points[2];
 
-              const centerX =
-                (x1 + x2) / 2;
+        const y2 =
+          object.points[3];
 
-              const centerY =
-                (y1 + y2) / 2;
+        setPosition({
+          x:
+            window.innerWidth / 2 -
+            ((x1 + x2) / 2) * scale,
 
-              setPosition({
-                x:
-                  window.innerWidth / 2 -
-                  centerX * scale,
+          y:
+            (window.innerHeight - 290) / 2 -
+            ((y1 + y2) / 2) * scale,
+        });
 
-                y:
-                  (window.innerHeight - 290) / 2 -
-                  centerY * scale,
-              });
+      } else {
 
-            }
+        setPosition({
+          x:
+            window.innerWidth / 2 -
+            (object.x || 0) * scale,
 
-            /* =========================
-   FIND HATCH
-========================= */
+          y:
+            (window.innerHeight - 290) / 2 -
+            (object.y || 0) * scale,
+        });
 
-else if (
-  object?.type === "hatch"
-) {
-  const centerX =
-    object.x +
-    object.width / 2;
+      }
 
-  const centerY =
-    object.y +
-    object.height / 2;
+    } else {
 
-  setPosition({
-    x:
-      window.innerWidth / 2 -
-      centerX * scale,
+      window.alert(
+        `No "${searchText}" object found.`
+      );
 
-    y:
-      (window.innerHeight - 290) / 2 -
-      centerY * scale,
-  });
+    }
+  }
+
+} else {
+
+  const toolMap = {
+    Line: "line",
+    Circle: "circle",
+    Rectangle: "rectangle",
+    Polyline: "polyline",
+    Arc: "arc",
+    Text: "text",
+    Measure: "measure",
+    Dimension: "dimension",
+    AngularDimension: "angularDimension",
+    RadiusDimension: "radiusDimension",
+    DiameterDimension: "diameterDimension",
+    Move: "move",
+    Copy: "copy",
+    Rotate: "rotate",
+    Trim: "trim",
+    Extend: "extend",
+    Stretch: "stretch",
+    Offset: "offset",
+    Fillet: "fillet",
+    Chamfer: "chamfer",
+    Array: "array",
+    Mirror: "mirror",
+    Scale: "scale",
+    Explode: "explode",
+    Join: "join",
+  };
+
+  changeTool(
+    toolMap[command]
+  );
+
 }
 
-            /* =========================
-               FIND POLYLINE
-            ========================= */
-
-            else if (object?.type === "polyline") {
-
-              const points =
-                object.points || [];
-
-              if (points.length >= 2) {
-
-                let minX = points[0];
-                let maxX = points[0];
-
-                let minY = points[1];
-                let maxY = points[1];
-
-                for (
-                  let i = 2;
-                  i < points.length;
-                  i += 2
-                ) {
-
-                  minX = Math.min(
-                    minX,
-                    points[i]
-                  );
-
-                  maxX = Math.max(
-                    maxX,
-                    points[i]
-                  );
-
-                  minY = Math.min(
-                    minY,
-                    points[i + 1]
-                  );
-
-                  maxY = Math.max(
-                    maxY,
-                    points[i + 1]
-                  );
-                }
-
-                const centerX =
-                  (minX + maxX) / 2;
-
-                const centerY =
-                  (minY + maxY) / 2;
-
-                setPosition({
-                  x:
-                    window.innerWidth / 2 -
-                    centerX * scale,
-
-                  y:
-                    (window.innerHeight - 290) / 2 -
-                    centerY * scale,
-                });
-              }
-
-            }
-
-            /* =========================
-               FIND OTHER OBJECTS
-            ========================= */
-
-            else {
-
-              setPosition({
-                x:
-                  window.innerWidth / 2 -
-                  (object.x || 0) * scale,
-
-                y:
-                  (window.innerHeight - 290) / 2 -
-                  (object.y || 0) * scale,
-              });
-            }
-
-          } else {
-
-            window.alert(
-              `No "${searchText}" object found.`
-            );
-          }
-        }
-
-      }
-
-      /* =========================
-         TOOL COMMAND
-      ========================= */
-
-      else {
-
-        const toolMap = {
-          Line: "line",
-          Circle: "circle",
-          Rectangle: "rectangle",
-          Polyline: "polyline",
-          Arc: "arc",
-          Text: "text",
-          Measure: "measure",
-          Dimension: "dimension",
-          AngularDimension: "angularDimension",
-          RadiusDimension: "radiusDimension",
-          DiameterDimension: "diameterDimension",
-          Move: "move",
-          Copy: "copy",
-          Rotate: "rotate",
-          Trim: "trim",
-          Extend: "extend",
-          Stretch: "stretch",
-          Offset: "offset",
-          Fillet: "fillet",
-          Chamfer: "chamfer",
-          Array: "array",
-          Mirror: "mirror",
-          Scale: "scale",
-          Explode: "explode",
-          Join: "join",
-          Hatch: "hatch",
-        };
-
-        const selectedTool =
-          toolMap[command];
-
-        if (selectedTool) {
-          changeTool(selectedTool);
-        }
-      }
-
-      setCommandText("");
-    }}
-  >
-    {command}
-  </button>
-))}
+            setCommandText("");
+          }}
+        >
+          {command}
+        </button>
+      ))}
 
   </div>
 )}
@@ -33622,34 +27303,6 @@ else if (
     />
   </>
 )}
-
-<label>Hatch Color</label>
-
-<input
-  type="color"
-  value={
-    selectedObject.hatchColor ||
-    "#00aaff"
-  }
-  onChange={(e) => {
-    setObjects((prev) =>
-      prev.map((object, index) =>
-        index === selectedIndex
-          ? {
-              ...object,
-              hatchColor:
-                e.target.value,
-            }
-          : object
-      )
-    );
-  }}
-  style={{
-    width: "100%",
-    height: "42px",
-    marginBottom: "12px",
-  }}
-/>
 
       <input
         type="color"
@@ -34131,6 +27784,6 @@ else if (
 
     </div>
   );
-
 }
+
 export default App;

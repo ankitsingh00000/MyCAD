@@ -140,14 +140,10 @@ body {
 
 .workspace {
   position: relative;
-
   flex: 1;
   min-width: 0;
-
   overflow: hidden;
-
   background-color: #111111;
-
   background-image:
     repeating-linear-gradient(
       0deg,
@@ -163,11 +159,10 @@ body {
       transparent 1px,
       transparent 25px
     );
-
   background-size: 25px 25px;
   background-position: 0 0;
-
   touch-action: none;
+  touch-action: none !important;
 }
 
 .workspace canvas {
@@ -372,7 +367,7 @@ body {
     /*
       COMMAND PANEL = 170px
     */
-    bottom: 170px !important;
+   bottom: 234px !important;
 
     width: 100% !important;
 
@@ -459,48 +454,40 @@ body {
     word-break: normal !important;
   }
 
-  /* =========================
-     MOBILE COMMAND PANEL
-  ========================= */
+/* =========================
+   MOBILE COMMAND PANEL
+========================= */
 
-  .mobile-command-bar {
-    position: fixed !important;
+.mobile-command-bar {
+  position: fixed !important;
 
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
 
-    width: 100% !important;
+  width: 100% !important;
 
-    height: 170px !important;
-    min-height: 170px !important;
+  height: 170px !important;
+  min-height: 170px !important;
+  max-height: 170px !important;
 
-    display: flex !important;
+  display: flex !important;
+  flex-direction: column !important;
 
-    flex-direction: column !important;
+  padding: 6px 8px !important;
+  margin: 0 !important;
 
-    align-items: stretch !important;
+  background: #f4f4f4 !important;
+  color: #222 !important;
 
-    justify-content: flex-start !important;
+  border-top: 1px solid #bbb !important;
 
-    gap: 0 !important;
+  z-index: 9999 !important;
 
-    padding: 6px 8px !important;
+  overflow: hidden !important;
 
-    margin: 0 !important;
-
-    background: #f4f4f4 !important;
-
-    color: #222 !important;
-
-    border-top: 1px solid #bbb !important;
-
-    z-index: 4000 !important;
-
-    overflow: hidden !important;
-
-    box-sizing: border-box !important;
-  }
+  box-sizing: border-box !important;
+}
 
   /* =========================
      STATUS
@@ -573,6 +560,56 @@ body {
   .mobile-command-title strong {
     color: #1976a8 !important;
   }
+
+  /* =========================
+   MOBILE QUICK ACTIONS
+========================= */
+
+.mobile-quick-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-content: flex-start !important;
+
+  gap: 4px !important;
+
+  width: 100% !important;
+  height: 68px !important;
+  min-height: 68px !important;
+  max-height: 68px !important;
+
+  flex: 0 0 68px !important;
+
+  padding: 3px !important;
+  box-sizing: border-box !important;
+
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.mobile-quick-actions button {
+  flex: 0 0 auto !important;
+
+  min-width: 72px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+
+  padding: 4px 8px !important;
+
+  border: 1px solid #aaa !important;
+  border-radius: 4px !important;
+
+  background: #fff !important;
+  color: #222 !important;
+
+  font-size: 12px !important;
+  line-height: 1 !important;
+
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
 
   /* =========================
      COMMAND CONTROLS
@@ -693,5 +730,117 @@ body {
 
   .statusbar {
     display: none !important;
+  }
+}
+
+.workspace {
+  position: relative;
+}
+
+.mobile-dimension-crosshair {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  transform: translate(-50%, -50%);
+  z-index: 5000;
+  pointer-events: none;
+}
+
+.crosshair-horizontal {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 52px;
+  height: 2px;
+  background: yellow;
+  transform: translateY(-50%);
+}
+
+.crosshair-vertical {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 52px;
+  background: yellow;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 768px) {
+  .mobile-dimension-crosshair {
+    display: block;
+  }
+}
+/* =========================
+   ACTIVE / ON BUTTON STYLE
+========================= */
+
+button.active {
+  background: #0078d4 !important;
+  color: #ffffff !important;
+  border: 2px solid #00a8ff !important;
+  font-weight: 800 !important;
+
+  box-shadow:
+    0 0 0 2px rgba(0, 120, 212, 0.25),
+    0 0 12px rgba(0, 168, 255, 0.45) !important;
+}
+
+/* Active button hover */
+button.active:hover {
+  background: #0088ee !important;
+  color: #ffffff !important;
+}
+
+/* Pressed effect */
+button.active:active {
+  transform: translateY(1px);
+}
+
+
+/* =========================
+   NORMAL OFF BUTTON
+========================= */
+
+button:not(.active) {
+  background: #333 !important;
+  color: #ddd !important;
+  border: 1px solid #555 !important;
+}
+
+/* Normal hover */
+button:not(.active):hover {
+  background: #444 !important;
+  color: #fff !important;
+}
+
+.mobile-topbar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: #f4f4f4;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .mobile-topbar button {
+    border: none;
+    background: transparent;
+    font-size: 24px;
+    padding: 8px 10px;
+    color: #333;
   }
 }
