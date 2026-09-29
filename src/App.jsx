@@ -17347,112 +17347,74 @@ newScale = Math.max(
 
 const handleTouchStart = (e) => {
   const touches = e.evt.touches;
-
   if (!touches) return;
 
   e.evt.preventDefault();
 
-  /* =========================
-     TWO FINGER = PAN / ZOOM
-  ========================= */
+  // 2 finger = pan / zoom
   if (touches.length === 2) {
     touchStateRef.current = {
       lastDistance: getTouchDistance(touches),
       lastCenter: getTouchCenter(touches),
     };
-
     return;
   }
 
-  /* =========================
-     ONE FINGER = CAD POINT
-  ========================= */
+  // 1 finger
   if (touches.length === 1) {
     lastTouchTimeRef.current = Date.now();
 
     const stage = e.target.getStage();
-
     if (!stage) return;
 
-    /*
-      IMPORTANT:
-      Touch position ko directly
-      Konva me register karo.
-    */
     stage.setPointersPositions(e.evt);
 
-    /*
-      Ab first tap ko normal CAD
-      point ki tarah handle karo.
-    */
+    // LINE / POLYLINE: touch ko mouse-down ki tarah use karo
     handleMouseDown(e);
   }
 };
 
-
 const handleTouchMove = (e) => {
   const touches = e.evt.touches;
-
   if (!touches) return;
 
   e.evt.preventDefault();
 
-  /* =========================
-     TWO FINGER = ZOOM / PAN
-  ========================= */
+  // =========================
+  // 2 FINGER PAN / ZOOM
+  // =========================
   if (touches.length === 2) {
     const center = getTouchCenter(touches);
     const distance = getTouchDistance(touches);
 
     const oldScale = scale;
-    const oldCenter =
-      touchStateRef.current.lastCenter;
+    const oldCenter = touchStateRef.current.lastCenter;
 
     if (!oldCenter) {
-      touchStateRef.current.lastCenter =
-        center;
-
-      touchStateRef.current.lastDistance =
-        distance;
-
+      touchStateRef.current.lastCenter = center;
+      touchStateRef.current.lastDistance = distance;
       return;
     }
 
     const zoomRatio =
       distance /
-      (
-        touchStateRef.current.lastDistance ||
-        distance
-      );
+      (touchStateRef.current.lastDistance || distance);
 
     const newScale = Math.max(
       0.2,
-      Math.min(
-        oldScale * zoomRatio,
-        20
-      )
+      Math.min(oldScale * zoomRatio, 20)
     );
 
     const worldPoint = {
-      x:
-        (oldCenter.x - position.x) /
-        oldScale,
-
-      y:
-        (oldCenter.y - position.y) /
-        oldScale,
+      x: (oldCenter.x - position.x) / oldScale,
+      y: (oldCenter.y - position.y) / oldScale,
     };
 
     setScale(newScale);
 
     setPosition({
-      x:
-        center.x -
-        worldPoint.x * newScale,
-
-      y:
-        center.y -
-        worldPoint.y * newScale,
+      x: center.x - worldPoint.x * newScale,
+      y: center.y - worldPoint.y * newScale,
     });
 
     touchStateRef.current = {
@@ -17463,47 +17425,34 @@ const handleTouchMove = (e) => {
     return;
   }
 
-  /* =========================
-     ONE FINGER = MOVE CURSOR
-  ========================= */
+  // =========================
+  // 1 FINGER
+  // =========================
   if (touches.length === 1) {
     const stage = e.target.getStage();
-
     if (!stage) return;
 
-    /*
-      Touch ki latest position
-      Konva Stage me update karo.
-    */
     stage.setPointersPositions(e.evt);
 
-    /*
-      Isse line/polyline ka
-      live preview chalega.
-    */
+    // IMPORTANT:
+    // line endpoint ko sirf preview me move karo
+    // actual line second tap par fix hogi
     handleMouseMove(e);
   }
 };
-
 
 const handleTouchEnd = (e) => {
   e.evt.preventDefault();
 
   const touches = e.evt.touches;
 
-  /*
-    Agar pinch se ek finger bachi hai,
-    to zoom state reset karo.
-  */
-  if (
-    touches &&
-    touches.length === 1
-  ) {
+  // Agar 1 finger abhi bhi screen par hai,
+  // drawing ko finish MAT karo.
+  if (touches && touches.length === 1) {
     touchStateRef.current = {
       lastDistance: null,
       lastCenter: null,
     };
-
     return;
   }
 
@@ -17512,26 +17461,18 @@ const handleTouchEnd = (e) => {
     lastCenter: null,
   };
 
-  /*
-    IMPORTANT MOBILE FIX
-
-    Line / Polyline me finger chhodna
-    drawing ko finish NAHI karega.
-
-    First tap  = START POINT
-    Finger move = PREVIEW
-    Second tap = END POINT
-  */
-  if (
-    tool === "line" ||
-    tool === "polyline"
-  ) {
+  // IMPORTANT:
+  // LINE ke second tap ko mouseUp se finish nahi karna.
+  // MouseUp line ko pending state me chhod deta hai.
+  if (tool === "line" && lineStart) {
     return;
   }
 
-  /*
-    Baaki tools ke liye normal mouse-up.
-  */
+  // Polyline bhi mouseUp se finish nahi hogi.
+  if (tool === "polyline") {
+    return;
+  }
+
   handleMouseUp(e);
 };
 
