@@ -1721,10 +1721,43 @@ useEffect(() => {
 
   const [scale, setScale] = useState(1);
 
-  const [position, setPosition] = useState({
-    x: 0,
-    y: 0,
-  });
+  const [position, setPosition] = useState(() => ({
+  x:
+    (window.innerWidth <= 768
+      ? window.innerWidth
+      : window.innerWidth - 298) / 2,
+
+  y:
+    (window.innerWidth <= 768
+      ? window.innerHeight - 87 - 64
+      : window.innerHeight - 87) / 2,
+}));
+
+  const [viewportSize, setViewportSize] = useState({
+  width: window.innerWidth,
+  height: window.innerHeight,
+});
+
+useEffect(() => {
+  const handleResize = () => {
+    setViewportSize({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  };
+
+  window.addEventListener(
+    "resize",
+    handleResize
+  );
+
+  return () => {
+    window.removeEventListener(
+      "resize",
+      handleResize
+    );
+  };
+}, []);
 
   const [isPanning, setIsPanning] =
   useState(false);
@@ -5202,10 +5235,12 @@ if (object.type === "hatch") {
             : object.color || "#ffffff"
         }
         strokeWidth={
-          selectedIndex === index
-            ? 3
-            : object.strokeWidth || 1
-        }
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
+
+
         hitStrokeWidth={15}
       />
 
@@ -5224,10 +5259,10 @@ if (object.type === "hatch") {
           <Circle
             x={x}
             y={y}
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -5265,10 +5300,10 @@ if (object.type === "hatch") {
           <Circle
             x={x + width}
             y={y + height}
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -17294,16 +17329,23 @@ newScale = Math.max(
   ========================= */
 
   const zoomFit = () => {
-    if (objects.length === 0) {
-      setScale(1);
+   if (objects.length === 0) {
+  setScale(1);
 
-      setPosition({
-        x: 0,
-        y: 0,
-      });
+  setPosition({
+    x:
+      (viewportSize.width <= 768
+        ? viewportSize.width
+        : viewportSize.width - 298) / 2,
 
-      return;
-    }
+    y:
+      (viewportSize.width <= 768
+        ? viewportSize.height - 87 - 64
+        : viewportSize.height - 87) / 2,
+  });
+
+  return;
+}
 
     const points = [];
 
@@ -17422,15 +17464,15 @@ newScale = Math.max(
         maxY - minY
       );
 
-   const canvasWidth =
-  window.innerWidth <= 768
-    ? window.innerWidth
-    : window.innerWidth - 298;
+  const canvasWidth =
+  viewportSize.width <= 768
+    ? viewportSize.width
+    : viewportSize.width - 298;
 
-   const canvasHeight =
-  window.innerWidth <= 768
-    ? window.innerHeight - 56 - 64
-    : window.innerHeight - 87;
+const canvasHeight =
+  viewportSize.width <= 768
+    ? viewportSize.height - 87 - 64
+    : viewportSize.height - 87;
 
     const padding = 80;
 
@@ -17552,50 +17594,79 @@ const handleTouchMove = (e) => {
 
   e.evt.preventDefault();
 
-  // =========================
-  // 2 FINGER PAN / ZOOM
-  // =========================
-  if (touches.length === 2) {
-    const center = getTouchCenter(touches);
-    const distance = getTouchDistance(touches);
+ // =========================
+// 2 FINGER PAN / ZOOM
+// =========================
+if (touches.length === 2) {
+  const center = getTouchCenter(touches);
+  const distance = getTouchDistance(touches);
 
-    const oldScale = scale;
-    const oldCenter = touchStateRef.current.lastCenter;
+  const oldScale = scale;
+  const lastCenter =
+    touchStateRef.current.lastCenter;
 
-    if (!oldCenter) {
-      touchStateRef.current.lastCenter = center;
-      touchStateRef.current.lastDistance = distance;
-      return;
-    }
+  const lastDistance =
+    touchStateRef.current.lastDistance;
 
-    const zoomRatio =
-      distance /
-      (touchStateRef.current.lastDistance || distance);
-
-    const newScale = Math.max(
-      0.2,
-      Math.min(oldScale * zoomRatio, 20)
-    );
-
-    const worldPoint = {
-      x: (oldCenter.x - position.x) / oldScale,
-      y: (oldCenter.y - position.y) / oldScale,
-    };
-
-    setScale(newScale);
-
-    setPosition({
-      x: center.x - worldPoint.x * newScale,
-      y: center.y - worldPoint.y * newScale,
-    });
-
+  // First 2-finger frame
+  if (!lastCenter || !lastDistance) {
     touchStateRef.current = {
-      lastDistance: distance,
       lastCenter: center,
+      lastDistance: distance,
     };
-
     return;
   }
+
+  // =========================
+  // ZOOM
+  // =========================
+  const zoomRatio =
+    distance / lastDistance;
+
+  const newScale = Math.max(
+    0.2,
+    Math.min(oldScale * zoomRatio, 20)
+  );
+
+  // =========================
+  // KEEP SAME POINT UNDER
+  // FINGERS WHILE ZOOMING
+  // =========================
+  const worldPoint = {
+    x:
+      (lastCenter.x - position.x) /
+      oldScale,
+
+    y:
+      (lastCenter.y - position.y) /
+      oldScale,
+  };
+
+  // =========================
+  // PAN + ZOOM TOGETHER
+  // =========================
+  const newPosition = {
+    x:
+      center.x -
+      worldPoint.x * newScale,
+
+    y:
+      center.y -
+      worldPoint.y * newScale,
+  };
+
+  setScale(newScale);
+
+  setPosition(newPosition);
+
+  // Save current finger state
+  touchStateRef.current = {
+    lastCenter: center,
+    lastDistance: distance,
+  };
+
+  return;
+}
 
   // =========================
   // 1 FINGER
@@ -18459,9 +18530,17 @@ const clearCurrentLayer = () => {
 
 const resetView = () => {
   setScale(1);
+
   setPosition({
-    x: 0,
-    y: 0,
+    x:
+      (viewportSize.width <= 768
+        ? viewportSize.width
+        : viewportSize.width - 298) / 2,
+
+    y:
+      (viewportSize.width <= 768
+        ? viewportSize.height - 87 - 64
+        : viewportSize.height - 87) / 2,
   });
 };
 
@@ -19260,16 +19339,19 @@ const fitAllObjects = () => {
   const centerY =
     (minY + maxY) / 2;
 
-  setPosition({
-    x:
-      window.innerWidth / 2 -
-      centerX * scale,
+ setPosition({
+  x:
+    (viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298) / 2 -
+    centerX * scale,
 
-    y:
-      (window.innerHeight - 290) /
-        2 -
-      centerY * scale,
-  });
+  y:
+    (viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87) / 2 -
+    centerY * scale,
+});
 };
 
 
@@ -19592,16 +19674,15 @@ const zoomToAllSelected = () => {
       maxY - minY
     );
 
-  const canvasWidth =
-    window.innerWidth <= 768
-      ? window.innerWidth
-      : window.innerWidth - 298;
+ const canvasWidth =
+  viewportSize.width <= 768
+    ? viewportSize.width
+    : viewportSize.width - 298;
 
-  const canvasHeight =
-    window.innerWidth <= 768
-      ? window.innerHeight -
-        120
-      : window.innerHeight - 87;
+const canvasHeight =
+  viewportSize.width <= 768
+    ? viewportSize.height - 87 - 64
+    : viewportSize.height - 87;
 
   const padding = 100;
 
@@ -23482,16 +23563,24 @@ setArcPoints([]);
   <button onClick={zoomFit}>⌗</button>
 
   <button
-    onClick={() => {
-      setScale(1);
-      setPosition({
-        x: 0,
-        y: 0,
-      });
-    }}
-  >
-    ⛶
-  </button>
+  onClick={() => {
+    setScale(1);
+
+    setPosition({
+      x:
+        (viewportSize.width <= 768
+          ? viewportSize.width
+          : viewportSize.width - 298) / 2,
+
+      y:
+        (viewportSize.width <= 768
+          ? viewportSize.height - 87 - 64
+          : viewportSize.height - 87) / 2,
+    });
+  }}
+>
+  ⛶
+</button>
 
   <button
     onClick={() => {
@@ -25252,15 +25341,15 @@ disabled={
 
           <Stage
             ref={stageRef}
-            width={
-  window.innerWidth <= 768
-    ? window.innerWidth
-    : window.innerWidth - 298
+         width={
+  viewportSize.width <= 768
+    ? viewportSize.width
+    : viewportSize.width - 298
 }
-         height={
-  window.innerWidth <= 768
-    ? window.innerHeight - 87 - 64
-    : window.innerHeight - 87
+height={
+  viewportSize.width <= 768
+    ? viewportSize.height - 87 - 64
+    : viewportSize.height - 87
 }
             
       draggable={false}
@@ -25311,14 +25400,14 @@ onTouchEnd={handleTouchEnd}
 ========================= */
 
 const canvasWidth =
-  window.innerWidth <= 768
-    ? window.innerWidth
-    : window.innerWidth - 298;
+  viewportSize.width <= 768
+    ? viewportSize.width
+    : viewportSize.width - 298;
 
 const canvasHeight =
-  window.innerWidth <= 768
-    ? window.innerHeight - 87 - 64
-    : window.innerHeight - 87;
+  viewportSize.width <= 768
+    ? viewportSize.height - 87 - 64
+    : viewportSize.height - 87;
 
 /* WORLD VIEWPORT */
 const left =
@@ -25344,46 +25433,46 @@ const bottom =
 const baseGrid = GRID_SIZE;
 
 /* target screen spacing */
-const targetPixels = 45;
+const targetPixels = 50;
 
 /* world units needed for target screen spacing */
 const idealStep =
   targetPixels / scale;
 
 /* CAD style 1-2-5 sequence */
-const gridSteps = [
-  baseGrid,
-  baseGrid * 2,
-  baseGrid * 5,
-  baseGrid * 10,
-  baseGrid * 20,
-  baseGrid * 50,
-  baseGrid * 100,
-  baseGrid * 200,
-  baseGrid * 500,
-  baseGrid * 1000,
-  baseGrid * 2000,
-  baseGrid * 5000,
-  baseGrid * 10000,
-  baseGrid * 20000,
-  baseGrid * 50000,
-  baseGrid * 100000,
-  baseGrid * 200000,
-  baseGrid * 500000,
-  baseGrid * 1000000,
-];
+/* =========================
+   INFINITE CAD GRID SCALE
+========================= */
 
-let gridStep = baseGrid;
+const relativeStep =
+  idealStep / baseGrid;
 
-for (let i = 0; i < gridSteps.length; i++) {
-  if (gridSteps[i] >= idealStep) {
-    gridStep = gridSteps[i];
-    break;
-  }
+const exponent = Math.floor(
+  Math.log10(
+    Math.max(relativeStep, 0.000001)
+  )
+);
 
-  gridStep =
-    gridSteps[gridSteps.length - 1];
+const power =
+  Math.pow(10, exponent);
+
+const normalized =
+  relativeStep / power;
+
+let multiplier;
+
+if (normalized <= 1) {
+  multiplier = 1;
+} else if (normalized <= 2) {
+  multiplier = 2;
+} else if (normalized <= 5) {
+  multiplier = 5;
+} else {
+  multiplier = 10;
 }
+
+const gridStep =
+  baseGrid * multiplier * power;
 
 /* =========================
    GRID RANGE
@@ -25415,8 +25504,8 @@ for (
   const x =
     i * gridStep;
 
-  const isMajor =
-    i % 5 === 0;
+ const isMajor =
+  Math.abs(i % 5) === 0;
 
   gridLines.push(
     <Line
@@ -25427,14 +25516,13 @@ for (
         x,
         bottom,
       ]}
-      stroke={
-        isMajor
-          ? "#3d4652"
-: "#2a323d"
-      }
+      stroke={isMajor ? "#303030" : "#252525"}
       strokeWidth={
-        1 / scale
-      }
+  Math.max(
+    0.5 / scale,
+    0.03
+  )
+}
       listening={false}
     />
   );
@@ -25452,9 +25540,8 @@ for (
   const y =
     i * gridStep;
 
-  const isMajor =
-    i % 5 === 0;
-
+ const isMajor =
+  Math.abs(i % 5) === 0;
   gridLines.push(
     <Line
       key={`grid-h-${i}`}
@@ -25464,14 +25551,13 @@ for (
         right,
         y,
       ]}
-      stroke={
-        isMajor
-          ? "#3d4652"
-: "#2a323d"
-      }
+  stroke={isMajor ? "#303030" : "#252525"}
       strokeWidth={
-        1 / scale
-      }
+  Math.max(
+    0.5 / scale,
+    0.03
+  )
+}
       listening={false}
     />
   );
@@ -25493,8 +25579,8 @@ gridLines.push(
       right,
       xAxisY,
     ]}
-    stroke="#6f3f3f"
-    strokeWidth={1 / scale}
+    stroke="#353535"
+    strokeWidth={0.8 / scale}
     listening={false}
   />
 );
@@ -25512,8 +25598,8 @@ gridLines.push(
       yAxisX,
       bottom,
     ]}
-    stroke="#3f6f48"
-    strokeWidth={1 / scale}
+    stroke="#353535"
+   strokeWidth={0.8 / scale}
     listening={false}
   />
 );
@@ -25595,9 +25681,9 @@ return gridLines;
   <Circle
     x={snapPoint.x}
     y={snapPoint.y}
-    radius={5}
+    radius={5 / scale}
 stroke="#ffd54f"
-    strokeWidth={2}
+    strokeWidth={2 / scale}
     listening={false}
   />
 )}
@@ -25615,7 +25701,7 @@ stroke="#ffd54f"
       linePreview.y2,
     ]}
     stroke="cyan"
-    strokeWidth={2}
+    strokeWidth={2 / scale}
     dash={[8, 6]}
     listening={false}
   />
@@ -26339,7 +26425,7 @@ onTouchStart={(e) => {
         snapPoint?.y ?? mousePosition.y,
       ]}
       stroke="yellow"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       listening={false}
     />
 
@@ -26351,7 +26437,7 @@ onTouchStart={(e) => {
         (snapPoint?.y ?? mousePosition.y) + 12,
       ]}
       stroke="yellow"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       listening={false}
     />
   </>
@@ -26371,7 +26457,7 @@ onTouchStart={(e) => {
     height={Math.abs(selectionBox.height)}
     fill="rgba(0, 120, 215, 0.15)"
     stroke="#0088ff"
-    strokeWidth={1}
+    strokeWidth={1 / scale}
     dash={[6, 4]}
     listening={false}
   />
@@ -26388,7 +26474,7 @@ onTouchStart={(e) => {
                     y={
                       measureStart.y
                     }
-                    radius={6}
+                    radius={6 / scale}
                     fill="yellow"
                   />
                 )}
@@ -26402,7 +26488,7 @@ onTouchStart={(e) => {
             key={`angle-point-${index}`}
             x={point.x}
             y={point.y}
-            radius={5}
+            radius={5 / scale}
             fill="yellow"
           />
         )
@@ -26422,7 +26508,7 @@ onTouchStart={(e) => {
             snapPoint?.y ?? mousePosition.y,
           ]}
           stroke="yellow"
-          strokeWidth={2}
+          strokeWidth={2 / scale}
           dash={[6, 4]}
         />
       )}
@@ -26437,7 +26523,7 @@ onTouchStart={(e) => {
               anglePoints[1].y,
             ]}
             stroke="yellow"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
           />
 
           <Line
@@ -26448,7 +26534,7 @@ onTouchStart={(e) => {
               snapPoint?.y ?? mousePosition.y,
             ]}
             stroke="yellow"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             dash={[6, 4]}
           />
         </>
@@ -26513,7 +26599,7 @@ onTouchStart={(e) => {
   angle={arcAngle}
   rotation={startAngle}
   stroke="yellow"
-  strokeWidth={2}
+ strokeWidth={2 / scale}
 />
  
       );
@@ -26588,7 +26674,7 @@ onTouchStart={(e) => {
           x={textX - 25}
           y={textY - 10}
           text={`${degrees.toFixed(2)}°`}
-          fontSize={16}
+         fontSize={16 / scale}
           fill="yellow"
         />
       );
@@ -26823,10 +26909,10 @@ if (
         ]}
         stroke="yellow"
         strokeWidth={
-          angularSelected
-            ? 4
-            : 2
-        }
+  angularSelected
+    ? 4 / scale
+    : 2 / scale
+}
         hitStrokeWidth={15}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -26848,10 +26934,10 @@ if (
         ]}
         stroke="yellow"
         strokeWidth={
-          angularSelected
-            ? 4
-            : 2
-        }
+  angularSelected
+    ? 4 / scale
+    : 2 / scale
+}
         hitStrokeWidth={15}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -26873,10 +26959,10 @@ if (
         rotation={startAngle}
         stroke="yellow"
         strokeWidth={
-          angularSelected
-            ? 4
-            : 2
-        }
+  angularSelected
+    ? 4 / scale
+    : 2 / scale
+}
         hitStrokeWidth={20}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -26887,64 +26973,64 @@ if (
         }}
       />
 
-      {/* START ARROW */}
+    {/* START ARROW */}
 
-      <Line
-        points={[
-          arcStartX,
-          arcStartY,
-          startArrow1.x,
-          startArrow1.y,
-        ]}
-        stroke="yellow"
-        strokeWidth={2}
-      />
+<Line
+  points={[
+    arcStartX,
+    arcStartY,
+    startArrow1.x,
+    startArrow1.y,
+  ]}
+  stroke="yellow"
+  strokeWidth={2 / scale}
+/>
 
-      <Line
-        points={[
-          arcStartX,
-          arcStartY,
-          startArrow2.x,
-          startArrow2.y,
-        ]}
-        stroke="yellow"
-        strokeWidth={2}
-      />
+<Line
+  points={[
+    arcStartX,
+    arcStartY,
+    startArrow2.x,
+    startArrow2.y,
+  ]}
+  stroke="yellow"
+  strokeWidth={2 / scale}
+/>
 
-      {/* END ARROW */}
+{/* END ARROW */}
 
-      <Line
-        points={[
-          arcEndX,
-          arcEndY,
-          endArrow1.x,
-          endArrow1.y,
-        ]}
-        stroke="yellow"
-        strokeWidth={2}
-      />
+<Line
+  points={[
+    arcEndX,
+    arcEndY,
+    endArrow1.x,
+    endArrow1.y,
+  ]}
+  stroke="yellow"
+  strokeWidth={2 / scale}
+/>
 
-      <Line
-        points={[
-          arcEndX,
-          arcEndY,
-          endArrow2.x,
-          endArrow2.y,
-        ]}
-        stroke="yellow"
-        strokeWidth={2}
-      />
+<Line
+  points={[
+    arcEndX,
+    arcEndY,
+    endArrow2.x,
+    endArrow2.y,
+  ]}
+  stroke="yellow"
+  strokeWidth={2 / scale}
+/>
 
       {/* VERTEX */}
 
       <Circle
         x={vertexX}
         y={vertexY}
-        radius={
-          angularSelected
-            ? 6
-            : 4
-        }
+       radius={
+  angularSelected
+    ? 6 / scale
+    : 4 / scale
+}
         fill="yellow"
       />
 
@@ -26954,10 +27040,11 @@ if (
         x={measurement.x2}
         y={measurement.y2}
         radius={
-          angularSelected
-            ? 6
-            : 4
-        }
+  angularSelected
+    ? 6 / scale
+    : 4 / scale
+}
+
         fill="yellow"
       />
 
@@ -26967,10 +27054,11 @@ if (
         x={measurement.x3}
         y={measurement.y3}
         radius={
-          angularSelected
-            ? 6
-            : 4
-        }
+  angularSelected
+    ? 6 / scale
+    : 4 / scale
+}
+
         fill="yellow"
       />
 
@@ -26982,7 +27070,7 @@ if (
         text={
           `${measurement.angle}°`
         }
-        fontSize={16}
+        fontSize={16 / scale}
         fill={
           angularSelected
             ? "white"
@@ -27120,10 +27208,10 @@ if (
         ]}
         stroke="yellow"
         strokeWidth={
-          radiusSelected
-            ? 4
-            : 2
-        }
+  radiusSelected
+    ? 4 / scale
+    : 2 / scale
+}
         hitStrokeWidth={15}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -27144,11 +27232,11 @@ if (
           arrow1.y,
         ]}
         stroke="yellow"
-        strokeWidth={
-          radiusSelected
-            ? 3
-            : 2
-        }
+       strokeWidth={
+  radiusSelected
+    ? 3 / scale
+    : 2 / scale
+}
         hitStrokeWidth={15}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -27167,11 +27255,11 @@ if (
           arrow2.y,
         ]}
         stroke="yellow"
-        strokeWidth={
-          radiusSelected
-            ? 3
-            : 2
-        }
+       strokeWidth={
+  radiusSelected
+    ? 3 / scale
+    : 2 / scale
+}
         hitStrokeWidth={15}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -27188,10 +27276,11 @@ if (
         x={centerX}
         y={centerY}
         radius={
-          radiusSelected
-            ? 6
-            : 4
-        }
+          
+  radiusSelected
+    ? 6 / scale
+    : 4 / scale
+}
         fill="yellow"
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -27208,10 +27297,12 @@ if (
         x={edgeX}
         y={edgeY}
         radius={
-          radiusSelected
-            ? 6
-            : 4
-        }
+  radiusSelected
+    ? 6 / scale
+    : 4 / scale
+}
+
+
         fill="yellow"
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -27228,7 +27319,10 @@ if (
         x={textX - 25}
         y={textY - 10}
         text={`R ${measurement.radius}`}
-        fontSize={16}
+        fontSize={16 / scale}
+
+
+
         fill={
           radiusSelected
             ? "white"
@@ -27400,11 +27494,12 @@ if (
           point2Y,
         ]}
         stroke="yellow"
-        strokeWidth={
-          diameterSelected
-            ? 4
-            : 2
-        }
+       strokeWidth={
+  diameterSelected
+    ? 4 / scale
+    : 2 / scale
+}
+
         hitStrokeWidth={15}
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -27425,7 +27520,7 @@ if (
           arrow1.y,
         ]}
         stroke="yellow"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
       />
 
       <Line
@@ -27436,7 +27531,9 @@ if (
           arrow2.y,
         ]}
         stroke="yellow"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
+
+
       />
 
       {/* ARROW 2 */}
@@ -27449,7 +27546,7 @@ if (
           arrow3.y,
         ]}
         stroke="yellow"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
       />
 
       <Line
@@ -27460,7 +27557,7 @@ if (
           arrow4.y,
         ]}
         stroke="yellow"
-        strokeWidth={2}
+       strokeWidth={2 / scale}
       />
 
       {/* CENTER */}
@@ -27469,10 +27566,10 @@ if (
         x={centerX}
         y={centerY}
         radius={
-          diameterSelected
-            ? 6
-            : 4
-        }
+  diameterSelected
+    ? 6 / scale
+    : 4 / scale
+}
         fill="yellow"
       />
 
@@ -27488,7 +27585,8 @@ if (
         text={
           `⌀ ${measurement.diameter}`
         }
-        fontSize={16}
+        fontSize={16 / scale}
+
         fill={
           diameterSelected
             ? "white"
@@ -27610,10 +27708,10 @@ if (
               : "cyan"
           }
           strokeWidth={
-            dimensionSelected
-              ? 4
-              : 2
-          }
+  dimensionSelected
+    ? 4 / scale
+    : 2 / scale
+}
           dash={
             measurement.type ===
             "dimension"
@@ -27643,7 +27741,7 @@ if (
                 dimY1,
               ]}
               stroke="yellow"
-              strokeWidth={1}
+              strokeWidth={1 / scale}
               onMouseDown={(e) => {
                 e.cancelBubble = true;
 
@@ -27661,7 +27759,9 @@ if (
                 dimY2,
               ]}
               stroke="yellow"
-              strokeWidth={1}
+              strokeWidth={1 / scale}
+
+
               onMouseDown={(e) => {
                 e.cancelBubble = true;
 
@@ -27682,7 +27782,7 @@ if (
           y={
             measurement.y1
           }
-          radius={4}
+          radius={4 / scale}
           fill={
             measurement.type ===
             "dimension"
@@ -27705,7 +27805,7 @@ if (
           y={
             measurement.y2
           }
-          radius={4}
+          radius={4 / scale}
           fill={
             measurement.type ===
             "dimension"
@@ -27735,7 +27835,7 @@ if (
               ? `${measurement.distance}`
               : `${measurement.distance} units`
           }
-          fontSize={16}
+          fontSize={16 / scale}
           fill={
             measurement.type ===
             "dimension"
@@ -27865,11 +27965,10 @@ if (
             : object.color ||
               "#ffffff"
         }
-       strokeWidth={
+      strokeWidth={
   selected
-    ? 3
-    : object.strokeWidth ||
-      2
+    ? 3 / scale
+    : (object.strokeWidth || 2) / scale
 }
         hitStrokeWidth={25}
         rotation={
@@ -27891,7 +27990,7 @@ if (
             radius={7}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -27916,7 +28015,7 @@ if (
             radius={7}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -27980,11 +28079,12 @@ rotation={
         ? "yellow"
         : object.color || "#ffffff"
     }
-    strokeWidth={
-      selectedIndex === index
-        ? 4
-        : object.strokeWidth || 2
-    }
+   strokeWidth={
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
+
   />
 ) : (
   <Circle
@@ -27998,11 +28098,11 @@ rotation={
         : object.color || "#ffffff"
     }
     strokeWidth={
-      selectedIndex === index
-        ? 4
-        : object.strokeWidth || 2
-    }
-    rotation={
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
+  rotation={
       object.rotation || 0
     }
   />
@@ -28019,10 +28119,10 @@ rotation={
     <Circle
       x={object.x}
       y={object.y}
-      radius={6}
+      radius={6 / scale}
       fill="#00aaff"
       stroke="white"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -28056,10 +28156,10 @@ rotation={
               : 0
           )
       }
-      radius={6}
+      radius={6 / scale}
       fill="#00aaff"
       stroke="white"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -28095,10 +28195,10 @@ rotation={
         object.radius *
           Math.sin(object.trimStartAngle)
       }
-      radius={6}
+      radius={6 / scale}
       fill="#ff9900"
       stroke="white"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -28124,10 +28224,10 @@ rotation={
         object.radius *
           Math.sin(object.trimEndAngle)
       }
-      radius={6}
+      radius={6 / scale}
       fill="#ff9900"
       stroke="white"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -28166,11 +28266,10 @@ if (
       "#ffffff"
 }
         strokeWidth={
-       selectedIndex === index
-  ? 4
-  : object.strokeWidth ||
-    2
-        }
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
         rotation={
           object.rotation ||
           0
@@ -28187,10 +28286,10 @@ if (
           <Circle
             x={object.x}
             y={object.y}
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28211,10 +28310,10 @@ if (
               object.width / 2
             }
             y={object.y}
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28235,10 +28334,10 @@ if (
               object.width
             }
             y={object.y}
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28262,10 +28361,10 @@ if (
               object.y +
               object.height / 2
             }
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28289,10 +28388,10 @@ if (
               object.y +
               object.height
             }
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28316,10 +28415,10 @@ if (
               object.y +
               object.height
             }
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28340,10 +28439,10 @@ if (
               object.y +
               object.height
             }
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28364,10 +28463,10 @@ if (
               object.y +
               object.height / 2
             }
-            radius={6}
+            radius={6 / scale}
             fill="#00aaff"
             stroke="white"
-            strokeWidth={2}
+            strokeWidth={2 / scale}
             draggable
             onMouseDown={(e) => {
               e.cancelBubble = true;
@@ -28481,11 +28580,11 @@ if (
             ? "yellow"
             : object.color || "#ffffff"
         }
-        strokeWidth={
-          selectedIndex === index
-            ? 4
-            : object.strokeWidth || 2
-        }
+       strokeWidth={
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
         rotation={
           object.rotation || 0
         }
@@ -28705,12 +28804,11 @@ if (
             : object.color ||
               "#ffffff"
         }
-        strokeWidth={
-          selectedIndex === index
-            ? 4
-            : object.strokeWidth ||
-              2
-        }
+       strokeWidth={
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
         hitStrokeWidth={15}
       />
 
@@ -28729,10 +28827,10 @@ if (
                 key={pointIndex}
                 x={object.points[pointIndex]}
                 y={object.points[pointIndex + 1]}
-                radius={6}
+                radius={6 / scale}
                 fill="#00aaff"
                 stroke="white"
-                strokeWidth={2}
+                strokeWidth={2 / scale}
                 draggable
                 onMouseDown={(e) => {
                   e.cancelBubble = true;
@@ -28795,11 +28893,11 @@ return (
           ? "yellow"
           : object.color || "#ffffff"
       }
-      strokeWidth={
-        selectedIndex === index
-          ? 4
-          : object.strokeWidth || 2
-      }
+     strokeWidth={
+  selectedIndex === index
+    ? 4 / scale
+    : (object.strokeWidth || 2) / scale
+}
       lineCap="round"
       lineJoin="round"
       hitStrokeWidth={15}
@@ -28983,7 +29081,7 @@ onDblTap={() => {
     radius={12 / scale}
     fill="#00aaff"
     stroke="black"
-    strokeWidth={2}
+    strokeWidth={2 / scale}
     draggable
     onMouseDown={(e) => {
       e.cancelBubble = true;
@@ -29014,7 +29112,7 @@ onDblTap={() => {
                           radius={12 / scale}
                           fill="#00aaff"
                           stroke="black"
-                          strokeWidth={2}
+                          strokeWidth={2 / scale}
                           draggable
                           onMouseDown={(
                             e
@@ -29080,7 +29178,7 @@ y={
   radius={12 / scale}
   fill="#ff9900"
   stroke="white"
-  strokeWidth={2}
+  strokeWidth={2 / scale}
   draggable
   onMouseDown={(e) => {
     e.cancelBubble = true;
@@ -29241,7 +29339,7 @@ y={
       radius={12 / scale}
       fill="#ff00ff"
       stroke="white"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
 
       onMouseDown={(e) => {
@@ -29294,7 +29392,7 @@ DIMENSION HANDLES
   radius={12 / scale}
   fill="#00aaff"
   stroke="black"
-  strokeWidth={2}
+  strokeWidth={2 / scale}
   draggable
 
   onMouseDown={(e) => {
@@ -29364,7 +29462,7 @@ const y = snappedPoint.y;
   radius={12 / scale}
   fill="#00aaff"
   stroke="black"
-  strokeWidth={2}
+  strokeWidth={2 / scale}
   draggable
 
   onMouseDown={(e) => {
@@ -29448,7 +29546,7 @@ const y = snappedPoint.y;
         radius={12 / scale}
         fill="#00aaff"
         stroke="black"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
         draggable
 
         onMouseDown={(e) => {
@@ -29533,7 +29631,7 @@ const y = snappedPoint.y;
         radius={12 / scale}
         fill="#00aaff"
         stroke="black"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
         draggable
 
         onMouseDown={(e) => {
@@ -29605,7 +29703,7 @@ const y = snappedPoint.y;
         radius={12 / scale}
         fill="#00aaff"
         stroke="black"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
         draggable
 
         onMouseDown={(e) => {
@@ -29693,7 +29791,7 @@ const y = snappedPoint.y;
         radius={12 / scale}
         fill="#00aaff"
         stroke="black"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
         draggable
 
         onMouseDown={(e) => {
@@ -29785,7 +29883,7 @@ const y = snappedPoint.y;
         radius={12 / scale}
         fill="#00aaff"
         stroke="black"
-        strokeWidth={2}
+        strokeWidth={2 / scale}
         draggable
 
         onMouseDown={(e) => {
@@ -29921,7 +30019,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -29948,7 +30046,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -29975,7 +30073,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30005,7 +30103,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30035,7 +30133,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30065,7 +30163,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30092,7 +30190,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30119,7 +30217,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30154,7 +30252,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30188,7 +30286,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30222,7 +30320,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30256,7 +30354,7 @@ const y = snappedPoint.y;
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30309,7 +30407,7 @@ const y = snappedPoint.y;
           radius={8}
           fill="yellow"
           stroke="black"
-          strokeWidth={2}
+          strokeWidth={2 / scale}
           draggable
           onMouseDown={(e) => {
             e.cancelBubble = true;
@@ -31970,8 +32068,19 @@ const y = snappedPoint.y;
 <button
   type="button"
   onClick={() => {
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
+   setScale(1);
+
+setPosition({
+  x:
+    (viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298) / 2,
+
+  y:
+    (viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87) / 2,
+});
   }}
 >
   100%
@@ -33542,15 +33651,19 @@ else if (
     object.y +
     object.height / 2;
 
-  setPosition({
-    x:
-      window.innerWidth / 2 -
-      centerX * scale,
+ setPosition({
+  x:
+    (viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298) / 2 -
+    centerX * scale,
 
-    y:
-      (window.innerHeight - 290) / 2 -
-      centerY * scale,
-  });
+  y:
+    (viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87) / 2 -
+    centerY * scale,
+});
 }
 
             /* =========================
@@ -33603,15 +33716,19 @@ else if (
                 const centerY =
                   (minY + maxY) / 2;
 
-                setPosition({
-                  x:
-                    window.innerWidth / 2 -
-                    centerX * scale,
+              setPosition({
+  x:
+    (viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298) / 2 -
+    centerX * scale,
 
-                  y:
-                    (window.innerHeight - 290) / 2 -
-                    centerY * scale,
-                });
+  y:
+    (viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87) / 2 -
+    centerY * scale,
+});
               }
 
             }
@@ -33622,15 +33739,19 @@ else if (
 
             else {
 
-              setPosition({
-                x:
-                  window.innerWidth / 2 -
-                  (object.x || 0) * scale,
+           setPosition({
+  x:
+    (viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298) / 2 -
+    (object.x || 0) * scale,
 
-                y:
-                  (window.innerHeight - 290) / 2 -
-                  (object.y || 0) * scale,
-              });
+  y:
+    (viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87) / 2 -
+    (object.y || 0) * scale,
+});
             }
 
           } else {
@@ -34000,7 +34121,7 @@ else if (
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -34043,7 +34164,7 @@ else if (
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -34086,7 +34207,7 @@ else if (
       radius={8}
       fill="yellow"
       stroke="black"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -34135,7 +34256,7 @@ else if (
   radius={8}
   fill="yellow"
   stroke="black"
-  strokeWidth={2}
+  strokeWidth={2 / scale}
   draggable
   onMouseDown={(e) => {
     e.cancelBubble = true;
@@ -34181,7 +34302,7 @@ else if (
       radius={12 / scale}
       fill="#00aaff"
       stroke="white"
-      strokeWidth={2}
+      strokeWidth={2 / scale}
       draggable
       onMouseDown={(e) => {
         e.cancelBubble = true;
