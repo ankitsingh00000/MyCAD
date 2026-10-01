@@ -17372,6 +17372,23 @@ const clearDrawing = () => {
 const handleWheel = (e) => {
   e.evt.preventDefault();
 
+  // =========================
+// TOUCHPAD PINCH ZOOM
+// =========================
+const wheelEvent = e.evt;
+
+if (
+  wheelEvent.ctrlKey ||
+  wheelEvent.metaKey
+) {
+  const delta =
+    wheelEvent.deltaY;
+
+  if (Math.abs(delta) < 0.01) {
+    return;
+  }
+}
+
   const stage = e.target.getStage();
 
   if (!stage) {
