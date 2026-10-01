@@ -1759,6 +1759,29 @@ useEffect(() => {
   };
 }, []);
 
+useEffect(() => {
+  const handleOrientationChange = () => {
+    setTimeout(() => {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    }, 100);
+  };
+
+  window.addEventListener(
+    "orientationchange",
+    handleOrientationChange
+  );
+
+  return () => {
+    window.removeEventListener(
+      "orientationchange",
+      handleOrientationChange
+    );
+  };
+}, []);
+
   const [isPanning, setIsPanning] =
   useState(false);
 
@@ -2241,7 +2264,7 @@ const snapToObject = (
   );
   const snapPoints = [];
 
-  objects.forEach((object) => {
+ getVisibleObjectsForSnap().forEach((object) => {
 
     /* =========================
        LINE
@@ -6232,6 +6255,96 @@ const getObjectBounds = (object) => {
   }
 
   return null;
+};
+
+/* =========================
+   VIEWPORT OBJECT FILTER
+========================= */
+
+const isObjectVisible = (object) => {
+  const bounds = getObjectBounds(object);
+
+  if (!bounds) {
+    return true;
+  }
+
+  const canvasWidth =
+    viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298;
+
+  const canvasHeight =
+    viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87;
+
+  const left = -position.x / scale;
+  const right =
+    (canvasWidth - position.x) / scale;
+
+  const top = -position.y / scale;
+  const bottom =
+    (canvasHeight - position.y) / scale;
+
+  const padding = 500 / scale;
+
+  return !(
+    bounds.right < left - padding ||
+    bounds.left > right + padding ||
+    bounds.bottom < top - padding ||
+    bounds.top > bottom + padding
+  );
+};
+
+/* =========================
+   VISIBLE OBJECTS FOR SNAP
+========================= */
+
+const getVisibleObjectsForSnap = () => {
+  return objects.filter((object, index) => {
+    if (
+      selectedIndexes.includes(index) ||
+      index === selectedIndex
+    ) {
+      return true;
+    }
+
+    return isObjectVisible(object);
+  });
+};
+
+/* =========================
+   VISIBLE OBJECTS FOR SEARCH
+========================= */
+
+const getVisibleObjectsForSearch = () => {
+  return objects.filter((object, index) => {
+    if (
+      selectedIndex === index ||
+      selectedIndexes.includes(index)
+    ) {
+      return true;
+    }
+
+    return isObjectVisible(object);
+  });
+};
+
+/* =========================
+   VISIBLE OBJECTS FOR FIND
+========================= */
+
+const getVisibleObjectsForFind = () => {
+  return objects.filter((object, index) => {
+    if (
+      selectedIndex === index ||
+      selectedIndexes.includes(index)
+    ) {
+      return true;
+    }
+
+    return isObjectVisible(object);
+  });
 };
 
   /* =========================
@@ -17159,6 +17272,26 @@ const deleteSelected = () => {
   );
 };
 
+/* =========================
+   CENTER CAD VIEW
+========================= */
+
+const getCenterPosition = () => ({
+  x:
+    (viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298) / 2,
+
+  y:
+    (viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87) / 2,
+});
+
+const resetViewPosition = () => {
+  setPosition(getCenterPosition());
+};
+
  /* =========================
    NEW / CLEAR
 ========================= */
@@ -17223,10 +17356,7 @@ const clearDrawing = () => {
 
   setScale(1);
 
-  setPosition({
-    x: 0,
-    y: 0,
-  });
+  resetViewPosition();
 
   setMousePosition({
     x: 0,
@@ -17278,7 +17408,7 @@ const handleWheel = (e) => {
       ? -1
       : 1;
 
-  const zoomFactor = 1.1;
+  const zoomFactor = 1.25;
 
   let newScale =
     direction > 0
@@ -17293,7 +17423,7 @@ const handleWheel = (e) => {
 ========================= */
 
 const MIN_ZOOM = 0.001;
-const MAX_ZOOM = 100000;
+const MAX_ZOOM = 1000000;
 
 newScale = Math.max(
   MIN_ZOOM,
@@ -17484,17 +17614,17 @@ const canvasHeight =
       (canvasHeight - padding) /
       drawingHeight;
 
-    const newScale =
-      Math.max(
-        0.2,
-        Math.min(
-          5,
-          Math.min(
-            scaleX,
-            scaleY
-          )
-        )
-      );
+  const newScale =
+  Math.max(
+    0.001,
+    Math.min(
+      1000000,
+      Math.min(
+        scaleX,
+        scaleY
+      )
+    )
+  );
 
     const centerX =
       (minX + maxX) / 2;
@@ -17617,6 +17747,60 @@ if (touches.length === 2) {
     return;
   }
 
+ // =====================================================
+// MOBILE SINGLE-FINGER PAN
+// Only in SELECT mode
+// =====================================================
+
+const touch = e.touches[0];
+
+const rect =
+  e.currentTarget.getBoundingClientRect();
+
+touchStateRef.current.lastCenter = {
+  x: touch.clientX - rect.left,
+  y: touch.clientY - rect.top,
+};
+
+touchStateRef.current.lastDistance = null;
+if (
+  e.touches.length === 1 &&
+  tool === "select" &&
+  touchStateRef.current.lastCenter
+) {
+  const touch = e.touches[0];
+
+  const rect =
+    e.currentTarget.getBoundingClientRect();
+
+  const currentX =
+    touch.clientX - rect.left;
+
+  const currentY =
+    touch.clientY - rect.top;
+
+  const previous =
+    touchStateRef.current.lastCenter;
+
+  const dx =
+    currentX - previous.x;
+
+  const dy =
+    currentY - previous.y;
+
+  setPosition((previousPosition) => ({
+    x: previousPosition.x + dx,
+    y: previousPosition.y + dy,
+  }));
+
+  touchStateRef.current.lastCenter = {
+    x: currentX,
+    y: currentY,
+  };
+
+  return;
+}
+
   // =========================
   // ZOOM
   // =========================
@@ -17683,6 +17867,10 @@ if (touches.length === 2) {
     handleMouseMove(e);
   }
 };
+if (e.touches.length === 0) {
+  touchStateRef.current.lastCenter = null;
+  touchStateRef.current.lastDistance = null;
+}
 
 const handleTouchEnd = (e) => {
   e.evt.preventDefault();
@@ -23535,6 +23723,8 @@ setArcPoints([]);
     null;
 };
 
+
+
   /* =========================
      SELECTED OBJECT
   ========================= */
@@ -23547,52 +23737,137 @@ setArcPoints([]);
       : null;
 
   return (
+    
+  
     <div className="app">
+
 
       {/* TOP BAR */}
 
-      <div className="mobile-topbar">
-  <button onClick={() => changeTool("select")}>✕</button>
-
-  <button onClick={undo}>↶</button>
-
-  <button onClick={redo}>↷</button>
-
-  <button onClick={saveDrawing}>💾</button>
-
-  <button onClick={zoomFit}>⌗</button>
-
+ <div
+  className="mobile-topbar"
+  onTouchStart={(e) => e.stopPropagation()}
+  onTouchMove={(e) => e.stopPropagation()}
+  onTouchEnd={(e) => e.stopPropagation()}
+  onPointerDown={(e) => e.stopPropagation()}
+>
+  {/* SELECT */}
   <button
-  onClick={() => {
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      changeTool("select");
+    }}
+    title="Select"
+  >
+    ✕
+  </button>
+
+  {/* UNDO */}
+ <button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    try {
+      undo();
+    } catch (error) {
+      console.error("Undo failed:", error);
+    }
+  }}
+>
+  ↶
+</button>
+
+  {/* REDO */}
+ <button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    try {
+      redo();
+    } catch (error) {
+      console.error("Redo failed:", error);
+    }
+  }}
+>
+  ↷
+</button>
+
+  {/* SAVE */}
+ <button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    try {
+      saveDrawing();
+    } catch (error) {
+      console.error("Save failed:", error);
+      window.alert("Save nahi ho paya.");
+    }
+  }}
+>
+  💾
+</button>
+
+  {/* ZOOM FIT */}
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      zoomFit();
+    }}
+    title="Zoom Fit"
+  >
+    ⌗
+  </button>
+
+  {/* RESET VIEW */}
+ <button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    const centerX = viewportSize.width / 2;
+    const centerY =
+      (viewportSize.height - 87 - 64) / 2;
+
     setScale(1);
-
     setPosition({
-      x:
-        (viewportSize.width <= 768
-          ? viewportSize.width
-          : viewportSize.width - 298) / 2,
-
-      y:
-        (viewportSize.width <= 768
-          ? viewportSize.height - 87 - 64
-          : viewportSize.height - 87) / 2,
+      x: centerX,
+      y: centerY,
     });
   }}
 >
   ⛶
 </button>
 
-  <button
-    onClick={() => {
-      setShowMobileProperties(
-        (prev) => !prev
-      );
-    }}
-  >
-    ⋮
-  </button>
-</div>
 
+  {/* MORE / PROPERTIES */}
+  <button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties((prev) => !prev);
+  }}
+>
+  ⋮
+</button>
+
+
+</div>
       <header className="topbar">
 
         <div className="logo">
@@ -25352,7 +25627,11 @@ height={
     : viewportSize.height - 87
 }
             
-      draggable={false}
+     draggable={
+  tool === "select" &&
+  !isSelecting &&
+  !isDrawing
+}
             onDragEnd={
               handleDragEnd
             }
@@ -25362,9 +25641,15 @@ height={
             onMouseMove={
               handleMouseMove
             }
-            onMouseLeave={() =>
-              setSnapPoint(null)
-            }
+            onMouseLeave={(e) => {
+  setSnapPoint(null);
+
+  const stage = e.target.getStage();
+
+  if (stage) {
+    stage.container().style.cursor = "default";
+  }
+}}
             onMouseUp={
               handleMouseUp
             }
@@ -25377,6 +25662,17 @@ height={
             onWheel={
               handleWheel
             }
+
+            onMouseEnter={(e) => {
+  const stage = e.target.getStage();
+
+  if (stage) {
+    stage.container().style.cursor =
+      tool === "select"
+        ? "default"
+        : "crosshair";
+  }
+}}
 
             onTouchStart={handleTouchStart}
 onTouchMove={handleTouchMove}
@@ -25394,9 +25690,8 @@ onTouchEnd={handleTouchEnd}
     {gridEnabled &&
     (() => {
 
-
 /* =========================
-   CAD ADAPTIVE GRID
+   CAD INFINITE ADAPTIVE GRID
 ========================= */
 
 const canvasWidth =
@@ -25409,7 +25704,10 @@ const canvasHeight =
     ? viewportSize.height - 87 - 64
     : viewportSize.height - 87;
 
-/* WORLD VIEWPORT */
+/* =========================
+   WORLD VIEWPORT
+========================= */
+
 const left =
   -position.x / scale;
 
@@ -25423,26 +25721,15 @@ const bottom =
   (canvasHeight - position.y) / scale;
 
 /* =========================
-   ADAPTIVE GRID STEP
-
-   Base unit = 25
-   Zoom in  -> 25
-   Zoom out -> 50 / 100 / 200...
+   ADAPTIVE 1-2-5 GRID
 ========================= */
 
 const baseGrid = GRID_SIZE;
 
-/* target screen spacing */
 const targetPixels = 50;
 
-/* world units needed for target screen spacing */
 const idealStep =
   targetPixels / scale;
-
-/* CAD style 1-2-5 sequence */
-/* =========================
-   INFINITE CAD GRID SCALE
-========================= */
 
 const relativeStep =
   idealStep / baseGrid;
@@ -25472,10 +25759,98 @@ if (normalized <= 1) {
 }
 
 const gridStep =
-  baseGrid * multiplier * power;
+  baseGrid *
+  multiplier *
+  power;
 
 /* =========================
-   GRID RANGE
+   MINOR GRID
+   5 MINOR CELLS
+========================= */
+
+const minorGridStep =
+  gridStep / 5;
+
+const minorStartX =
+  Math.floor(
+    left / minorGridStep
+  ) - 2;
+
+const minorEndX =
+  Math.ceil(
+    right / minorGridStep
+  ) + 2;
+
+const minorStartY =
+  Math.floor(
+    top / minorGridStep
+  ) - 2;
+
+const minorEndY =
+  Math.ceil(
+    bottom / minorGridStep
+  ) + 2;
+
+const minorGridLines = [];
+
+/* MINOR VERTICAL */
+
+for (
+  let i = minorStartX;
+  i <= minorEndX;
+  i++
+) {
+  const x =
+    i * minorGridStep;
+
+  minorGridLines.push(
+    <Line
+      key={`minor-v-${i}`}
+      points={[
+        x,
+        top,
+        x,
+        bottom,
+      ]}
+      stroke="#202a35"
+      strokeWidth={
+        0.7 / scale
+      }
+      listening={false}
+    />
+  );
+}
+
+/* MINOR HORIZONTAL */
+
+for (
+  let i = minorStartY;
+  i <= minorEndY;
+  i++
+) {
+  const y =
+    i * minorGridStep;
+
+  minorGridLines.push(
+    <Line
+      key={`minor-h-${i}`}
+      points={[
+        left,
+        y,
+        right,
+        y,
+      ]}
+      stroke="#202a35"
+      strokeWidth={
+        0.7 / scale
+      }
+      listening={false}
+    />
+  );
+}
+
+/* =========================
+   MAIN GRID
 ========================= */
 
 const startX =
@@ -25492,9 +25867,7 @@ const endY =
 
 const gridLines = [];
 
-/* =========================
-   VERTICAL GRID
-========================= */
+/* MAIN VERTICAL */
 
 for (
   let i = startX;
@@ -25503,9 +25876,6 @@ for (
 ) {
   const x =
     i * gridStep;
-
- const isMajor =
-  Math.abs(i % 5) === 0;
 
   gridLines.push(
     <Line
@@ -25516,21 +25886,16 @@ for (
         x,
         bottom,
       ]}
-      stroke={isMajor ? "#303030" : "#252525"}
+      stroke="#303b4a"
       strokeWidth={
-  Math.max(
-    0.5 / scale,
-    0.03
-  )
-}
+        1 / scale
+      }
       listening={false}
     />
   );
 }
 
-/* =========================
-   HORIZONTAL GRID
-========================= */
+/* MAIN HORIZONTAL */
 
 for (
   let i = startY;
@@ -25540,8 +25905,6 @@ for (
   const y =
     i * gridStep;
 
- const isMajor =
-  Math.abs(i % 5) === 0;
   gridLines.push(
     <Line
       key={`grid-h-${i}`}
@@ -25551,13 +25914,10 @@ for (
         right,
         y,
       ]}
-  stroke={isMajor ? "#303030" : "#252525"}
+      stroke="#303b4a"
       strokeWidth={
-  Math.max(
-    0.5 / scale,
-    0.03
-  )
-}
+        1 / scale
+      }
       listening={false}
     />
   );
@@ -25567,20 +25927,19 @@ for (
    X AXIS
 ========================= */
 
-const xAxisY = 0;
-const yAxisX = 0;
-
 gridLines.push(
   <Line
     key="x-axis"
     points={[
       left,
-      xAxisY,
+      0,
       right,
-      xAxisY,
+      0,
     ]}
-    stroke="#353535"
-    strokeWidth={0.8 / scale}
+    stroke="#6f3f3f"
+    strokeWidth={
+      1.5 / scale
+    }
     listening={false}
   />
 );
@@ -25593,13 +25952,15 @@ gridLines.push(
   <Line
     key="y-axis"
     points={[
-      yAxisX,
+      0,
       top,
-      yAxisX,
+      0,
       bottom,
     ]}
-    stroke="#353535"
-   strokeWidth={0.8 / scale}
+    stroke="#3f6f48"
+    strokeWidth={
+      1.5 / scale
+    }
     listening={false}
   />
 );
@@ -25615,11 +25976,13 @@ gridLines.push(
       right - 20 / scale
     }
     y={
-      xAxisY + 6 / scale
+      6 / scale
     }
     text="X"
-    fontSize={12 / scale}
-    fill="#666666"
+    fontSize={
+      12 / scale
+    }
+    fill="#777"
     listening={false}
   />
 );
@@ -25628,20 +25991,22 @@ gridLines.push(
   <Text
     key="axis-y-label"
     x={
-      yAxisX + 6 / scale
+      6 / scale
     }
     y={
       top + 6 / scale
     }
     text="Y"
-    fontSize={12 / scale}
-    fill="#666666"
+    fontSize={
+      12 / scale
+    }
+    fill="#777"
     listening={false}
   />
 );
 
 /* =========================
-   ORIGIN LABEL
+   ORIGIN
 ========================= */
 
 gridLines.push(
@@ -25650,13 +26015,23 @@ gridLines.push(
     x={8 / scale}
     y={8 / scale}
     text="0,0"
-    fontSize={10 / scale}
+    fontSize={
+      10 / scale
+    }
     fill="#777"
     listening={false}
   />
 );
-    
-return gridLines;
+
+/* =========================
+   MINOR + MAIN GRID
+========================= */
+
+return [
+  ...minorGridLines,
+  ...gridLines,
+];
+
 })()}
 </Group>
 </Layer>
@@ -25669,9 +26044,10 @@ return gridLines;
     scaleX={scale}
     scaleY={scale}
     draggable={
-      tool === "select" &&
-      !isSelecting
-    }
+  tool === "select" &&
+  !isSelecting &&
+  !isDrawing
+}
     onDragEnd={
       handleDragEnd
     }
@@ -27882,6 +28258,13 @@ if (
                   const selected =
                     selectedIndex === index ||
                     selectedIndexes.includes(index);
+
+              if (
+                    !selected &&
+                    !isObjectVisible(object)
+                  ) {
+                    return null;
+                  }
 
                   const commonProps = {
   
@@ -31078,11 +31461,26 @@ const y = snappedPoint.y;
 
         <div className="mobile-command-bar">
 
-          <button
+ <button
   type="button"
+  onPointerDown={(e) => {
+    e.stopPropagation();
+  }}
+  onPointerUp={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchStart={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchEnd={(e) => {
+    e.stopPropagation();
+  }}
   onClick={(e) => {
-    const bar =
-      e.currentTarget.parentElement;
+    e.stopPropagation();
+
+    const bar = e.currentTarget.parentElement;
+
+    if (!bar) return;
 
     const collapsed =
       bar.dataset.collapsed === "true";
@@ -31093,12 +31491,21 @@ const y = snappedPoint.y;
         "170px",
         "important"
       );
+
       bar.style.setProperty(
         "min-height",
         "170px",
         "important"
       );
+
+      bar.style.setProperty(
+        "max-height",
+        "170px",
+        "important"
+      );
+
       bar.dataset.collapsed = "false";
+
       e.currentTarget.textContent = "⌃";
     } else {
       bar.style.setProperty(
@@ -31106,12 +31513,21 @@ const y = snappedPoint.y;
         "46px",
         "important"
       );
+
       bar.style.setProperty(
         "min-height",
         "46px",
         "important"
       );
+
+      bar.style.setProperty(
+        "max-height",
+        "46px",
+        "important"
+      );
+
       bar.dataset.collapsed = "true";
+
       e.currentTarget.textContent = "⌄";
     }
   }}
@@ -31119,27 +31535,54 @@ const y = snappedPoint.y;
     position: "fixed",
     right: "10px",
     bottom: "180px",
-    zIndex: 12001,
+    zIndex: 1200001,
     width: "42px",
     height: "42px",
-    background: "#fff",
-    border: "1px solid #ccc",
-    borderRadius: "4px",
+    minWidth: "42px",
+    minHeight: "42px",
+    background: "#ffffff",
+    color: "#333333",
+    border: "1px solid #cccccc",
+    borderRadius: "6px",
     fontSize: "22px",
-    color: "#333",
+    lineHeight: "42px",
+    padding: 0,
+    margin: 0,
+    textAlign: "center",
+    pointerEvents: "auto",
+    touchAction: "manipulation",
   }}
 >
+
   ⌃
 </button>
 
-          {showMobileLayers && (
+ {showMobileLayers && (
   <div
+    onPointerDown={(e) => {
+      e.stopPropagation();
+    }}
+    onPointerUp={(e) => {
+      e.stopPropagation();
+    }}
+    onTouchStart={(e) => {
+      e.stopPropagation();
+    }}
+    onTouchMove={(e) => {
+      e.stopPropagation();
+    }}
+    onTouchEnd={(e) => {
+      e.stopPropagation();
+    }}
+    onClick={(e) => {
+      e.stopPropagation();
+    }}
     style={{
       position: "fixed",
       left: "10px",
       right: "10px",
       bottom: "180px",
-      zIndex: 12000,
+      zIndex: 1200000,
       background: "#171717",
       color: "#fff",
       border: "1px solid #444",
@@ -31148,6 +31591,8 @@ const y = snappedPoint.y;
       boxSizing: "border-box",
       maxHeight: "55vh",
       overflowY: "auto",
+      pointerEvents: "auto",
+      touchAction: "pan-y",
       boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
     }}
   >
@@ -31363,33 +31808,43 @@ const y = snappedPoint.y;
 </div>
   <div className="mobile-quick-actions">
 
-  <button
-    onClick={() =>
-      changeTool("select")
-    }
-  >
-    Select
-  </button>
-
-  <button
+ <button
   type="button"
-  onClick={() => {
-    const allIndexes =
-      objects.map(
-        (_, index) => index
-      );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    changeTool("select");
+  }}
+>
+  Select
+</button>
 
-    setSelectedIndexes(
-      allIndexes
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    if (!objects || objects.length === 0) {
+      setSelectedIndexes([]);
+      setSelectedIndex(null);
+      return;
+    }
+
+    const allIndexes = objects.map(
+      (_, index) => index
     );
 
+    setSelectedIndexes(allIndexes);
     setSelectedIndex(
       allIndexes.length > 0
-        ? allIndexes[
-            allIndexes.length - 1
-          ]
+        ? allIndexes[0]
         : null
     );
+
+    changeTool("select");
   }}
 >
   ☑ All
@@ -31397,8 +31852,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("select");
+    setShowMobileProperties(false);
   }}
 >
   🖱 Select
@@ -31406,28 +31865,41 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
-    setPosition((prev) => ({
-      x: prev.x,
-      y: prev.y,
-    }));
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    changeTool("select");
   }}
 >
   ✋ Pan
 </button>
 
+
+
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("line");
   }}
 >
   ╱ Line
 </button>
 
+
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("rectangle");
   }}
 >
@@ -31436,7 +31908,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("circle");
   }}
 >
@@ -31445,7 +31922,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("polyline");
   }}
 >
@@ -31454,7 +31936,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("arc");
   }}
 >
@@ -31463,7 +31950,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("text");
   }}
 >
@@ -31472,7 +31964,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("dimension");
   }}
 >
@@ -31481,7 +31978,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("angularDimension");
   }}
 >
@@ -31490,7 +31992,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("radiusDimension");
   }}
 >
@@ -31499,7 +32006,12 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("diameterDimension");
   }}
 >
@@ -31508,17 +32020,27 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setShowMobileProperties(false);
+    setCommandText("");
     changeTool("measure");
   }}
 >
   📏 Measure
 </button>
 
+
 {selectedIndex !== null && selectedObject && (
   <button
     type="button"
-    onClick={() => {
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
+
       const object = selectedObject;
 
       const details = [
@@ -31554,7 +32076,10 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     setSelectedIndex(null);
     setSelectedIndexes([]);
     setSelectedMeasurementIndex(null);
@@ -31566,7 +32091,10 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("move");
   }}
 >
@@ -31575,88 +32103,107 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("copy");
   }}
 >
   📋 Copy
 </button>
 
-{/* ROTATE */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("rotate");
   }}
 >
   🔄 Rotate
 </button>
 
-{/* TRIM */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("trim");
   }}
 >
   ✂ Trim
 </button>
 
-{/* EXTEND */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("extend");
   }}
 >
   ↔ Extend
 </button>
 
-{/* STRETCH */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("stretch");
   }}
 >
   ↔ Stretch
 </button>
 
-{/* OFFSET */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("offset");
   }}
 >
   ⤴ Offset
 </button>
 
-{/* FILLET */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("fillet");
   }}
 >
   ◯ Fillet
 </button>
 
-{/* CHAMFER */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("chamfer");
   }}
 >
   ◇ Chamfer
 </button>
 
-{/* MIRROR */}
 {selectedIndex !== null && (
   <button
     type="button"
-    onClick={() => {
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
       mirrorObject(selectedIndex);
     }}
   >
@@ -31664,11 +32211,13 @@ const y = snappedPoint.y;
   </button>
 )}
 
-{/* SCALE */}
 {selectedIndex !== null && (
   <button
     type="button"
-    onClick={() => {
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
       scaleObject(selectedIndex);
     }}
   >
@@ -31676,11 +32225,13 @@ const y = snappedPoint.y;
   </button>
 )}
 
-{/* ARRAY */}
 {selectedIndex !== null && (
   <button
     type="button"
-    onClick={() => {
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
       arrayObject(selectedIndex);
     }}
   >
@@ -31688,11 +32239,13 @@ const y = snappedPoint.y;
   </button>
 )}
 
-{/* EXPLODE */}
 {selectedIndex !== null && (
   <button
     type="button"
-    onClick={() => {
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
       explodeObject(selectedIndex);
     }}
   >
@@ -31700,10 +32253,12 @@ const y = snappedPoint.y;
   </button>
 )}
 
-{/* JOIN */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("join");
   }}
 >
@@ -31712,7 +32267,10 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeTool("hatch");
   }}
 >
@@ -31722,35 +32280,79 @@ const y = snappedPoint.y;
 {/* OSNAP */}
 <button
   type="button"
-  onClick={() => {
-    setObjectSnapEnabled((prev) => !prev);
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    if (typeof toggleOsnap === "function") {
+      toggleOsnap();
+      return;
+    }
+
+    if (typeof setOsnap === "function") {
+      setOsnap((prev) => !prev);
+      return;
+    }
+
+    window.alert("OSNAP control is not available.");
   }}
 >
   🎯 OSNAP
 </button>
 
+{/* SNAP */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    if (typeof toggleGridSnap === "function") {
+      toggleGridSnap();
+      return;
+    }
+
+    setGridSnapEnabled((prev) => !prev);
+  }}
+>
+  ⛓ SNAP
+</button>
+
 {/* GRID */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     setGridEnabled((prev) => !prev);
   }}
 >
   ▦ Grid
 </button>
 
+{/* LAYER */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     addLayer();
   }}
 >
   ➕ Layer
 </button>
 
+{/* LAYERS */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     setShowMobileLayers(true);
   }}
 >
@@ -31760,7 +32362,12 @@ const y = snappedPoint.y;
 {/* ORTHO */}
 <button
   type="button"
-  onClick={toggleOrtho}
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    toggleOrtho();
+  }}
 >
   ⊥ Ortho
 </button>
@@ -31768,266 +32375,388 @@ const y = snappedPoint.y;
 {/* POLAR */}
 <button
   type="button"
- onClick={togglePolar}
- >
-∠ Polar
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    togglePolar();
+  }}
+>
+  ∠ Polar
 </button>
 
+
+{/* PREVIOUS */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectPreviousObject();
   }}
 >
   ◀ Prev
 </button>
 
+{/* NEXT */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectNextObject();
   }}
 >
   Next ▶
 </button>
 
+{/* DESELECT ALL */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     deselectAllObjects();
   }}
 >
   ✖ Deselect All
 </button>
 
+{/* ZOOM SELECTED */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     zoomToAllSelected();
   }}
 >
   🔍 Zoom Selected All
 </button>
 
+{/* LOCK */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     toggleSelectedLock();
   }}
 >
   🔒 Lock
 </button>
 
+{/* LOCK ALL */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     lockAllSelected();
   }}
 >
   🔒 Lock All
 </button>
 
+{/* UNLOCK ALL */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     unlockAllObjects();
   }}
 >
   🔓 Unlock All
 </button>
 
+{/* DELETE SELECTED */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     deleteSelectedOnly();
   }}
 >
   🗑 Delete Selected
 </button>
 
+{/* ROTATE -90 */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     rotateSelectedMinus90();
   }}
 >
   ↺ -90°
 </button>
 
+{/* ROTATE 180 */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     rotateSelected180();
   }}
 >
   ↻ 180°
 </button>
 
+{/* ROTATE 45 */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     rotateSelected45();
   }}
 >
   ↻ 45°
 </button>
 
+{/* EXACT ANGLE */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     setExactRotation();
   }}
 >
   🔢 Angle
 </button>
 
+{/* HIDE */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     hideAllSelected();
   }}
 >
   🙈 Hide Selected
 </button>
 
+{/* SHOW */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     showSelectedObjects();
   }}
 >
   👁 Show Selected
 </button>
 
+{/* LOCK SELECTED */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     lockSelectedObjects();
   }}
 >
   🔒 Lock Selected
 </button>
 
+{/* UNLOCK SELECTED */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     unlockSelectedObjects();
   }}
 >
   🔓 Unlock Selected
 </button>
 
+{/* FLIP H */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     flipSelectedHorizontal();
   }}
 >
   ↔ Flip H
 </button>
 
+{/* FLIP V */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     flipSelectedVertical();
   }}
 >
   ↕ Flip V
 </button>
 
+{/* DUPLICATE ALL */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     duplicateAllSelected();
   }}
 >
   🧬 Duplicate All
 </button>
 
+{/* DUPLICATE OFFSET */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     duplicateWithOffset();
   }}
 >
   🧬 Duplicate + Offset
 </button>
 
+{/* UNLOCK EVERYTHING */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     unlockEveryObject();
   }}
 >
   🔓 Unlock Everything
 </button>
 
+{/* SHOW EVERYTHING */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     showEverything();
   }}
 >
   👁 Show Everything
 </button>
 
+{/* SELECT LOCKED */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectLockedObjects();
   }}
 >
   🔒 Select Locked
 </button>
 
+{/* SELECT HIDDEN */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectHiddenObjects();
   }}
 >
   🙈 Select Hidden
 </button>
 
+{/* SELECT UNLOCKED */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectUnlockedObjects();
   }}
 >
   🔓 Select Unlocked
 </button>
 
+{/* NO LAYER */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectObjectsWithoutLayer();
   }}
 >
   📚 No Layer
 </button>
 
+{/* RESET COLOR */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     resetSelectedColor();
   }}
 >
   🎨 Reset Color
 </button>
 
+{/* RESET WIDTH */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     resetSelectedWidth();
   }}
 >
   🖊 Reset Width
 </button>
 
+{/* RESET OBJECT */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     resetSelectedObject();
   }}
 >
@@ -32037,8 +32766,35 @@ const y = snappedPoint.y;
 {/* ZOOM IN */}
 <button
   type="button"
-  onClick={() => {
-    setScale((prev) => Math.min(prev * 1.25, 20));
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    const oldScale = scale;
+    const newScale = Math.min(
+      oldScale * 1.25,
+      20
+    );
+
+    const centerX =
+      viewportSize.width / 2;
+
+    const centerY =
+      (viewportSize.height - 87 - 64) / 2;
+
+    const worldX =
+      (centerX - position.x) / oldScale;
+
+    const worldY =
+      (centerY - position.y) / oldScale;
+
+    setScale(newScale);
+
+    setPosition({
+      x: centerX - worldX * newScale,
+      y: centerY - worldY * newScale,
+    });
   }}
 >
   ＋ Zoom
@@ -32047,8 +32803,35 @@ const y = snappedPoint.y;
 {/* ZOOM OUT */}
 <button
   type="button"
-  onClick={() => {
-    setScale((prev) => Math.max(prev / 1.25, 0.2));
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    const oldScale = scale;
+    const newScale = Math.max(
+      oldScale / 1.25,
+      0.2
+    );
+
+    const centerX =
+      viewportSize.width / 2;
+
+    const centerY =
+      (viewportSize.height - 87 - 64) / 2;
+
+    const worldX =
+      (centerX - position.x) / oldScale;
+
+    const worldY =
+      (centerY - position.y) / oldScale;
+
+    setScale(newScale);
+
+    setPosition({
+      x: centerX - worldX * newScale,
+      y: centerY - worldY * newScale,
+    });
   }}
 >
   － Zoom
@@ -32057,7 +32840,10 @@ const y = snappedPoint.y;
 {/* ZOOM FIT */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     zoomFit();
   }}
 >
@@ -32067,37 +32853,43 @@ const y = snappedPoint.y;
 {/* 100% */}
 <button
   type="button"
-  onClick={() => {
-   setScale(1);
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
 
-setPosition({
-  x:
-    (viewportSize.width <= 768
-      ? viewportSize.width
-      : viewportSize.width - 298) / 2,
+    setScale(1);
 
-  y:
-    (viewportSize.width <= 768
-      ? viewportSize.height - 87 - 64
-      : viewportSize.height - 87) / 2,
-});
+    setPosition({
+      x: viewportSize.width / 2,
+      y:
+        (viewportSize.height - 87 - 64) / 2,
+    });
   }}
 >
   100%
 </button>
 
-  <button
+{/* NEW */}
+<button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     clearDrawing();
   }}
 >
   🆕 New
 </button>
 
+{/* OPEN */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     openDrawing();
   }}
 >
@@ -32112,9 +32904,14 @@ setPosition({
   style={{ display: "none" }}
 />
 
+{/* IMPORT DXF */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
     document
       .getElementById("dxfImportInput")
       ?.click();
@@ -32123,83 +32920,135 @@ setPosition({
   📐 Import DXF
 </button>
 
+{/* SAVE */}
 <button
   type="button"
-  onClick={() => {
-    saveDrawing();
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    try {
+      saveDrawing();
+    } catch (error) {
+      console.error(
+        "Save failed:",
+        error
+      );
+      window.alert(
+        "Save nahi ho paya."
+      );
+    }
   }}
 >
   💾 Save
 </button>
 
+{/* SAVE AS */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     saveDrawingAs();
   }}
 >
   💾 Save As
 </button>
 
+{/* COPY */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     copyDrawing();
   }}
 >
   📋 Copy
 </button>
 
+{/* SHARE */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     shareDrawing();
   }}
 >
   📤 Share
 </button>
 
+{/* PNG */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     exportPNG();
   }}
 >
   🖼 PNG
 </button>
 
+{/* SVG */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     exportSVG();
   }}
 >
   📄 SVG
 </button>
 
+{/* DXF */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     exportDXF();
   }}
 >
   📐 DXF
 </button>
 
+{/* FULLSCREEN */}
 <button
   type="button"
-  onClick={() => {
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen();
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    if (
+      document.documentElement
+        .requestFullscreen
+    ) {
+      document.documentElement
+        .requestFullscreen();
     }
   }}
 >
   ⛶ Full
 </button>
 
+{/* PRINT */}
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     window.print();
   }}
 >
@@ -32207,57 +33056,149 @@ setPosition({
 </button>
 
 
-  <button
-    onClick={() => {
-      const query =
-        window.prompt(
-          "Find object type:",
-          "line"
-        );
 
-      if (
-        !query ||
-        !query.trim()
+
+ <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+
+    const query = window.prompt(
+      "Find object type:",
+      "line"
+    );
+
+    if (!query || !query.trim()) {
+      return;
+    }
+
+   const search = query.trim().toLowerCase();
+
+const visibleObjects =
+  getVisibleObjectsForFind();
+
+const foundObject =
+  visibleObjects.find((object) => {
+    const type = String(
+      object?.type || ""
+    ).toLowerCase();
+
+    const text = String(
+      object?.text || ""
+    ).toLowerCase();
+
+    return (
+      type.includes(search) ||
+      text.includes(search)
+    );
+  });
+
+const index =
+  foundObject
+    ? objects.indexOf(foundObject)
+    : -1;
+
+    if (index === -1) {
+      window.alert(`No "${query}" object found.`);
+      return;
+    }
+
+    const object = objects[index];
+
+    setSelectedIndex(index);
+    setSelectedIndexes([index]);
+    changeTool("select");
+
+    let centerX = 0;
+    let centerY = 0;
+
+    if (
+      object?.type === "line" ||
+      object?.type === "dimension"
+    ) {
+      centerX =
+        (object.points?.[0] +
+          object.points?.[2]) / 2;
+
+      centerY =
+        (object.points?.[1] +
+          object.points?.[3]) / 2;
+    } else if (
+      object?.type === "rectangle"
+    ) {
+      centerX =
+        (object.points?.[0] +
+          object.points?.[2]) / 2;
+
+      centerY =
+        (object.points?.[1] +
+          object.points?.[3]) / 2;
+    } else if (
+      object?.type === "circle" ||
+      object?.type === "arc"
+    ) {
+      centerX = object.x || 0;
+      centerY = object.y || 0;
+    } else if (
+      object?.type === "text"
+    ) {
+      centerX = object.x || 0;
+      centerY = object.y || 0;
+    } else if (
+      object?.points &&
+      object.points.length >= 2
+    ) {
+      const xs = [];
+      const ys = [];
+
+      for (
+        let i = 0;
+        i < object.points.length;
+        i += 2
       ) {
-        return;
+        xs.push(object.points[i]);
+        ys.push(object.points[i + 1]);
       }
 
-      const search =
-        query
-          .trim()
-          .toLowerCase();
+      centerX =
+        (Math.min(...xs) +
+          Math.max(...xs)) / 2;
 
-      const index =
-        objects.findIndex(
-          (object) =>
-            object.type
-              ?.toLowerCase()
-              .includes(search) ||
-            (
-              object.text || ""
-            )
-              .toLowerCase()
-              .includes(search)
-        );
+      centerY =
+        (Math.min(...ys) +
+          Math.max(...ys)) / 2;
+    }
 
-      if (index === -1) {
-        window.alert(
-          "Object not found."
-        );
-        return;
-      }
+    const viewWidth =
+      viewportSize.width <= 768
+        ? viewportSize.width
+        : viewportSize.width - 298;
 
-      setSelectedIndex(index);
+    const viewHeight =
+      viewportSize.width <= 768
+        ? viewportSize.height - 87 - 64
+        : viewportSize.height - 87;
 
-      setSelectedIndexes([
-        index,
-      ]);
+    const newScale = Math.max(
+      0.5,
+      Math.min(scale < 1 ? 2 : scale, 20)
+    );
 
-      setTool("select");
-    }}
-  >
-    🔍 Find
-  </button>
+    setScale(newScale);
+
+    setPosition({
+      x:
+        viewWidth / 2 -
+        centerX * newScale,
+
+      y:
+        viewHeight / 2 -
+        centerY * newScale,
+    });
+  }}
+>
+  🔍 Find
+</button>
 
   <button
     onClick={() =>
@@ -32383,7 +33324,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     zoomToSelected();
   }}
 >
@@ -32392,7 +33336,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     duplicateSelected();
   }}
 >
@@ -32401,7 +33348,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     bringToFront();
   }}
 >
@@ -32410,7 +33360,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     sendToBack();
   }}
 >
@@ -32419,7 +33372,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     bringForward();
   }}
 >
@@ -32428,16 +33384,24 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     isolateSelectedLayer();
   }}
 >
   👁 Isolate
 </button>
+  </>
+)}
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     unisolateLayers();
   }}
 >
@@ -32446,7 +33410,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     reverseSelectedDirection();
   }}
 >
@@ -32455,7 +33422,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     invertSelection();
   }}
 >
@@ -32464,7 +33434,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectCurrentLayer();
   }}
 >
@@ -32473,7 +33446,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     setSelectedLayerActive();
   }}
 >
@@ -32482,7 +33458,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeSelectedLineWidth();
   }}
 >
@@ -32491,7 +33470,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     clearCurrentLayer();
   }}
 >
@@ -32500,7 +33482,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     resetView();
   }}
 >
@@ -32509,7 +33494,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     rotateSelected90();
   }}
 >
@@ -32518,7 +33506,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     resetSelectedRotation();
   }}
 >
@@ -32529,7 +33520,10 @@ setPosition({
   selectedObject?.type === "text" && (
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         increaseSelectedTextSize();
       }}
     >
@@ -32537,9 +33531,12 @@ setPosition({
     </button>
   )}
 
-  <button
+<button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     decreaseSelectedTextSize();
   }}
 >
@@ -32548,7 +33545,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     resetSelectedTextSize();
   }}
 >
@@ -32557,7 +33557,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     increaseSelectedLineWidth();
   }}
 >
@@ -32566,7 +33569,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     decreaseSelectedLineWidth();
   }}
 >
@@ -32575,7 +33581,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllLines();
   }}
 >
@@ -32584,7 +33593,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllCircles();
   }}
 >
@@ -32593,7 +33605,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllRectangles();
   }}
 >
@@ -32602,7 +33617,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllText();
   }}
 >
@@ -32611,7 +33629,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllPolylines();
   }}
 >
@@ -32620,7 +33641,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllArcs();
   }}
 >
@@ -32629,7 +33653,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllDimensions();
   }}
 >
@@ -32638,7 +33665,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectAllVisible();
   }}
 >
@@ -32647,7 +33677,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     hideSelectedObject();
   }}
 >
@@ -32656,7 +33689,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     showAllHiddenObjects();
   }}
 >
@@ -32665,7 +33701,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     toggleSelectedVisibility();
   }}
 >
@@ -32674,7 +33713,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     centerSelected();
   }}
 >
@@ -32683,7 +33725,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     nudgeSelectedLeft();
   }}
 >
@@ -32692,7 +33737,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     nudgeSelectedRight();
   }}
 >
@@ -32701,7 +33749,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     nudgeSelectedUp();
   }}
 >
@@ -32710,7 +33761,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     nudgeSelectedDown();
   }}
 >
@@ -32719,7 +33773,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     fitAllObjects();
   }}
 >
@@ -32728,7 +33785,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     deleteAllHiddenObjects();
   }}
 >
@@ -32737,7 +33797,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectByLayerPrompt();
   }}
 >
@@ -32746,7 +33809,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     showObjectCount();
   }}
 >
@@ -32755,7 +33821,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     selectByColorPrompt();
   }}
 >
@@ -32764,8 +33833,12 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
-    toggleGrid();
+  className={gridEnabled ? "active" : ""}
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setGridEnabled((prev) => !prev);
   }}
 >
   ▦ Grid
@@ -32773,8 +33846,12 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
-    toggleOSNAP();
+  className={objectSnapEnabled ? "active" : ""}
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setObjectSnapEnabled((prev) => !prev);
   }}
 >
   🎯 OSNAP
@@ -32782,8 +33859,12 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
-    toggleOrtho();
+  className={orthoEnabled ? "active" : ""}
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setOrthoEnabled((prev) => !prev);
   }}
 >
   ⊥ Ortho
@@ -32791,8 +33872,12 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
-    togglePolar();
+  className={polarEnabled ? "active" : ""}
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setPolarEnabled((prev) => !prev);
   }}
 >
   ∠ Polar
@@ -32800,7 +33885,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     changeSelectedColor();
   }}
 >
@@ -32809,7 +33897,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     editSelectedText();
   }}
 >
@@ -32820,7 +33911,10 @@ setPosition({
   selectedObject && (
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         moveSelectedToLayerPrompt();
       }}
     >
@@ -32828,33 +33922,38 @@ setPosition({
     </button>
   )}
 
+{selectedIndex !== null && (
+  <>
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         changeTool("rotate");
       }}
     >
       🔄 Rotate
     </button>
-  </>
-)}
 
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onClick={() => {
-      changeTool("stretch");
-    }}
-  >
-    ↔ Stretch
-  </button>
-)}
-
-{selectedIndex !== null && (
-  <>
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        changeTool("stretch");
+      }}
+    >
+      ↔ Stretch
+    </button>
+
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         changeTool("trim");
       }}
     >
@@ -32863,20 +33962,22 @@ setPosition({
 
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         changeTool("extend");
       }}
     >
       ↔ Extend
     </button>
-  </>
-)}
 
-{selectedIndex !== null && (
-  <>
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         mirrorObject(selectedIndex);
       }}
     >
@@ -32885,31 +33986,34 @@ setPosition({
 
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         scaleObject(selectedIndex);
       }}
     >
       ⤢ Scale
     </button>
-  </>
-)}
 
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onClick={() => {
-      offsetObject(selectedIndex);
-    }}
-  >
-    ⤴ Offset
-  </button>
-)}
-
-{selectedIndex !== null && (
-  <>
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        offsetObject(selectedIndex);
+      }}
+    >
+      ⤴ Offset
+    </button>
+
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         changeTool("fillet");
       }}
     >
@@ -32918,20 +34022,22 @@ setPosition({
 
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         changeTool("chamfer");
       }}
     >
       ◇ Chamfer
     </button>
-  </>
-)}
 
-{selectedIndex !== null && (
-  <>
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         explodeObject(selectedIndex);
       }}
     >
@@ -32940,32 +34046,37 @@ setPosition({
 
     <button
       type="button"
-      onClick={() => {
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
         changeTool("join");
       }}
     >
       🔗 Join
     </button>
-  </>
-)}
 
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onClick={() => {
-      arrayObject(selectedIndex);
-    }}
-  >
-    ▦ Array
-  </button>
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        arrayObject(selectedIndex);
+      }}
+    >
+      ▦ Array
+    </button>
+  </>
 )}
 
 <button
   type="button"
-  onClick={() => {
-    setScale((prev) =>
-      Math.min(prev * 1.25, 20)
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setScale((prev) => Math.min(prev * 1.25, 20));
   }}
 >
   ＋ Zoom
@@ -32973,10 +34084,11 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
-    setScale((prev) =>
-      Math.max(prev / 1.25, 0.2)
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setScale((prev) => Math.max(prev / 1.25, 0.2));
   }}
 >
   － Zoom
@@ -32984,7 +34096,10 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
     zoomFit();
   }}
 >
@@ -32993,7 +34108,11 @@ setPosition({
 
 <button
   type="button"
-  onClick={() => {
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
     setScale(1);
 
     setPosition({
@@ -33008,10 +34127,11 @@ setPosition({
 <button
   type="button"
   className={objectSnapEnabled ? "active" : ""}
-  onClick={() => {
-    setObjectSnapEnabled(
-      (prev) => !prev
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setObjectSnapEnabled((prev) => !prev);
   }}
 >
   OSNAP
@@ -33020,10 +34140,11 @@ setPosition({
 <button
   type="button"
   className={gridEnabled ? "active" : ""}
-  onClick={() => {
-    setGridEnabled(
-      (prev) => !prev
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setGridEnabled((prev) => !prev);
   }}
 >
   GRID
@@ -33032,10 +34153,11 @@ setPosition({
 <button
   type="button"
   className={gridSnapEnabled ? "active" : ""}
-  onClick={() => {
-    setGridSnapEnabled(
-      (prev) => !prev
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setGridSnapEnabled((prev) => !prev);
   }}
 >
   SNAP
@@ -33044,10 +34166,11 @@ setPosition({
 <button
   type="button"
   className={orthoEnabled ? "active" : ""}
-  onClick={() => {
-    setOrthoEnabled(
-      (prev) => !prev
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setOrthoEnabled((prev) => !prev);
   }}
 >
   ORTHO
@@ -33056,15 +34179,16 @@ setPosition({
 <button
   type="button"
   className={polarEnabled ? "active" : ""}
-  onClick={() => {
-    setPolarEnabled(
-      (prev) => !prev
-    );
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    setPolarEnabled((prev) => !prev);
   }}
 >
   POLAR
 </button>
-
+{/* DYN */}
 <button
   type="button"
   className={
@@ -33072,7 +34196,15 @@ setPosition({
       ? "active"
       : ""
   }
-  onClick={() => {
+  onPointerDown={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchStart={(e) => {
+    e.stopPropagation();
+  }}
+  onClick={(e) => {
+    e.stopPropagation();
+
     setDynamicInputEnabled(
       (prev) => !prev
     );
@@ -33081,6 +34213,7 @@ setPosition({
   DYN
 </button>
 
+{/* TRACK */}
 <button
   type="button"
   className={
@@ -33088,7 +34221,15 @@ setPosition({
       ? "active"
       : ""
   }
-  onClick={() => {
+  onPointerDown={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchStart={(e) => {
+    e.stopPropagation();
+  }}
+  onClick={(e) => {
+    e.stopPropagation();
+
     setObjectSnapTrackingEnabled(
       (prev) => !prev
     );
@@ -33097,231 +34238,309 @@ setPosition({
   TRACK
 </button>
 
-</div>
+<div
+  className="mobile-command-controls"
+  onPointerDown={(e) => {
+    e.stopPropagation();
+  }}
+  onPointerUp={(e) => {
+    e.stopPropagation();
+  }}
+  onPointerMove={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchStart={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchMove={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchEnd={(e) => {
+    e.stopPropagation();
+  }}
+  onMouseDown={(e) => {
+    e.stopPropagation();
+  }}
+  onMouseUp={(e) => {
+    e.stopPropagation();
+  }}
+  onClick={(e) => {
+    e.stopPropagation();
+  }}
+  style={{
+    position: "relative",
+    zIndex: 1000002,
+    pointerEvents: "auto",
+    touchAction: "manipulation",
+  }}
+>
+  {/* =====================================================
+      CLOSE / CANCEL ACTIVE COMMAND
+  ===================================================== */}
 
-  <div className="mobile-command-controls">
+  {(
+    ((tool === "line" || tool === "polyline") && lineStart) ||
+    (tool === "hatch" && isDrawing)
+  ) && (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
 
-{(
-  ((tool === "line" || tool === "polyline") && lineStart) ||
-  (tool === "hatch" && isDrawing)
-) && (
+        if (tool === "hatch" && isDrawing) {
+          setObjects((prev) => {
+            const lastIndex = prev.length - 1;
+            const lastObject = prev[lastIndex];
+
+            if (
+              lastObject &&
+              lastObject.type === "hatch"
+            ) {
+              return prev.slice(0, -1);
+            }
+
+            return prev;
+          });
+        }
+
+        setLineStart(null);
+        setLinePreview(null);
+        setPendingLinePoint(null);
+        setLineLengthInput("");
+        setShowLineInput(false);
+        setIsDrawing(false);
+
+        actionStartRef.current = null;
+        setSnapPoint(null);
+        setSnapType("");
+
+        changeTool("select");
+      }}
+    >
+      Close
+    </button>
+  )}
+
+  {/* =====================================================
+      UNDO
+  ===================================================== */}
+
   <button
     type="button"
-    onClick={() => {
+    onClick={(e) => {
+      e.stopPropagation();
 
-      if (tool === "hatch" && isDrawing) {
-        setObjects((prev) => {
-          const lastIndex = prev.length - 1;
-          const lastObject = prev[lastIndex];
+      /* POLYLINE — REMOVE LAST SEGMENT */
+      if (
+        tool === "polyline" &&
+        isDrawing &&
+        !showLineInput
+      ) {
+        const lastObject =
+          objects[objects.length - 1];
 
-          if (
-            lastObject &&
-            lastObject.type === "hatch"
-          ) {
-            return prev.slice(0, -1);
-          }
+        if (
+          lastObject &&
+          lastObject.type === "polyline" &&
+          Array.isArray(lastObject.points) &&
+          lastObject.points.length >= 4
+        ) {
+          saveHistory(
+            [...objects],
+            [...measurements]
+          );
 
-          return prev;
-        });
+          setObjects((prev) => {
+            const updated = [...prev];
+            const index = updated.length - 1;
+            const current = updated[index];
+
+            if (
+              !current ||
+              current.type !== "polyline" ||
+              !Array.isArray(current.points) ||
+              current.points.length < 4
+            ) {
+              return prev;
+            }
+
+            updated[index] = {
+              ...current,
+              points: current.points.slice(0, -2),
+            };
+
+            return updated;
+          });
+
+          const newLength =
+            lastObject.points.length - 2;
+
+          setLineStart({
+            x: lastObject.points[newLength - 2],
+            y: lastObject.points[newLength - 1],
+          });
+
+          setLinePreview(null);
+          setPendingLinePoint(null);
+          setLineLengthInput("");
+          setShowLineInput(false);
+          setSnapPoint(null);
+
+          return;
+        }
       }
+
+      /* LINE — CANCEL CURRENT DRAWING */
+
+      if (
+        tool === "line" &&
+        (
+          lineStart ||
+          showLineInput ||
+          pendingLinePoint
+        )
+      ) {
+        setLinePreview(null);
+        setPendingLinePoint(null);
+        setLineLengthInput("");
+        setShowLineInput(false);
+        setIsDrawing(false);
+
+        return;
+      }
+
+      /* NORMAL UNDO */
+
+      undo();
+    }}
+    disabled={
+      tool === "line"
+        ? false
+        : tool === "polyline" && isDrawing
+          ? false
+          : past.length === 0
+    }
+  >
+    ↶ Undo
+  </button>
+
+  {/* =====================================================
+      REDO
+  ===================================================== */}
+
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      redo();
+    }}
+    disabled={future.length === 0}
+  >
+    ↷ Redo
+  </button>
+
+  {/* =====================================================
+      ESC
+  ===================================================== */}
+
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
 
       setLineStart(null);
       setLinePreview(null);
       setPendingLinePoint(null);
       setLineLengthInput("");
       setShowLineInput(false);
+
       setIsDrawing(false);
+      setMeasureStart(null);
+      setAnglePoints([]);
+      setSnapType("");
+      setSnapPoint(null);
+
+      setSelectedIndex(null);
+      setSelectedIndexes([]);
+      setSelectedMeasurementIndex(null);
+      setCommandFirstIndex(null);
 
       actionStartRef.current = null;
-      setSnapPoint(null);
-      setSnapType("");
+      moveStartRef.current = null;
+      stretchStartRef.current = null;
+
+      setShowMobileProperties(false);
+      setShowMobileLayers(false);
 
       changeTool("select");
     }}
   >
-    Close
+    ESC
   </button>
 
-)}
+  {/* =====================================================
+      FIND
+  ===================================================== */}
 
- <button
-  type="button"
-  onClick={() => {
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
 
-    // POLYLINE: last segment remove
-    if (
-      tool === "polyline" &&
-      isDrawing &&
-      !showLineInput
-    ) {
-      const lastObject = objects[objects.length - 1];
-
-      if (
-        lastObject &&
-        lastObject.type === "polyline" &&
-        Array.isArray(lastObject.points) &&
-        lastObject.points.length >= 4
-      ) {
-        saveHistory(
-          [...objects],
-          [...measurements]
+      const query =
+        window.prompt(
+          "Find object type:",
+          "line"
         );
 
-        setObjects((prev) => {
-          const updated = [...prev];
-          const index = updated.length - 1;
-          const current = updated[index];
-
-          if (
-            !current ||
-            current.type !== "polyline" ||
-            !Array.isArray(current.points) ||
-            current.points.length < 4
-          ) {
-            return prev;
-          }
-
-          updated[index] = {
-            ...current,
-            points: current.points.slice(0, -2),
-          };
-
-          return updated;
-        });
-
-        const newLength =
-          lastObject.points.length - 2;
-
-        setLineStart({
-          x: lastObject.points[newLength - 2],
-          y: lastObject.points[newLength - 1],
-        });
-
-        setLinePreview(null);
-        setPendingLinePoint(null);
-        setLineLengthInput("");
-        setShowLineInput(false);
-        setSnapPoint(null);
-
+      if (!query || !query.trim()) {
         return;
       }
-    }
 
-    // LINE: current drawing cancel
-    if (
-      tool === "line" &&
-      (
-        lineStart ||
-        showLineInput ||
-        pendingLinePoint
-      )
-    ) {
-      setLinePreview(null);
-      setPendingLinePoint(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-      setIsDrawing(false);
+      const search =
+        query.trim().toLowerCase();
 
-      return;
-    }
+     const visibleObjects =
+  getVisibleObjectsForSearch();
 
-    // NORMAL UNDO
-    undo();
-  }}
-  disabled={
-    tool === "line"
-      ? false
-      : tool === "polyline" && isDrawing
-        ? false
-        : past.length === 0
-  }
->
-  Undo
-</button>
+const foundObject =
+  visibleObjects.find(
+    (object) =>
+      String(object?.type || "")
+        .toLowerCase()
+        .includes(search) ||
+      String(object?.text || "")
+        .toLowerCase()
+        .includes(search)
+  );
 
+const index =
+  foundObject
+    ? objects.indexOf(foundObject)
+    : -1;
 
-    <button
-  type="button"
-  onClick={() => {
-    redo();
-  }}
-  disabled={future.length === 0}
->
-  ↷ Redo
-</button>
+      if (index === -1) {
+        window.alert(
+          "Object not found."
+        );
+        return;
+      }
 
-<button
-  type="button"
-  onClick={() => {
-    setLineStart(null);
-    setLinePreview(null);
-    setPendingLinePoint(null);
-    setLineLengthInput("");
-    setShowLineInput(false);
+      setSelectedIndex(index);
+      setSelectedIndexes([index]);
+      setTool("select");
+    }}
+  >
+    🔍 Find
+  </button>
 
-    setIsDrawing(false);
-    setMeasureStart(null);
-    setAnglePoints([]);
-   setSnapType("");
-setSnapPoint(null);
+  {/* =====================================================
+      COMMAND INPUT
+  ===================================================== */}
 
-
-    setSelectedIndex(null);
-    setSelectedIndexes([]);
-    setSelectedMeasurementIndex(null);
-    setCommandFirstIndex(null);
-
-    actionStartRef.current = null;
-    moveStartRef.current = null;
-    stretchStartRef.current = null;
-
-    setShowMobileProperties(false);
-setShowMobileLayers(false);
-
-    changeTool("select");
-  }}
->
-  ESC
-</button>
-
-    <button
-  onClick={() => {
-    const query = window.prompt(
-      "Find object type:",
-      "line"
-    );
-
-    if (!query || !query.trim()) {
-      return;
-    }
-
-    const search = query.trim().toLowerCase();
-
-    const index = objects.findIndex(
-      (object) =>
-        object.type?.toLowerCase().includes(search) ||
-        (object.text || "")
-          .toLowerCase()
-          .includes(search)
-    );
-
-    if (index === -1) {
-      window.alert("Object not found.");
-      return;
-    }
-
-    setSelectedIndex(index);
-    setSelectedIndexes([index]);
-    setTool("select");
-  }}
->
-  🔍 Find
-</button>
-
-<input
+ <input
   type="text"
-inputMode="text"
-
+  inputMode="text"
   value={
     showLineInput
       ? lineLengthInput
@@ -33330,119 +34549,18 @@ inputMode="text"
   autoFocus={showLineInput}
   onChange={(e) => {
     if (showLineInput) {
-      setLineLengthInput(
-        e.target.value
-      );
+      setLineLengthInput(e.target.value);
     } else {
-      setCommandText(
-        e.target.value
-      );
+      setCommandText(e.target.value);
     }
   }}
-onKeyDown={(e) => {
-  if (e.key !== "Enter") {
-    return;
-  }
-
-  e.preventDefault();
-
-  /* LINE DISTANCE INPUT */
-  if (showLineInput) {
-    confirmLineInput();
-    return;
-  }
-
-  const command = commandText
-    .trim()
-    .toLowerCase();
-
-  if (!command) {
-    return;
-  }
-
-  /* COMMAND MAP */
-  const toolMap = {
-    select: "select",
-    line: "line",
-    circle: "circle",
-    rectangle: "rectangle",
-    polyline: "polyline",
-    arc: "arc",
-    text: "text",
-    measure: "measure",
-    dimension: "dimension",
-    angulardimension: "angularDimension",
-    radiusdimension: "radiusDimension",
-    diameterdimension: "diameterDimension",
-    move: "move",
-    copy: "copy",
-    rotate: "rotate",
-    trim: "trim",
-    extend: "extend",
-    stretch: "stretch",
-    offset: "offset",
-    fillet: "fillet",
-    chamfer: "chamfer",
-    array: "array",
-    mirror: "mirror",
-    scale: "scale",
-    explode: "explode",
-    join: "join",
-    hatch: "hatch",
-  };
-
-  /* FIND COMMAND */
-  if (command === "find") {
-    const searchText = window.prompt(
-      "Find object (Line, Circle, Rectangle, Text, Arc, etc.):"
-    );
-
-    if (searchText && searchText.trim()) {
-      const query = searchText
-        .trim()
-        .toLowerCase();
-
-      const foundIndex = objects.findIndex(
-        (object) =>
-          object?.type?.toLowerCase() === query
-      );
-
-      if (foundIndex !== -1) {
-        setSelectedIndexes([foundIndex]);
-        setSelectedIndex(foundIndex);
-        changeTool("select");
-      } else {
-        window.alert(
-          `No "${searchText}" object found.`
-        );
-      }
+  onKeyDown={(e) => {
+    if (e.key !== "Enter") {
+      return;
     }
 
-    setCommandText("");
-    return;
-  }
+    e.preventDefault();
 
-  const selectedTool = toolMap[command];
-
-  if (!selectedTool) {
-    window.alert(
-      `Unknown command: ${command}`
-    );
-    return;
-  }
-
-  changeTool(selectedTool);
-  setCommandText("");
-}}
-  placeholder={
-  showLineInput
-    ? "Length or Length<Angle"
-    : "Type a command"
-}
-/>
-<button
-  type="button"
-  onClick={() => {
     if (showLineInput) {
       confirmLineInput();
       return;
@@ -33488,7 +34606,8 @@ onKeyDown={(e) => {
 
     if (command === "find") {
       const searchText = window.prompt(
-        "Find object (Line, Circle, Rectangle, Text, Arc, etc.):"
+        "Find object:",
+        "line"
       );
 
       if (searchText && searchText.trim()) {
@@ -33496,10 +34615,140 @@ onKeyDown={(e) => {
           .trim()
           .toLowerCase();
 
-        const foundIndex = objects.findIndex(
-          (object) =>
-            object?.type?.toLowerCase() === query
-        );
+       const visibleObjects =
+  getVisibleObjectsForFind();
+
+const foundObject =
+  visibleObjects.find(
+    (object) =>
+      String(object?.type || "")
+        .toLowerCase()
+        .includes(query) ||
+      String(object?.text || "")
+        .toLowerCase()
+        .includes(query)
+  );
+
+const foundIndex =
+  foundObject
+    ? objects.indexOf(foundObject)
+    : -1;
+
+        if (foundIndex !== -1) {
+          setSelectedIndexes([foundIndex]);
+          setSelectedIndex(foundIndex);
+          changeTool("select");
+        } else {
+          window.alert(
+            `No "${searchText}" object found.`
+          );
+        }
+      }
+
+      setCommandText("");
+      return;
+    }
+
+    const selectedTool = toolMap[command];
+
+    if (!selectedTool) {
+      window.alert(
+        `Unknown command: ${command}`
+      );
+      return;
+    }
+
+    changeTool(selectedTool);
+    setCommandText("");
+  }}
+  placeholder={
+    showLineInput
+      ? "Length or Length<Angle"
+      : "Type a command"
+  }
+/>
+
+  {/* =====================================================
+      ENTER
+  ===================================================== */}
+
+ <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+
+    if (showLineInput) {
+      confirmLineInput();
+      return;
+    }
+
+    const command = commandText
+      .trim()
+      .toLowerCase();
+
+    if (!command) {
+      return;
+    }
+
+    const toolMap = {
+      select: "select",
+      line: "line",
+      circle: "circle",
+      rectangle: "rectangle",
+      polyline: "polyline",
+      arc: "arc",
+      text: "text",
+      measure: "measure",
+      dimension: "dimension",
+      angulardimension: "angularDimension",
+      radiusdimension: "radiusDimension",
+      diameterdimension: "diameterDimension",
+      move: "move",
+      copy: "copy",
+      rotate: "rotate",
+      trim: "trim",
+      extend: "extend",
+      stretch: "stretch",
+      offset: "offset",
+      fillet: "fillet",
+      chamfer: "chamfer",
+      array: "array",
+      mirror: "mirror",
+      scale: "scale",
+      explode: "explode",
+      join: "join",
+      hatch: "hatch",
+    };
+
+    if (command === "find") {
+      const searchText = window.prompt(
+        "Find object:",
+        "line"
+      );
+
+      if (searchText && searchText.trim()) {
+        const query = searchText
+          .trim()
+          .toLowerCase();
+
+       const visibleObjects =
+  getVisibleObjectsForFind();
+
+const foundObject =
+  visibleObjects.find(
+    (object) =>
+      String(object?.type || "")
+        .toLowerCase()
+        .includes(query) ||
+      String(object?.text || "")
+        .toLowerCase()
+        .includes(query)
+  );
+
+const foundIndex =
+  foundObject
+    ? objects.indexOf(foundObject)
+    : -1;
 
         if (foundIndex !== -1) {
           setSelectedIndexes([foundIndex]);
@@ -33531,43 +34780,41 @@ onKeyDown={(e) => {
 >
   {showLineInput ? "✓" : "Enter"}
 </button>
-
-  </div>
+</div>
 
 </div>
 
 {commandText.trim() !== "" && (
   <div className="command-suggestions">
-
     {[
-  "Find",
-  "Line",
-  "Circle",
-  "Rectangle",
-  "Polyline",
-  "Arc",
-  "Text",
-  "Measure",
-  "Dimension",
-  "AngularDimension",
-  "RadiusDimension",
-  "DiameterDimension",
-  "Move",
-  "Copy",
-  "Rotate",
-  "Trim",
-  "Extend",
-  "Stretch",
-  "Offset",
-  "Fillet",
-  "Chamfer",
-  "Array",
-  "Mirror",
-  "Scale",
-  "Explode",
-  "Join",
-  "Hatch",
-]
+      "Find",
+      "Line",
+      "Circle",
+      "Rectangle",
+      "Polyline",
+      "Arc",
+      "Text",
+      "Measure",
+      "Dimension",
+      "AngularDimension",
+      "RadiusDimension",
+      "DiameterDimension",
+      "Move",
+      "Copy",
+      "Rotate",
+      "Trim",
+      "Extend",
+      "Stretch",
+      "Offset",
+      "Fillet",
+      "Chamfer",
+      "Array",
+      "Mirror",
+      "Scale",
+      "Explode",
+      "Join",
+      "Hatch",
+    ]
       .filter((command) =>
         command
           .toLowerCase()
@@ -33577,257 +34824,149 @@ onKeyDown={(e) => {
               .toLowerCase()
           )
       )
-  .map((command) => (
-  <button
-    key={command}
-    onClick={() => {
+      .map((command) => (
+       <button
+  type="button"
+  key={command}
+  onPointerDown={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchStart={(e) => {
+    e.stopPropagation();
+  }}
+  onClick={(e) => {
+    e.stopPropagation();
 
-      if (command === "Find") {
+            e.stopPropagation();
 
-        const searchText = window.prompt(
-          "Find object (Line, Circle, Rectangle, Text, Arc, etc.):"
-        );
+            if (command === "Find") {
+              const searchText = window.prompt(
+                "Find object:",
+                "line"
+              );
 
-        if (searchText && searchText.trim()) {
+              if (
+                searchText &&
+                searchText.trim()
+              ) {
+                const query =
+                  searchText
+                    .trim()
+                    .toLowerCase();
 
-          const query = searchText
-            .trim()
-            .toLowerCase();
-
-          const foundIndex = objects.findIndex(
-            (object) =>
-              object?.type?.toLowerCase() === query
-          );
-
-          if (foundIndex !== -1) {
-
-            setSelectedIndexes([foundIndex]);
-            setSelectedIndex(foundIndex);
-
-            const object = objects[foundIndex];
-
-            /* =========================
-               FIND LINE
-            ========================= */
-
-            if (object?.type === "line") {
-
-              const x1 = object.points[0];
-              const y1 = object.points[1];
-
-              const x2 = object.points[2];
-              const y2 = object.points[3];
-
-              const centerX =
-                (x1 + x2) / 2;
-
-              const centerY =
-                (y1 + y2) / 2;
-
-              setPosition({
-                x:
-                  window.innerWidth / 2 -
-                  centerX * scale,
-
-                y:
-                  (window.innerHeight - 290) / 2 -
-                  centerY * scale,
-              });
-
-            }
-
-            /* =========================
-   FIND HATCH
-========================= */
-
-else if (
-  object?.type === "hatch"
-) {
-  const centerX =
-    object.x +
-    object.width / 2;
-
-  const centerY =
-    object.y +
-    object.height / 2;
-
- setPosition({
-  x:
-    (viewportSize.width <= 768
-      ? viewportSize.width
-      : viewportSize.width - 298) / 2 -
-    centerX * scale,
-
-  y:
-    (viewportSize.width <= 768
-      ? viewportSize.height - 87 - 64
-      : viewportSize.height - 87) / 2 -
-    centerY * scale,
-});
-}
-
-            /* =========================
-               FIND POLYLINE
-            ========================= */
-
-            else if (object?.type === "polyline") {
-
-              const points =
-                object.points || [];
-
-              if (points.length >= 2) {
-
-                let minX = points[0];
-                let maxX = points[0];
-
-                let minY = points[1];
-                let maxY = points[1];
-
-                for (
-                  let i = 2;
-                  i < points.length;
-                  i += 2
-                ) {
-
-                  minX = Math.min(
-                    minX,
-                    points[i]
+                const foundIndex =
+                  objects.findIndex(
+                    (object) =>
+                      String(
+                        object?.type || ""
+                      )
+                        .toLowerCase()
+                        .includes(query) ||
+                      String(
+                        object?.text || ""
+                      )
+                        .toLowerCase()
+                        .includes(query)
                   );
 
-                  maxX = Math.max(
-                    maxX,
-                    points[i]
+                if (foundIndex !== -1) {
+                  setSelectedIndexes([
+                    foundIndex,
+                  ]);
+
+                  setSelectedIndex(
+                    foundIndex
                   );
 
-                  minY = Math.min(
-                    minY,
-                    points[i + 1]
-                  );
-
-                  maxY = Math.max(
-                    maxY,
-                    points[i + 1]
+                  changeTool("select");
+                } else {
+                  window.alert(
+                    `No "${searchText}" object found.`
                   );
                 }
-
-                const centerX =
-                  (minX + maxX) / 2;
-
-                const centerY =
-                  (minY + maxY) / 2;
-
-              setPosition({
-  x:
-    (viewportSize.width <= 768
-      ? viewportSize.width
-      : viewportSize.width - 298) / 2 -
-    centerX * scale,
-
-  y:
-    (viewportSize.width <= 768
-      ? viewportSize.height - 87 - 64
-      : viewportSize.height - 87) / 2 -
-    centerY * scale,
-});
               }
 
+              setCommandText("");
+              return;
             }
 
-            /* =========================
-               FIND OTHER OBJECTS
-            ========================= */
+            const toolMap = {
+              Line: "line",
+              Circle: "circle",
+              Rectangle: "rectangle",
+              Polyline: "polyline",
+              Arc: "arc",
+              Text: "text",
+              Measure: "measure",
+              Dimension: "dimension",
+              AngularDimension:
+                "angularDimension",
+              RadiusDimension:
+                "radiusDimension",
+              DiameterDimension:
+                "diameterDimension",
+              Move: "move",
+              Copy: "copy",
+              Rotate: "rotate",
+              Trim: "trim",
+              Extend: "extend",
+              Stretch: "stretch",
+              Offset: "offset",
+              Fillet: "fillet",
+              Chamfer: "chamfer",
+              Array: "array",
+              Mirror: "mirror",
+              Scale: "scale",
+              Explode: "explode",
+              Join: "join",
+              Hatch: "hatch",
+            };
 
-            else {
+            const selectedTool =
+              toolMap[command];
 
-           setPosition({
-  x:
-    (viewportSize.width <= 768
-      ? viewportSize.width
-      : viewportSize.width - 298) / 2 -
-    (object.x || 0) * scale,
-
-  y:
-    (viewportSize.width <= 768
-      ? viewportSize.height - 87 - 64
-      : viewportSize.height - 87) / 2 -
-    (object.y || 0) * scale,
-});
+            if (selectedTool) {
+              changeTool(selectedTool);
             }
 
-          } else {
-
-            window.alert(
-              `No "${searchText}" object found.`
-            );
-          }
-        }
-
-      }
-
-      /* =========================
-         TOOL COMMAND
-      ========================= */
-
-      else {
-
-        const toolMap = {
-          Line: "line",
-          Circle: "circle",
-          Rectangle: "rectangle",
-          Polyline: "polyline",
-          Arc: "arc",
-          Text: "text",
-          Measure: "measure",
-          Dimension: "dimension",
-          AngularDimension: "angularDimension",
-          RadiusDimension: "radiusDimension",
-          DiameterDimension: "diameterDimension",
-          Move: "move",
-          Copy: "copy",
-          Rotate: "rotate",
-          Trim: "trim",
-          Extend: "extend",
-          Stretch: "stretch",
-          Offset: "offset",
-          Fillet: "fillet",
-          Chamfer: "chamfer",
-          Array: "array",
-          Mirror: "mirror",
-          Scale: "scale",
-          Explode: "explode",
-          Join: "join",
-          Hatch: "hatch",
-        };
-
-        const selectedTool =
-          toolMap[command];
-
-        if (selectedTool) {
-          changeTool(selectedTool);
-        }
-      }
-
-      setCommandText("");
-    }}
-  >
-    {command}
-  </button>
-))}
-
+            setCommandText("");
+          }}
+        >
+          {command}
+        </button>
+      ))}
   </div>
 )}
 
       </div>
 
-      {showMobileProperties &&
+    {showMobileProperties &&
   selectedObject && (
     <div
+      onPointerDown={(e) => {
+        e.stopPropagation();
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchMove={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchEnd={(e) => {
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
       style={{
         position: "fixed",
         left: "10px",
         right: "10px",
         bottom: "180px",
-        zIndex: 12000,
+        zIndex: 1200000,
         background: "#171717",
         color: "#fff",
         border: "1px solid #444",
@@ -33836,6 +34975,8 @@ else if (
         maxHeight: "55vh",
         overflowY: "auto",
         boxSizing: "border-box",
+        pointerEvents: "auto",
+        touchAction: "pan-y",
       }}
     >
       <div
@@ -34425,6 +35566,7 @@ else if (
 
       </footer>
 
+    </div>
     </div>
   );
 
