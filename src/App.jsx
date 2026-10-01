@@ -17867,10 +17867,6 @@ if (
     handleMouseMove(e);
   }
 };
-if (e.touches.length === 0) {
-  touchStateRef.current.lastCenter = null;
-  touchStateRef.current.lastDistance = null;
-}
 
 const handleTouchEnd = (e) => {
   e.evt.preventDefault();
