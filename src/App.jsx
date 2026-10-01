@@ -17369,108 +17369,144 @@ const clearDrawing = () => {
   /* =========================
      ZOOM
   ========================= */
-const handleWheel = (e) => {
-  e.evt.preventDefault();
+  
+  const handleWheel = (e) => {
+  const wheelEvent = e.evt;
 
-  // =========================
-// TOUCHPAD PINCH ZOOM
-// =========================
-const wheelEvent = e.evt;
-
-if (
-  wheelEvent.ctrlKey ||
-  wheelEvent.metaKey
-) {
-  const delta =
-    wheelEvent.deltaY;
-
-  if (Math.abs(delta) < 0.01) {
+  if (!wheelEvent) {
     return;
   }
-}
 
-  const stage = e.target.getStage();
+  wheelEvent.preventDefault();
+
+  const stage =
+    e.target.getStage();
 
   if (!stage) {
     return;
   }
 
-  const oldScale = scale;
-
-  const pointer = stage.getPointerPosition();
+  const pointer =
+    stage.getPointerPosition();
 
   if (!pointer) {
     return;
   }
 
+  const oldScale = scale;
+
+  /* =========================
+     TOUCHPAD / MOUSE ZOOM
+  ========================= */
+
+  let zoomFactor;
+
   /*
-    Mouse ke neeche ka world point
-    calculate karo
+    Ctrl / Meta = touchpad pinch
   */
-  const mousePointTo = {
+
+  if (
+    wheelEvent.ctrlKey ||
+    wheelEvent.metaKey
+  ) {
+    /*
+      Touchpad pinch usually gives
+      small fractional delta values.
+    */
+
+    const delta =
+      wheelEvent.deltaY;
+
+    if (
+      !Number.isFinite(delta) ||
+      delta === 0
+    ) {
+      return;
+    }
+
+    /*
+      Smooth touchpad zoom
+    */
+
+    zoomFactor =
+      Math.exp(
+        -delta * 0.01
+      );
+  } else {
+    /*
+      Normal mouse wheel
+    */
+
+    const direction =
+      wheelEvent.deltaY > 0
+        ? -1
+        : 1;
+
+    zoomFactor =
+      direction > 0
+        ? 1.25
+        : 1 / 1.25;
+  }
+
+  /* =========================
+     NEW SCALE
+  ========================= */
+
+  let newScale =
+    oldScale * zoomFactor;
+
+  const MIN_ZOOM =
+    0.001;
+
+  const MAX_ZOOM =
+    1000000;
+
+  newScale =
+    Math.max(
+      MIN_ZOOM,
+      Math.min(
+        MAX_ZOOM,
+        newScale
+      )
+    );
+
+  /* =========================
+     KEEP POINTER POSITION
+  ========================= */
+
+  const worldPoint = {
     x:
-      (pointer.x - position.x) /
+      (pointer.x -
+        position.x) /
       oldScale,
 
     y:
-      (pointer.y - position.y) /
+      (pointer.y -
+        position.y) /
       oldScale,
   };
 
-  /*
-    Zoom direction
-  */
-  const direction =
-    e.evt.deltaY > 0
-      ? -1
-      : 1;
-
-  const zoomFactor = 1.25;
-
-  let newScale =
-    direction > 0
-      ? oldScale * zoomFactor
-      : oldScale / zoomFactor;
-
-  /*
-    Zoom limits
-  */
- /* =========================
-   INFINITE CAD ZOOM
-========================= */
-
-const MIN_ZOOM = 0.001;
-const MAX_ZOOM = 1000000;
-
-newScale = Math.max(
-  MIN_ZOOM,
-  Math.min(
-    MAX_ZOOM,
-    newScale
-  )
-);
-  /*
-    Mouse ke neeche same world point
-    maintain rahe
-  */
   const newPosition = {
     x:
       pointer.x -
-      mousePointTo.x *
+      worldPoint.x *
         newScale,
 
     y:
       pointer.y -
-      mousePointTo.y *
+      worldPoint.y *
         newScale,
   };
 
-  setScale(newScale);
+  setScale(
+    newScale
+  );
 
   setPosition(
     newPosition
   );
 };
+
     /* =========================
      ZOOM FIT
   ========================= */
@@ -17705,162 +17741,206 @@ const canvasHeight =
       (rect?.top || 0),
   };
 };
+/* =====================================================
+   MOBILE TOUCH — AUTOCAD STYLE LINE DRAWING
+===================================================== */
 
 const handleTouchStart = (e) => {
   const touches = e.evt.touches;
+
   if (!touches) return;
 
   e.evt.preventDefault();
 
-  // 2 finger = pan / zoom
+  /* =========================
+     2 FINGER
+     PAN / ZOOM
+  ========================= */
+
   if (touches.length === 2) {
     touchStateRef.current = {
-      lastDistance: getTouchDistance(touches),
-      lastCenter: getTouchCenter(touches),
+      lastDistance:
+        getTouchDistance(touches),
+
+      lastCenter:
+        getTouchCenter(touches),
     };
+
     return;
   }
 
-  // 1 finger
-  if (touches.length === 1) {
-    lastTouchTimeRef.current = Date.now();
+/* =========================
+   1 FINGER
+========================= */
 
-    const stage = e.target.getStage();
-    if (!stage) return;
+if (touches.length === 1) {
 
-    stage.setPointersPositions(e.evt);
+  lastTouchTimeRef.current =
+    Date.now();
 
-    // LINE / POLYLINE: touch ko mouse-down ki tarah use karo
-    handleMouseDown(e);
+  const stage =
+    e.target.getStage();
+
+  if (!stage) return;
+
+  stage.setPointersPositions(
+    e.evt
+  );
+
+  const touch =
+    touches[0];
+
+  const rect =
+    stage.container()
+      .getBoundingClientRect();
+
+  touchStateRef.current = {
+    lastCenter: {
+      x:
+        touch.clientX -
+        rect.left,
+
+      y:
+        touch.clientY -
+        rect.top,
+    },
+
+    lastDistance: null,
+  };
+
+  /* =========================
+     SELECT
+     → 1 FINGER PAN
+  ========================= */
+
+  if (
+    tool === "select"
+  ) {
+    return;
   }
+
+  /* =========================
+     LINE / OTHER TOOLS
+     → NORMAL ACTION
+  ========================= */
+
+  handleMouseDown(e);
+}
 };
+
+
+/* =====================================================
+   MOBILE TOUCH MOVE
+===================================================== */
 
 const handleTouchMove = (e) => {
   const touches = e.evt.touches;
+
   if (!touches) return;
 
   e.evt.preventDefault();
 
- // =========================
-// 2 FINGER PAN / ZOOM
-// =========================
+ /* =========================
+   2 FINGER PAN + PINCH ZOOM
+========================= */
+
 if (touches.length === 2) {
-  const center = getTouchCenter(touches);
-  const distance = getTouchDistance(touches);
+
+  const center =
+    getTouchCenter(touches);
+
+  const distance =
+    getTouchDistance(touches);
 
   const oldScale = scale;
+
   const lastCenter =
-    touchStateRef.current.lastCenter;
+    touchStateRef.current
+      .lastCenter;
 
   const lastDistance =
-    touchStateRef.current.lastDistance;
+    touchStateRef.current
+      .lastDistance;
 
-  // First 2-finger frame
-  if (!lastCenter || !lastDistance) {
+  /* =========================
+     FIRST 2-FINGER FRAME
+  ========================= */
+
+  if (
+    !lastCenter ||
+    !lastDistance
+  ) {
     touchStateRef.current = {
       lastCenter: center,
       lastDistance: distance,
     };
+
     return;
   }
 
- // =====================================================
-// MOBILE SINGLE-FINGER PAN
-// Only in SELECT mode
-// =====================================================
+  /* =========================
+     PINCH ZOOM
+  ========================= */
 
-const touch = e.touches[0];
-
-const rect =
-  e.currentTarget.getBoundingClientRect();
-
-touchStateRef.current.lastCenter = {
-  x: touch.clientX - rect.left,
-  y: touch.clientY - rect.top,
-};
-
-touchStateRef.current.lastDistance = null;
-if (
-  e.touches.length === 1 &&
-  tool === "select" &&
-  touchStateRef.current.lastCenter
-) {
-  const touch = e.touches[0];
-
-  const rect =
-    e.currentTarget.getBoundingClientRect();
-
-  const currentX =
-    touch.clientX - rect.left;
-
-  const currentY =
-    touch.clientY - rect.top;
-
-  const previous =
-    touchStateRef.current.lastCenter;
-
-  const dx =
-    currentX - previous.x;
-
-  const dy =
-    currentY - previous.y;
-
-  setPosition((previousPosition) => ({
-    x: previousPosition.x + dx,
-    y: previousPosition.y + dy,
-  }));
-
-  touchStateRef.current.lastCenter = {
-    x: currentX,
-    y: currentY,
-  };
-
-  return;
-}
-
-  // =========================
-  // ZOOM
-  // =========================
   const zoomRatio =
     distance / lastDistance;
 
-  const newScale = Math.max(
-    0.2,
-    Math.min(oldScale * zoomRatio, 20)
+  let newScale =
+    oldScale * zoomRatio;
+
+  const MIN_ZOOM = 0.001;
+  const MAX_ZOOM = 1000000;
+
+  newScale = Math.max(
+    MIN_ZOOM,
+    Math.min(
+      MAX_ZOOM,
+      newScale
+    )
   );
 
-  // =========================
-  // KEEP SAME POINT UNDER
-  // FINGERS WHILE ZOOMING
-  // =========================
+  /* =========================
+     KEEP PINCH CENTER FIXED
+  ========================= */
+
   const worldPoint = {
     x:
-      (lastCenter.x - position.x) /
+      (lastCenter.x -
+        position.x) /
       oldScale,
 
     y:
-      (lastCenter.y - position.y) /
+      (lastCenter.y -
+        position.y) /
       oldScale,
   };
 
-  // =========================
-  // PAN + ZOOM TOGETHER
-  // =========================
+  /* =========================
+     PAN + ZOOM
+  ========================= */
+
   const newPosition = {
     x:
       center.x -
-      worldPoint.x * newScale,
+      worldPoint.x *
+        newScale,
 
     y:
       center.y -
-      worldPoint.y * newScale,
+      worldPoint.y *
+        newScale,
   };
 
   setScale(newScale);
 
-  setPosition(newPosition);
+  setPosition(
+    newPosition
+  );
 
-  // Save current finger state
+  /* =========================
+     SAVE TOUCH STATE
+  ========================= */
+
   touchStateRef.current = {
     lastCenter: center,
     lastDistance: distance,
@@ -17869,51 +17949,113 @@ if (
   return;
 }
 
-  // =========================
-  // 1 FINGER
-  // =========================
+
+  /* =========================
+     1 FINGER
+  ========================= */
+
   if (touches.length === 1) {
-    const stage = e.target.getStage();
+
+    const stage =
+      e.target.getStage();
+
     if (!stage) return;
 
-    stage.setPointersPositions(e.evt);
+    stage.setPointersPositions(
+      e.evt
+    );
 
-    // IMPORTANT:
-    // line endpoint ko sirf preview me move karo
-    // actual line second tap par fix hogi
+    /*
+      LINE ke time:
+      finger move =
+      live preview
+
+      Actual line tabhi banegi
+      jab second tap hoga.
+    */
+
     handleMouseMove(e);
   }
 };
 
+
+/* =====================================================
+   MOBILE TOUCH END
+===================================================== */
+
 const handleTouchEnd = (e) => {
+
   e.evt.preventDefault();
 
-  const touches = e.evt.touches;
+  const touches =
+    e.evt.touches;
 
-  // Agar 1 finger abhi bhi screen par hai,
-  // drawing ko finish MAT karo.
-  if (touches && touches.length === 1) {
-    touchStateRef.current = {
-      lastDistance: null,
-      lastCenter: null,
-    };
+  /* =========================
+     2 → 1 FINGER
+     TRANSITION
+  ========================= */
+
+  if (
+    touches &&
+    touches.length === 1
+  ) {
+    const stage =
+      e.target.getStage();
+
+    if (stage) {
+      stage.setPointersPositions(
+        e.evt
+      );
+
+      const touch =
+        touches[0];
+
+      const rect =
+        stage.container()
+          .getBoundingClientRect();
+
+      touchStateRef.current = {
+        lastCenter: {
+          x:
+            touch.clientX -
+            rect.left,
+
+          y:
+            touch.clientY -
+            rect.top,
+        },
+
+        lastDistance: null,
+      };
+    }
+
     return;
   }
+
+  /* =========================
+     ALL FINGERS RELEASED
+  ========================= */
 
   touchStateRef.current = {
     lastDistance: null,
     lastCenter: null,
   };
 
-  // IMPORTANT:
-  // LINE ke second tap ko mouseUp se finish nahi karna.
-  // MouseUp line ko pending state me chhod deta hai.
-  if (tool === "line" && lineStart) {
+  /* =========================
+     LINE
+     SECOND TAP IS HANDLED
+     BY TOUCH START
+  ========================= */
+
+  if (
+    tool === "line"
+  ) {
     return;
   }
 
-  // Polyline bhi mouseUp se finish nahi hogi.
-  if (tool === "polyline") {
+  if (
+    tool === "polyline"
+  ) {
     return;
   }
 
@@ -25640,10 +25782,11 @@ height={
     : viewportSize.height - 87
 }
             
-     draggable={
+    draggable={
   tool === "select" &&
   !isSelecting &&
-  !isDrawing
+  !isDrawing &&
+  viewportSize.width > 768
 }
             onDragEnd={
               handleDragEnd
@@ -28251,33 +28394,35 @@ if (
                 (
                   object,
                   index
-                ) => {
-                  const objectLayer =
-                    layers.find(
-                      (layer) =>
-                        layer.id ===
-                        (
-                          object.layerId ||
-                          "layer-0"
-                        )
-                    );
+            ) => {
+  const objectLayer =
+    layers.find(
+      (layer) =>
+        layer.id ===
+        (
+          object.layerId ||
+          "layer-0"
+        )
+    );
 
-                  if (
-                    objectLayer &&
-                    !objectLayer.visible
-                  ) {
-                    return null;
-                  }
-                  const selected =
-                    selectedIndex === index ||
-                    selectedIndexes.includes(index);
+  if (
+    objectLayer &&
+    !objectLayer.visible
+  ) {
+    return null;
+  }
 
-              if (
-                    !selected &&
-                    !isObjectVisible(object)
-                  ) {
-                    return null;
-                  }
+  const selected =
+    selectedIndex === index ||
+    selectedIndexes.includes(index);
+
+  if (
+    !selected &&
+    !isObjectVisible(object)
+  ) {
+    return null;
+                }
+
 
                   const commonProps = {
   
@@ -35582,6 +35727,6 @@ const foundIndex =
     </div>
     </div>
   );
-
 }
+
 export default App;
