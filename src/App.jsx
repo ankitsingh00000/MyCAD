@@ -28576,9 +28576,7 @@ if (
               "#ffffff"
         }
       strokeWidth={
-  selected
-    ? 3 / scale
-    : (object.strokeWidth || 2) / scale
+  (selected ? 3 : (object.strokeWidth || 2)) / scale
 }
         hitStrokeWidth={25}
         rotation={
