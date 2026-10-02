@@ -28601,7 +28601,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+            draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -28626,7 +28626,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+            draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
