@@ -26394,75 +26394,76 @@ stroke="#ffd54f"
 
 {tool === "line" && !showLineInput && (
   <Group
-    x={mousePosition.x + 12 / scale}
-    y={mousePosition.y - 42 / scale}
+    x={mousePosition.x - 19 / scale}
+    y={mousePosition.y - 40 / scale}
+
     onMouseDown={(e) => {
-  e.cancelBubble = true;
+      e.cancelBubble = true;
 
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
+      const dx =
+        linePreview.x2 -
+        linePreview.x1;
 
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
+      const dy =
+        linePreview.y2 -
+        linePreview.y1;
 
-  const distance =
-    Math.hypot(dx, dy);
+      const distance =
+        Math.hypot(dx, dy);
 
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
+      let angle =
+        Math.atan2(dy, dx) *
+        (180 / Math.PI);
 
-  if (angle < 0) {
-    angle += 360;
-  }
+      if (angle < 0) {
+        angle += 360;
+      }
 
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
+      setPendingLinePoint({
+        x: linePreview.x2,
+        y: linePreview.y2,
+      });
 
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
+      setLineLengthInput(
+        `${distance.toFixed(2)}<${angle.toFixed(1)}`
+      );
 
-  setShowLineInput(true);
-}}
+      setShowLineInput(true);
+    }}
 
-onTouchStart={(e) => {
-  e.cancelBubble = true;
+    onTouchStart={(e) => {
+      e.cancelBubble = true;
 
-  const dx =
-    linePreview.x2 -
-    linePreview.x1;
+      const dx =
+        linePreview.x2 -
+        linePreview.x1;
 
-  const dy =
-    linePreview.y2 -
-    linePreview.y1;
+      const dy =
+        linePreview.y2 -
+        linePreview.y1;
 
-  const distance =
-    Math.hypot(dx, dy);
+      const distance =
+        Math.hypot(dx, dy);
 
-  let angle =
-    Math.atan2(dy, dx) *
-    (180 / Math.PI);
+      let angle =
+        Math.atan2(dy, dx) *
+        (180 / Math.PI);
 
-  if (angle < 0) {
-    angle += 360;
-  }
+      if (angle < 0) {
+        angle += 360;
+      }
 
-  setPendingLinePoint({
-    x: linePreview.x2,
-    y: linePreview.y2,
-  });
+      setPendingLinePoint({
+        x: linePreview.x2,
+        y: linePreview.y2,
+      });
 
-  setLineLengthInput(
-    `${distance.toFixed(2)}<${angle.toFixed(1)}`
-  );
+      setLineLengthInput(
+        `${distance.toFixed(2)}<${angle.toFixed(1)}`
+      );
 
-  setShowLineInput(true);
-}}
+      setShowLineInput(true);
+    }}
 
   >
     <Rect
@@ -26476,8 +26477,9 @@ onTouchStart={(e) => {
       x={7 / scale}
       y={4 / scale}
       text="Tap"
-      fontSize={12 / scale}
+      fontSize={14 / scale}
       fill="#ffffff"
+      listening={false}
     />
   </Group>
 )}
@@ -26860,11 +26862,11 @@ onTouchStart={(e) => {
       angle += 360;
     }
 
-    const boxX =
-      linePreview.x2 + 15;
+   const boxX =
+  linePreview.x2 + 12;
 
-    const boxY =
-      linePreview.y2 - 60;
+const boxY =
+  linePreview.y2 - 35;
 
     return (
       <Group

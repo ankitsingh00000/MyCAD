@@ -478,7 +478,7 @@ top: 0;
     background: #252525 !important;
     color: #ffffff !important;
 
-    border-top: 1px solid #444 !important;
+   border-top: none !important;
 
     z-index: 1000000 !important;
 
@@ -616,8 +616,8 @@ top: 0;
   min-width: 72px !important;
   width: auto !important;
 
-  height: 34px !important;
-  min-height: 34px !important;
+  height: 40px !important;
+  min-height: 40px !important;
 
   padding: 4px 10px !important;
 
