@@ -17819,12 +17819,19 @@ if (touches.length === 1) {
     return;
   }
 
-  /* =========================
-     LINE / OTHER TOOLS
-     → NORMAL ACTION
-  ========================= */
+ /* =========================
+   LINE
+   =========================
+   First touch sirf crosshair move karega.
+   START POINT Tap button se set hoga.
+========================= */
 
-  handleMouseDown(e);
+if (tool === "line") {
+  return;
+}
+
+/* OTHER TOOLS */
+handleMouseDown(e);
 }
 };
 
@@ -26397,8 +26404,28 @@ stroke="#ffd54f"
     x={mousePosition.x - 19 / scale}
     y={mousePosition.y - 40 / scale}
 
-    onMouseDown={(e) => {
-      e.cancelBubble = true;
+      onMouseDown={(e) => {
+  e.cancelBubble = true;
+
+  if (!lineStart) {
+    actionStartRef.current = {
+      objects: [...objects],
+      measurements: [...measurements],
+    };
+
+    setLineStart({
+      x: mousePosition.x,
+      y: mousePosition.y,
+    });
+
+    setIsDrawing(true);
+    setLinePreview(null);
+
+    return;
+  }
+
+  // yahan tumhara existing
+  // dx, dy, distance, angle wala code rahega
 
       const dx =
         linePreview.x2 -
@@ -26433,6 +26460,26 @@ stroke="#ffd54f"
 
     onTouchStart={(e) => {
       e.cancelBubble = true;
+
+  if (!lineStart) {
+    actionStartRef.current = {
+      objects: [...objects],
+      measurements: [...measurements],
+    };
+
+    setLineStart({
+      x: mousePosition.x,
+      y: mousePosition.y,
+    });
+
+    setIsDrawing(true);
+    setLinePreview(null);
+
+    return;
+  }
+
+  // yahan tumhara existing
+  // dx, dy, distance, angle wala code rahega
 
       const dx =
         linePreview.x2 -
