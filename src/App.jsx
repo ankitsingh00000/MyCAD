@@ -3498,7 +3498,15 @@ if (tool === "polyline") {
     newLine,
   ]);
  
-  setLineStart(null);
+/* =========================
+   CONTINUE LINE FROM END
+========================= */
+
+setLineStart({
+  x: finalX,
+  y: finalY,
+});
+
 setPendingLinePoint(null);
 setLineLengthInput("");
 setShowLineInput(false);
@@ -3507,7 +3515,7 @@ setLinePreview(null);
 setSnapPoint(null);
 setSnapType("");
 
-setIsDrawing(false);
+setIsDrawing(true);
 
 actionStartRef.current = null;
 
@@ -3518,9 +3526,7 @@ if (
   document.activeElement.blur();
 }
 
-/* LINE COMPLETE */
-setTool("select");}
-
+return;}
   /* =========================
      MOUSE DOWN
   ========================= */
