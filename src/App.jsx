@@ -2257,7 +2257,7 @@ const snapToObject = (
   }
 
  const snapDistance =
-  15 /
+  30 /
   Math.max(
     scale,
     0.2
@@ -5509,6 +5509,8 @@ const snappedPoint =
     rawY
   );
 
+  
+
 /* =========================
    LINE / POLYLINE LIVE PREVIEW
 ========================= */
@@ -5518,8 +5520,20 @@ if (
   lineStart &&
   !showLineInput
 ) {
-  let previewX = snappedPoint.x;
-  let previewY = snappedPoint.y;
+ let previewX = snappedPoint.x;
+let previewY = snappedPoint.y;
+
+/* =========================
+   ENDPOINT SNAP LOCK
+========================= */
+
+if (
+  tool === "line" &&
+  snappedPoint
+) {
+  previewX = snappedPoint.x;
+  previewY = snappedPoint.y;
+}
 
   const dx =
     previewX - lineStart.x;
