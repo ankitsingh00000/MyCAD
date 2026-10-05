@@ -18,6 +18,9 @@ import "./App.css";
 
 function App() {
 
+ const [showHome, setShowHome] = useState(false);
+
+
   const [commandText, setCommandText] =
   useState("");
   const [tool, setTool] = useState("select");
@@ -1849,6 +1852,21 @@ const [objectSnapEnabled, setObjectSnapEnabled] =
   const panStartRef = useRef(null);
 
   const moveStartRef = useRef(null);
+
+  /* =========================
+   OFFSET TOUCH / DRAG STATE
+========================= */
+
+const offsetStartRef = useRef(null);
+
+/* =========================
+   OFFSET LIVE PREVIEW
+========================= */
+
+const [offsetPreview, setOffsetPreview] = useState(null);
+
+  const copyStartRef = useRef(null);
+
 
   const GRID_SIZE = 25;
 
@@ -5239,11 +5257,8 @@ if (object.type === "hatch") {
           object.hatchColor ||
           "#00aaff"
         }
-        strokeWidth={
-          (object.strokeWidth || 1) /
-          scale
-        }
-        listening={false}
+       strokeWidth={Math.max(2, (object.strokeWidth || 1) / scale)}
+listening={false}
       />
     );
   }
@@ -5422,6 +5437,18 @@ if (tool === "hatch") {
   ========================= */
 
   const handleMouseMove = (e) => {
+
+      /* =========================
+     COPY = DRAG COPIED OBJECT
+  ========================= */
+
+  if (
+    tool === "copy" &&
+    copyStartRef.current
+  ) {
+    updateCopy(e);
+    return;
+  }
  if (
   e.evt?.buttons === 4 &&
   !isPanning
@@ -5452,16 +5479,174 @@ if (tool === "hatch") {
   return;
 }
 
+/* =========================
+   OFFSET = START DRAG
+========================= */
+
+if (
+  tool === "offset" &&
+  offsetStartRef.current
+) {
+  const offsetData =
+    offsetStartRef.current;
+
+  const pointer =
+    stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
+  const currentX =
+    (pointer.x - position.x) /
+    scale;
+
+  const currentY =
+    (pointer.y - position.y) /
+    scale;
+
+  /* =========================
+     SET START POINT
+  ========================= */
+
+  if (
+    offsetData.startX === null ||
+    offsetData.startY === null
+  ) {
+    offsetData.startX =
+      currentX;
+
+    offsetData.startY =
+      currentY;
+  }
+
+  /* =========================
+     OFFSET DELTA
+  ========================= */
+
+  const dx =
+    currentX -
+    offsetData.startX;
+
+  const dy =
+    currentY -
+    offsetData.startY;
+
+  const distance =
+    Math.hypot(
+      dx,
+      dy
+    );
+
+  /* =========================
+     OFFSET DIRECTION
+  ========================= */
+
+  let sign = 1;
+
+  const original =
+    objects[offsetData.index];
+
+  if (
+    original?.type === "line" &&
+    original.points?.length >= 4
+  ) {
+    const x1 =
+      original.points[0];
+
+    const y1 =
+      original.points[1];
+
+    const x2 =
+      original.points[2];
+
+    const y2 =
+      original.points[3];
+
+    const lineDx =
+      x2 - x1;
+
+    const lineDy =
+      y2 - y1;
+
+    const cross =
+      lineDx * dy -
+      lineDy * dx;
+
     if (
+      cross < 0
+    ) {
+      sign = -1;
+    }
+  }
+
+  /* =========================
+     SAVE OFFSET STATE
+  ========================= */
+
+  offsetData.moved =
+    distance > 0;
+
+  offsetData.currentX =
+    currentX;
+
+  offsetData.currentY =
+    currentY;
+
+  offsetData.dx =
+    dx;
+
+  offsetData.dy =
+    dy;
+
+  offsetData.distance =
+    distance;
+
+  offsetData.sign =
+    sign;
+
+  /* =========================
+     LIVE OFFSET PREVIEW DATA
+  ========================= */
+
+  if (original) {
+    setOffsetPreview({
+      index:
+        offsetData.index,
+
+      dx,
+      dy,
+
+      distance,
+
+      sign,
+    });
+  }
+
+  return;
+}
+
+/* =========================
+   PAN
+========================= */
+
+if (
   isPanning &&
   panStartRef.current
 ) {
+  const pointer =
+    stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
   const dx =
-    e.evt.clientX -
+    pointer.x -
     panStartRef.current.mouseX;
 
   const dy =
-    e.evt.clientY -
+    pointer.y -
     panStartRef.current.mouseY;
 
   setPosition({
@@ -5476,33 +5661,50 @@ if (tool === "hatch") {
 
   return;
 }
-    const point =
-      stage.getPointerPosition();
 
-    if (!point) return;
+/* =========================
+   GET CURRENT POINTER
+========================= */
 
-    const rawX =
-      (point.x - position.x) /
-      scale;
+const point =
+  stage.getPointerPosition();
 
-    const rawY =
-      (point.y - position.y) /
-      scale;
+if (!point) {
+  return;
+}
 
-    setMousePosition({
-      x: Math.round(rawX),
-      y: Math.round(rawY),
-    });
+const rawX =
+  (point.x - position.x) /
+  scale;
 
-    /* SELECTION BOX */
-if (isSelecting && selectionBox) {
+const rawY =
+  (point.y - position.y) /
+  scale;
+
+setMousePosition({
+  x: Math.round(rawX),
+  y: Math.round(rawY),
+});
+
+/* =========================
+   SELECTION BOX
+========================= */
+
+if (
+  isSelecting &&
+  selectionBox
+) {
   setSelectionBox((prev) => {
-    if (!prev) return null;
+    if (!prev) {
+      return null;
+    }
 
     return {
       ...prev,
-      width: rawX - prev.x,
-      height: rawY - prev.y,
+      width:
+        rawX - prev.x,
+      height:
+        rawY - prev.y,
     };
   });
 
@@ -5515,39 +5717,50 @@ const snappedPoint =
     rawY
   );
 
-  
-
 /* =========================
    LINE / POLYLINE LIVE PREVIEW
 ========================= */
 
 if (
-  (tool === "line" || tool === "polyline") &&
+  (tool === "line" ||
+    tool === "polyline") &&
   lineStart &&
   !showLineInput
 ) {
- let previewX = snappedPoint.x;
-let previewY = snappedPoint.y;
+  let previewX =
+    snappedPoint.x;
 
-/* =========================
-   ENDPOINT SNAP LOCK
-========================= */
+  let previewY =
+    snappedPoint.y;
 
-if (
-  tool === "line" &&
-  snappedPoint
-) {
-  previewX = snappedPoint.x;
-  previewY = snappedPoint.y;
-}
+  /* =========================
+     ENDPOINT SNAP LOCK
+  ========================= */
+
+  if (
+    tool === "line" &&
+    snappedPoint
+  ) {
+    previewX =
+      snappedPoint.x;
+
+    previewY =
+      snappedPoint.y;
+  }
 
   const dx =
-    previewX - lineStart.x;
+    previewX -
+    lineStart.x;
 
   const dy =
-    previewY - lineStart.y;
+    previewY -
+    lineStart.y;
 
-  const distance = Math.hypot(dx, dy);
+  const distance =
+    Math.hypot(
+      dx,
+      dy
+    );
 
   /* =========================
      AUTO STRAIGHT LOCK
@@ -5560,7 +5773,10 @@ if (
     !polarEnabled
   ) {
     const angle =
-      Math.atan2(dy, dx) *
+      Math.atan2(
+        dy,
+        dx
+      ) *
       (180 / Math.PI);
 
     const normalizedAngle =
@@ -5585,11 +5801,13 @@ if (
       );
 
     if (horizontal) {
-      previewY = lineStart.y;
+      previewY =
+        lineStart.y;
     }
 
     if (vertical) {
-      previewX = lineStart.x;
+      previewX =
+        lineStart.x;
     }
   }
 
@@ -5597,66 +5815,91 @@ if (
      ORTHO
   ========================= */
 
-  if (orthoEnabled) {
-    const orthoPoint = applyOrtho(
-      lineStart.x,
-      lineStart.y,
-      previewX,
-      previewY
-    );
+  if (
+    orthoEnabled
+  ) {
+    const orthoPoint =
+      applyOrtho(
+        lineStart.x,
+        lineStart.y,
+        previewX,
+        previewY
+      );
 
-    previewX = orthoPoint.x;
-    previewY = orthoPoint.y;
+    previewX =
+      orthoPoint.x;
+
+    previewY =
+      orthoPoint.y;
   }
 
   /* =========================
      POLAR
   ========================= */
 
-  if (polarEnabled) {
-    const polarPoint = applyPolar(
-      lineStart.x,
-      lineStart.y,
-      previewX,
-      previewY
-    );
+  if (
+    polarEnabled
+  ) {
+    const polarPoint =
+      applyPolar(
+        lineStart.x,
+        lineStart.y,
+        previewX,
+        previewY
+      );
 
-    previewX = polarPoint.x;
-    previewY = polarPoint.y;
+    previewX =
+      polarPoint.x;
+
+    previewY =
+      polarPoint.y;
   }
 
   setLinePreview({
-    x1: lineStart.x,
-    y1: lineStart.y,
-    x2: previewX,
-    y2: previewY,
+    x1:
+      lineStart.x,
+
+    y1:
+      lineStart.y,
+
+    x2:
+      previewX,
+
+    y2:
+      previewY,
   });
 
   return;
 }
 
-if (!isDrawing) {
+if (
+  !isDrawing
+) {
   return;
 }
+
 let x =
   snappedPoint.x;
 
 let y =
   snappedPoint.y;
 
-
 /* =========================
    ARC PREVIEW
 ========================= */
 
 const lastObject =
-  objects[objects.length - 1];
+  objects[
+    objects.length - 1
+  ];
 
 if (
   lastObject &&
   lastObject.type === "line"
 ) {
-  if (polarEnabled) {
+  if (
+    polarEnabled
+  ) {
     const polarPoint =
       applyPolar(
         lastObject.points[0],
@@ -5665,9 +5908,14 @@ if (
         y
       );
 
-    x = polarPoint.x;
-    y = polarPoint.y;
-  } else if (orthoEnabled) {
+    x =
+      polarPoint.x;
+
+    y =
+      polarPoint.y;
+  } else if (
+    orthoEnabled
+  ) {
     const orthoPoint =
       applyOrtho(
         lastObject.points[0],
@@ -5676,81 +5924,117 @@ if (
         y
       );
 
-    x = orthoPoint.x;
-    y = orthoPoint.y;
+    x =
+      orthoPoint.x;
+
+    y =
+      orthoPoint.y;
   }
 }
 
-    setObjects((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
+/* =========================
+   LIVE OBJECT UPDATE
+========================= */
 
-      const updated = [...prev];
+setObjects((prev) => {
+  if (
+    prev.length === 0
+  ) {
+    return prev;
+  }
 
-      const lastIndex =
-        updated.length - 1;
+  const updated =
+    [...prev];
 
-      const current = {
-        ...updated[lastIndex],
-      };
-if (current.type === "line") {
-  current.points = [
-    current.points[0],
-    current.points[1],
-    x,
-    y,
-  ];
-}
-      if (current.type === "circle") {
-        const dx =
-          x - current.x;
+  const lastIndex =
+    updated.length - 1;
 
-        const dy =
-          y - current.y;
-
-        current.radius = Math.sqrt(
-          dx * dx + dy * dy
-        );
-      }
-      if (
-        current.type ===
-        "rectangle"
-      ) {
-        const startX =
-          current.x;
-
-        const startY =
-          current.y;
-
-        current.x =
-          Math.min(
-            startX,
-            x
-          );
-
-        current.y =
-          Math.min(
-            startY,
-            y
-          );
-
-        current.width =
-          Math.abs(
-            x - startX
-          );
-
-        current.height =
-          Math.abs(
-            y - startY
-          );
-      }
-
-      updated[lastIndex] = current;
-
-      return updated;
-    });
+  const current = {
+    ...updated[lastIndex],
   };
+
+  /* LINE */
+
+  if (
+    current.type === "line"
+  ) {
+    current.points = [
+      current.points[0],
+      current.points[1],
+      x,
+      y,
+    ];
+  }
+
+  /* CIRCLE */
+
+  if (
+    current.type === "circle"
+  ) {
+    const dx =
+      x -
+      current.x;
+
+    const dy =
+      y -
+      current.y;
+
+    current.radius =
+      Math.sqrt(
+        dx * dx +
+        dy * dy
+      );
+  }
+
+  /* RECTANGLE */
+
+  if (
+    current.type ===
+    "rectangle"
+  ) {
+    const startX =
+      current.x;
+
+    const startY =
+      current.y;
+
+    current.x =
+      Math.min(
+        startX,
+        x
+      );
+
+    current.y =
+      Math.min(
+        startY,
+        y
+      );
+
+    current.width =
+      Math.abs(
+        x -
+        startX
+      );
+
+    current.height =
+      Math.abs(
+        y -
+        startY
+      );
+  }
+
+   updated[
+    lastIndex
+  ] = current;
+
+  return updated;
+});
+/* =========================
+   END HANDLE MOUSE MOVE
+========================= */
+
+};
+
 
 /* =========================
    LINE GRIP DRAG
@@ -6282,6 +6566,15 @@ const getObjectBounds = (object) => {
 ========================= */
 
 const isObjectVisible = (object) => {
+
+  /* =========================
+     HIDDEN OBJECT
+  ========================= */
+
+  if (object?.hidden) {
+    return false;
+  }
+
   const bounds = getObjectBounds(object);
 
   if (!bounds) {
@@ -6298,21 +6591,30 @@ const isObjectVisible = (object) => {
       ? viewportSize.height - 87 - 64
       : viewportSize.height - 87;
 
-  const left = -position.x / scale;
+  const left =
+    -position.x / scale;
+
   const right =
     (canvasWidth - position.x) / scale;
 
-  const top = -position.y / scale;
+  const top =
+    -position.y / scale;
+
   const bottom =
     (canvasHeight - position.y) / scale;
 
-  const padding = 500 / scale;
+  const padding =
+    500 / scale;
 
   return !(
-    bounds.right < left - padding ||
-    bounds.left > right + padding ||
-    bounds.bottom < top - padding ||
-    bounds.top > bottom + padding
+    bounds.right <
+      left - padding ||
+    bounds.left >
+      right + padding ||
+    bounds.bottom <
+      top - padding ||
+    bounds.top >
+      bottom + padding
   );
 };
 
@@ -6322,6 +6624,12 @@ const isObjectVisible = (object) => {
 
 const getVisibleObjectsForSnap = () => {
   return objects.filter((object, index) => {
+
+    /* HIDDEN OBJECTS NEVER SNAP */
+    if (object?.hidden) {
+      return false;
+    }
+
     if (
       selectedIndexes.includes(index) ||
       index === selectedIndex
@@ -6339,6 +6647,12 @@ const getVisibleObjectsForSnap = () => {
 
 const getVisibleObjectsForSearch = () => {
   return objects.filter((object, index) => {
+
+    /* HIDDEN OBJECTS NEVER SEARCH */
+    if (object?.hidden) {
+      return false;
+    }
+
     if (
       selectedIndex === index ||
       selectedIndexes.includes(index)
@@ -6356,6 +6670,12 @@ const getVisibleObjectsForSearch = () => {
 
 const getVisibleObjectsForFind = () => {
   return objects.filter((object, index) => {
+
+    /* HIDDEN OBJECTS NEVER FIND */
+    if (object?.hidden) {
+      return false;
+    }
+
     if (
       selectedIndex === index ||
       selectedIndexes.includes(index)
@@ -6445,6 +6765,19 @@ const handleMouseUp = (e) => {
     e.cancelBubble = true;
     return;
   }
+
+  /* =========================
+   COPY = FINISH DRAG
+========================= */
+
+if (
+  tool === "copy" &&
+  copyStartRef.current
+) {
+  copyStartRef.current = null;
+  return;
+}
+
   if (
   tool === "move" &&
   moveStartRef.current
@@ -6452,6 +6785,324 @@ const handleMouseUp = (e) => {
   finishMove();
   return;
 }
+
+/* =========================
+   OFFSET = FINISH
+========================= */
+
+if (
+  tool === "offset" &&
+  offsetStartRef.current
+) {
+  const offsetData =
+    offsetStartRef.current;
+
+  const index =
+    offsetData.index;
+
+  const original =
+    objects[index];
+
+  if (!original) {
+    offsetStartRef.current = null;
+    return;
+  }
+
+  /* =========================
+   OFFSET DISTANCE
+========================= */
+
+let distance = 0;
+let dragDx = 0;
+let dragDy = 0;
+
+if (
+  offsetData.startX !== null &&
+  offsetData.startY !== null &&
+  offsetData.currentX !== undefined &&
+  offsetData.currentY !== undefined
+) {
+  dragDx =
+    offsetData.currentX -
+    offsetData.startX;
+
+  dragDy =
+    offsetData.currentY -
+    offsetData.startY;
+
+  distance =
+    Math.hypot(
+      dragDx,
+      dragDy
+    );
+}
+
+/* =========================
+   OFFSET DIRECTION
+========================= */
+
+let offsetSign = 1;
+
+if (
+  original.type === "line" &&
+  original.points?.length >= 4
+) {
+  const [
+    x1,
+    y1,
+    x2,
+    y2,
+  ] = original.points;
+
+  const lineDx =
+    x2 - x1;
+
+  const lineDy =
+    y2 - y1;
+
+  const cross =
+    lineDx * dragDy -
+    lineDy * dragDx;
+
+  if (cross < 0) {
+    offsetSign = -1;
+  }
+}
+
+const signedDistance =
+  distance * offsetSign;
+
+  /* =========================
+     NO DRAG
+  ========================= */
+
+if (
+  !offsetData.moved ||
+  distance <= 0
+) {
+  setOffsetPreview(null);
+
+  offsetStartRef.current = null;
+
+  /* Normal click = existing OFFSET prompt */
+  offsetObject(index);
+
+  return;
+}
+
+ /* =========================
+   DRAG OFFSET
+========================= */
+
+/* =========================
+   OFFSET OBJECT SAFETY
+========================= */
+
+if (
+  original.hidden
+) {
+  window.alert(
+    "Selected object is hidden."
+  );
+
+  setOffsetPreview(null);
+  offsetStartRef.current = null;
+  return;
+}
+
+if (
+  original.locked
+) {
+  window.alert(
+    "Selected object is locked."
+  );
+
+  setOffsetPreview(null);
+  offsetStartRef.current = null;
+  return;
+}
+
+const originalLayerId =
+  original.layerId ||
+  "layer-0";
+
+if (
+  isLayerLocked(
+    originalLayerId
+  )
+) {
+  window.alert(
+    "Selected object is on a locked layer."
+  );
+
+  setOffsetPreview(null);
+  offsetStartRef.current = null;
+  return;
+}
+
+const previousObjects = [
+  ...objects,
+];
+
+  let newObject = null;
+
+  /* LINE */
+  if (
+    original.type === "line" &&
+    original.points?.length >= 4
+  ) {
+    const [
+      x1,
+      y1,
+      x2,
+      y2,
+    ] = original.points;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    const length =
+      Math.hypot(dx, dy);
+
+    if (length > 0) {
+      const nx = -dy / length;
+      const ny = dx / length;
+
+      newObject = {
+        ...original,
+        locked: false,
+        hidden: false,
+        points: [
+         x1 + nx * signedDistance,
+y1 + ny * signedDistance,
+
+x2 + nx * signedDistance,
+y2 + ny * signedDistance,
+        ],
+      };
+    }
+  }
+
+  /* RECTANGLE */
+  else if (
+    original.type === "rectangle"
+  ) {
+    newObject = {
+      ...original,
+      locked: false,
+      hidden: false,
+      x:
+        original.x -
+        distance,
+      y:
+        original.y -
+        distance,
+      width:
+        Math.abs(
+          original.width
+        ) +
+        distance * 2,
+      height:
+        Math.abs(
+          original.height
+        ) +
+        distance * 2,
+    };
+  }
+
+  /* CIRCLE */
+  else if (
+    original.type === "circle"
+  ) {
+    newObject = {
+      ...original,
+      locked: false,
+      hidden: false,
+      radius:
+        original.radius +
+        distance,
+    };
+  }
+
+  /* ARC */
+  else if (
+    original.type === "arc"
+  ) {
+    newObject = {
+      ...original,
+      locked: false,
+      hidden: false,
+      radius:
+        original.radius +
+        distance,
+    };
+  }
+
+  /* HATCH */
+  else if (
+    original.type === "hatch"
+  ) {
+    newObject = {
+      ...original,
+      locked: false,
+      hidden: false,
+      x:
+        original.x -
+        distance,
+      y:
+        original.y -
+        distance,
+      width:
+        Math.abs(
+          original.width
+        ) +
+        distance * 2,
+      height:
+        Math.abs(
+          original.height
+        ) +
+        distance * 2,
+    };
+  }
+
+  if (!newObject) {
+    window.alert(
+      "Selected object cannot be offset."
+    );
+
+    offsetStartRef.current = null;
+    return;
+  }
+
+  const newObjects = [
+    ...objects,
+    newObject,
+  ];
+
+  setObjects(newObjects);
+
+  const newIndex =
+    newObjects.length - 1;
+
+  setSelectedIndex(
+    newIndex
+  );
+
+  setSelectedIndexes([
+    newIndex,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setOffsetPreview(null);
+
+  offsetStartRef.current = null;
+  return;
+}
+
   if (
     e.evt?.button === 1 ||
     isPanning
@@ -7475,13 +8126,14 @@ if (tool === "move") {
   startMove(index, event);
   return;
 }
+/* COPY */
 
-  /* COPY */
+if (tool === "copy") {
 
-  if (tool === "copy") {
-    copyObject(index);
-    return;
-  }
+  copyObject(index, event);
+
+  return;
+}
 
   /* ROTATE */
 
@@ -7597,12 +8249,18 @@ if (tool === "stretch") {
   return;
 }
 
-  /* OFFSET */
+ /* OFFSET */
 
-  if (tool === "offset") {
-    offsetObject(index);
-    return;
-  }
+if (tool === "offset") {
+  offsetStartRef.current = {
+    index,
+    startX: null,
+    startY: null,
+    moved: false,
+  };
+
+  return;
+}
 
   /* MIRROR */
 
@@ -7625,50 +8283,82 @@ if (tool === "stretch") {
     return;
   }
 
-  /* JOIN */
+ /* =========================
+   JOIN - TOUCH FRIENDLY
+========================= */
 
- if (tool === "join") {
+if (tool === "join") {
   const currentSelection = [
     ...selectedIndexes,
   ];
 
+  /* FIRST OBJECT */
   if (
     currentSelection.length === 0
   ) {
-    setSelectedIndexes([index]);
-    setSelectedIndex(index);
-    return;
-  }
+    setSelectedIndexes([
+      index,
+    ]);
 
-  if (
-    currentSelection.length === 1
-  ) {
-    if (
-      currentSelection[0] === index
-    ) {
-      return;
-    }
-
-    const firstIndex =
-      currentSelection[0];
-
-    joinObject(
-      firstIndex,
+    setSelectedIndex(
       index
     );
 
-    setSelectedIndexes([]);
-    setSelectedIndex(null);
-
     return;
   }
 
+  /* SAME OBJECT TAP */
+  if (
+    currentSelection.length === 1 &&
+    currentSelection[0] === index
+  ) {
+    return;
+  }
+
+  /* SECOND OBJECT */
+  if (
+    currentSelection.length === 1
+  ) {
+    const firstIndex =
+      currentSelection[0];
+
+    const secondIndex =
+      index;
+
+    /* KEEP BOTH SELECTED
+       WHILE JOIN RUNS */
+    setSelectedIndexes([
+      firstIndex,
+      secondIndex,
+    ]);
+
+    setSelectedIndex(
+      secondIndex
+    );
+
+   joinObject(
+  firstIndex,
+  secondIndex
+);
+
+/* JOIN COMPLETE */
+changeTool("select");
+
+return;
+  }
+
+  /* SAFETY */
   window.alert(
-    "Join requires exactly two selected objects."
+    "Join requires exactly two objects."
   );
+
+  setSelectedIndexes([]);
+
+  setSelectedIndex(null);
 
   return;
 }
+
   /* FILLET */
 
   if (tool === "fillet") {
@@ -7750,11 +8440,13 @@ if (tool === "stretch") {
     return;
   }
 };
+
+
  /* =========================
    COPY
 ========================= */
 
-const copyObject = (index) => {
+const copyObject = (index, event = null) => {
   const indexesToCopy =
     selectedIndexes.length > 1
       ? selectedIndexes
@@ -7863,6 +8555,15 @@ if (
         copied.y += GRID_SIZE;
       }
 
+      /* HATCH */
+
+else if (
+  original.type === "hatch"
+) {
+  copied.x += GRID_SIZE;
+  copied.y += GRID_SIZE;
+}
+
       /* TEXT */
 
       else if (
@@ -7912,6 +8613,41 @@ if (
     ]
   );
 
+  /* =========================
+     COPY TOUCH STATE
+  ========================= */
+
+  copyStartRef.current = {
+  indexes: newIndexes,
+  objects: newObjects,
+  startPointer: null,
+  moved: false,
+};
+
+/* =========================
+   COPY START POINTER
+========================= */
+
+if (event) {
+  const stage =
+    event.target.getStage();
+
+  if (stage) {
+    const pointer =
+      stage.getPointerPosition();
+
+    if (pointer) {
+      copyStartRef.current.startPointer = {
+        x:
+          (pointer.x - position.x) /
+          scale,
+        y:
+          (pointer.y - position.y) /
+          scale,
+      };
+    }
+  }
+}
   saveHistory(
     previousObjects,
     [...measurements]
@@ -8367,6 +9103,10 @@ const getLineIntersection = (
   };
 };
 
+/* =========================
+   INFINITE LINE INTERSECTION
+========================= */
+
 const getInfiniteLineIntersection = (
   line1,
   line2
@@ -8380,35 +9120,105 @@ const getInfiniteLineIntersection = (
     return null;
   }
 
-  const x1 = line1.points[0];
-  const y1 = line1.points[1];
-  const x2 = line1.points[2];
-  const y2 = line1.points[3];
+  if (
+    !Array.isArray(line1.points) ||
+    line1.points.length < 4 ||
+    !Array.isArray(line2.points) ||
+    line2.points.length < 4
+  ) {
+    return null;
+  }
 
-  const x3 = line2.points[0];
-  const y3 = line2.points[1];
-  const x4 = line2.points[2];
-  const y4 = line2.points[3];
+  const x1 =
+    Number(line1.points[0]);
+
+  const y1 =
+    Number(line1.points[1]);
+
+  const x2 =
+    Number(line1.points[2]);
+
+  const y2 =
+    Number(line1.points[3]);
+
+  const x3 =
+    Number(line2.points[0]);
+
+  const y3 =
+    Number(line2.points[1]);
+
+  const x4 =
+    Number(line2.points[2]);
+
+  const y4 =
+    Number(line2.points[3]);
+
+  if (
+    !Number.isFinite(x1) ||
+    !Number.isFinite(y1) ||
+    !Number.isFinite(x2) ||
+    !Number.isFinite(y2) ||
+    !Number.isFinite(x3) ||
+    !Number.isFinite(y3) ||
+    !Number.isFinite(x4) ||
+    !Number.isFinite(y4)
+  ) {
+    return null;
+  }
 
   const denominator =
-    (x1 - x2) * (y3 - y4) -
-    (y1 - y2) * (x3 - x4);
+    (x1 - x2) *
+      (y3 - y4) -
+    (y1 - y2) *
+      (x3 - x4);
 
-  if (Math.abs(denominator) < 0.000001) {
+  /* =========================
+     PARALLEL LINES
+  ========================= */
+
+  if (
+    Math.abs(denominator) <
+    0.000001
+  ) {
     return null;
   }
 
   const t =
-    ((x1 - x3) * (y3 - y4) -
-      (y1 - y3) * (x3 - x4)) /
+    (
+      (x1 - x3) *
+        (y3 - y4) -
+      (y1 - y3) *
+        (x3 - x4)
+    ) /
     denominator;
 
+  const x =
+    x1 +
+    t * (x2 - x1);
+
+  const y =
+    y1 +
+    t * (y2 - y1);
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(t)
+  ) {
+    return null;
+  }
+
   return {
-    x: x1 + t * (x2 - x1),
-    y: y1 + t * (y2 - y1),
+    x,
+    y,
     t,
   };
 };
+
+
+/* =========================
+   LINE + ARC INTERSECTIONS
+========================= */
 
 const getLineArcIntersections = (
   line,
@@ -8423,21 +9233,76 @@ const getLineArcIntersections = (
     return [];
   }
 
-  const x1 = line.points[0];
-  const y1 = line.points[1];
+  if (
+    !Array.isArray(line.points) ||
+    line.points.length < 4
+  ) {
+    return [];
+  }
 
-  const x2 = line.points[2];
-  const y2 = line.points[3];
+  if (
+    !Number.isFinite(
+      Number(arc.x)
+    ) ||
+    !Number.isFinite(
+      Number(arc.y)
+    ) ||
+    !Number.isFinite(
+      Number(arc.radius)
+    ) ||
+    !Number.isFinite(
+      Number(arc.angleStart)
+    ) ||
+    !Number.isFinite(
+      Number(arc.angleEnd)
+    )
+  ) {
+    return [];
+  }
 
-  const dx = x2 - x1;
-  const dy = y2 - y1;
+  const x1 =
+    Number(line.points[0]);
 
-  const fx = x1 - arc.x;
-  const fy = y1 - arc.y;
+  const y1 =
+    Number(line.points[1]);
+
+  const x2 =
+    Number(line.points[2]);
+
+  const y2 =
+    Number(line.points[3]);
+
+  if (
+    !Number.isFinite(x1) ||
+    !Number.isFinite(y1) ||
+    !Number.isFinite(x2) ||
+    !Number.isFinite(y2)
+  ) {
+    return [];
+  }
+
+  const dx =
+    x2 - x1;
+
+  const dy =
+    y2 - y1;
+
+  const fx =
+    x1 - Number(arc.x);
+
+  const fy =
+    y1 - Number(arc.y);
+
+  const radius =
+    Number(arc.radius);
 
   const a =
     dx * dx +
     dy * dy;
+
+  /* =========================
+     ZERO-LENGTH LINE
+  ========================= */
 
   if (
     Math.abs(a) <
@@ -8456,12 +9321,15 @@ const getLineArcIntersections = (
   const c =
     fx * fx +
     fy * fy -
-    arc.radius *
-      arc.radius;
+    radius * radius;
 
   const discriminant =
     b * b -
     4 * a * c;
+
+  /* =========================
+     NO INTERSECTION
+  ========================= */
 
   if (
     discriminant <
@@ -8497,8 +9365,8 @@ const getLineArcIntersections = (
     Math.PI * 2;
 
   let sweep =
-    arc.angleEnd -
-    arc.angleStart;
+    Number(arc.angleEnd) -
+    Number(arc.angleStart);
 
   while (
     sweep < 0
@@ -8533,13 +9401,13 @@ const getLineArcIntersections = (
 
       const angle =
         Math.atan2(
-          py - arc.y,
-          px - arc.x
+          py - Number(arc.y),
+          px - Number(arc.x)
         );
 
       let arcT =
         angle -
-        arc.angleStart;
+        Number(arc.angleStart);
 
       arcT =
         (
@@ -8551,6 +9419,10 @@ const getLineArcIntersections = (
         ) %
         fullCircle;
 
+      /* =========================
+         OUTSIDE ARC
+      ========================= */
+
       if (
         arcT >
         sweep +
@@ -8558,6 +9430,10 @@ const getLineArcIntersections = (
       ) {
         return;
       }
+
+      /* =========================
+         DUPLICATE INTERSECTION
+      ========================= */
 
       const duplicate =
         intersections.some(
@@ -8578,11 +9454,17 @@ const getLineArcIntersections = (
       intersections.push({
         x: px,
         y: py,
+
         angle:
-          arc.angleStart +
+          Number(
+            arc.angleStart
+          ) +
           arcT,
+
         arcT,
-        lineT: t,
+
+        lineT:
+          t,
       });
     }
   );
@@ -9619,164 +10501,6 @@ if (
 
   return;
 }
-
-  /* =========================
-     RESPECT EXISTING ARC RANGE
-  ========================= */
-
-  const originalStart =
-    target.angleStart ??
-    target.startAngle ??
-    0;
-
-  const originalEnd =
-    target.angleEnd ??
-    target.endAngle ??
-    Math.PI * 2;
-
-  const isAngleOnArc = (
-    angle,
-    start,
-    end
-  ) => {
-    const full =
-      Math.PI * 2;
-
-    const s =
-      normalizeAngle(start);
-
-    const e =
-      normalizeAngle(end);
-
-    const a =
-      normalizeAngle(angle);
-
-    const span =
-      (e - s + full) %
-      full;
-
-    const fromStart =
-      (a - s + full) %
-      full;
-
-    return (
-      fromStart <=
-      span + 0.0001
-    );
-  };
-
-  const validAngles =
-    angles.filter(
-      (angle) =>
-        isAngleOnArc(
-          angle,
-          originalStart,
-          originalEnd
-        )
-    );
-
-  if (
-    validAngles.length < 2
-  ) {
-    window.alert(
-      "The HATCH boundary does not cross the visible ARC."
-    );
-    return;
-  }
-
-  a1 = validAngles[0];
-  a2 = validAngles[1];
-
-  /* =========================
-     CLICK SIDE
-  ========================= */
-
-  let trimStart =
-    a1;
-
-  let trimEnd =
-    a2;
-
-  if (clickPoint) {
-    const clickAngle =
-      normalizeAngle(
-        Math.atan2(
-          clickPoint.y - cy,
-          clickPoint.x - cx
-        )
-      );
-
-    const full =
-      Math.PI * 2;
-
-    const span =
-      (a2 - a1 + full) %
-      full;
-
-    const fromStart =
-      (clickAngle - a1 + full) %
-      full;
-
-    if (
-      fromStart <=
-      span
-    ) {
-      trimStart =
-        a2;
-
-      trimEnd =
-        a1;
-    }
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  const updatedArc = {
-    ...target,
-
-    trimStartAngle:
-      trimStart,
-
-    trimEndAngle:
-      trimEnd,
-
-    trimEnabled:
-      true,
-  };
-
-  const updatedObjects =
-    objects.map(
-      (object, index) =>
-        index === targetIndex
-          ? updatedArc
-          : object
-    );
-
-  setObjects(
-    updatedObjects
-  );
-
-  setSelectedIndex(
-    targetIndex
-  );
-
-  setSelectedIndexes([
-    targetIndex,
-  ]);
-
-  setTrimFirstIndex(
-    null
-  );
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  return;
-
 
 /* =========================
    HATCH BOUNDARY + RECTANGLE TARGET
@@ -12247,6 +12971,48 @@ if (
   const TWO_PI =
     Math.PI * 2;
 
+  /* =========================
+     VALIDATE ARC DATA
+  ========================= */
+
+  if (
+    !Number.isFinite(
+      Number(boundary.x)
+    ) ||
+    !Number.isFinite(
+      Number(boundary.y)
+    ) ||
+    !Number.isFinite(
+      Number(boundary.radius)
+    ) ||
+    !Number.isFinite(
+      Number(boundary.angleStart)
+    ) ||
+    !Number.isFinite(
+      Number(boundary.angleEnd)
+    ) ||
+    !Number.isFinite(
+      Number(target.x)
+    ) ||
+    !Number.isFinite(
+      Number(target.y)
+    ) ||
+    !Number.isFinite(
+      Number(target.radius)
+    ) ||
+    !Number.isFinite(
+      Number(target.angleStart)
+    ) ||
+    !Number.isFinite(
+      Number(target.angleEnd)
+    )
+  ) {
+    window.alert(
+      "Invalid ARC data."
+    );
+    return;
+  }
+
   const normalizeAngle =
     (angle) =>
       (
@@ -12266,6 +13032,14 @@ if (
       const sweep =
         arc.angleEnd -
         arc.angleStart;
+
+      if (
+        Math.abs(sweep) >=
+        TWO_PI -
+          0.000001
+      ) {
+        return true;
+      }
 
       if (
         sweep >= 0
@@ -12290,13 +13064,49 @@ if (
       );
     };
 
+  const boundaryX =
+    Number(boundary.x);
+
+  const boundaryY =
+    Number(boundary.y);
+
+  const targetX =
+    Number(target.x);
+
+  const targetY =
+    Number(target.y);
+
+  const r1 =
+    Math.abs(
+      Number(boundary.radius)
+    );
+
+  const r2 =
+    Math.abs(
+      Number(target.radius)
+    );
+
+  if (
+    r1 <= 0 ||
+    r2 <= 0
+  ) {
+    window.alert(
+      "ARC radius must be greater than zero."
+    );
+    return;
+  }
+
+  /* =========================
+     CENTER DISTANCE
+  ========================= */
+
   const dx =
-    target.x -
-    boundary.x;
+    targetX -
+    boundaryX;
 
   const dy =
-    target.y -
-    boundary.y;
+    targetY -
+    boundaryY;
 
   const centerDistance =
     Math.hypot(
@@ -12304,11 +13114,9 @@ if (
       dy
     );
 
-  const r1 =
-    boundary.radius;
-
-  const r2 =
-    target.radius;
+  /* =========================
+     SAME CENTER
+  ========================= */
 
   if (
     centerDistance <
@@ -12320,17 +13128,29 @@ if (
     return;
   }
 
+  /* =========================
+     NO CIRCLE INTERSECTION
+  ========================= */
+
   if (
     centerDistance >
-      r1 + r2 ||
+      r1 + r2 +
+        0.000001 ||
     centerDistance <
-      Math.abs(r1 - r2)
+      Math.abs(
+        r1 - r2
+      ) -
+        0.000001
   ) {
     window.alert(
       "The two arcs do not intersect."
     );
     return;
   }
+
+  /* =========================
+     CIRCLE-CIRCLE INTERSECTION
+  ========================= */
 
   const a =
     (
@@ -12367,14 +13187,14 @@ if (
     );
 
   const baseX =
-    boundary.x +
+    boundaryX +
     (
       a * dx
     ) /
     centerDistance;
 
   const baseY =
-    boundary.y +
+    boundaryY +
     (
       a * dy
     ) /
@@ -12406,6 +13226,10 @@ if (
     },
   ];
 
+  /* =========================
+     SECOND INTERSECTION
+  ========================= */
+
   if (
     h >
     0.000001
@@ -12421,44 +13245,56 @@ if (
     });
   }
 
+  /* =========================
+     KEEP ONLY POINTS ON
+     VISIBLE BOUNDARY ARC
+  ========================= */
+
   const intersections =
-    candidates.filter(
-      (point) => {
-        const boundaryAngle =
-          Math.atan2(
-            point.y -
-              boundary.y,
-            point.x -
-              boundary.x
+    candidates
+      .filter(
+        (point) => {
+          const boundaryAngle =
+            Math.atan2(
+              point.y -
+                boundaryY,
+              point.x -
+                boundaryX
+            );
+
+          return isAngleOnArc(
+            boundary,
+            boundaryAngle
           );
+        }
+      )
+      .map(
+        (point) => ({
+          ...point,
 
-        return isAngleOnArc(
-          boundary,
-          boundaryAngle
-        );
-      }
-    ).map(
-      (point) => ({
-        ...point,
-
-        targetAngle:
-          Math.atan2(
-            point.y -
-              target.y,
-            point.x -
-              target.x
-          ),
-      })
-    );
+          targetAngle:
+            Math.atan2(
+              point.y -
+                targetY,
+              point.x -
+                targetX
+            ),
+        })
+      );
 
   if (
-    intersections.length === 0
+    intersections.length ===
+    0
   ) {
     window.alert(
       "The visible boundary arc does not intersect the target arc."
     );
     return;
   }
+
+  /* =========================
+     FIND BEST EXTENSION POINT
+  ========================= */
 
   const targetSweep =
     target.angleEnd -
@@ -12472,6 +13308,8 @@ if (
 
   intersections.forEach(
     (intersection) => {
+      /* TARGET ALREADY REACHES
+         THIS INTERSECTION */
       if (
         isAngleOnArc(
           target,
@@ -12490,25 +13328,25 @@ if (
         distanceFromStart =
           normalizeAngle(
             intersection.targetAngle -
-            target.angleStart
+              target.angleStart
           );
 
         distanceFromEnd =
           normalizeAngle(
             target.angleEnd -
-            intersection.targetAngle
+              intersection.targetAngle
           );
       } else {
         distanceFromStart =
           normalizeAngle(
             target.angleStart -
-            intersection.targetAngle
+              intersection.targetAngle
           );
 
         distanceFromEnd =
           normalizeAngle(
             intersection.targetAngle -
-            target.angleEnd
+              target.angleEnd
           );
       }
 
@@ -12540,11 +13378,18 @@ if (
     return;
   }
 
+  /* =========================
+     HISTORY
+  ========================= */
+
   const previousObjects = [
     ...objects,
   ];
 
-  let updatedTarget;
+  /* =========================
+     DETERMINE WHICH END
+     OF TARGET ARC TO EXTEND
+  ========================= */
 
   let extendFromStart =
     false;
@@ -12555,13 +13400,13 @@ if (
     const fromStart =
       normalizeAngle(
         bestIntersection.targetAngle -
-        target.angleStart
+          target.angleStart
       );
 
     const fromEnd =
       normalizeAngle(
         target.angleEnd -
-        bestIntersection.targetAngle
+          bestIntersection.targetAngle
       );
 
     extendFromStart =
@@ -12571,19 +13416,25 @@ if (
     const fromStart =
       normalizeAngle(
         target.angleStart -
-        bestIntersection.targetAngle
+          bestIntersection.targetAngle
       );
 
     const fromEnd =
       normalizeAngle(
         bestIntersection.targetAngle -
-        target.angleEnd
+          target.angleEnd
       );
 
     extendFromStart =
       fromStart <
       fromEnd;
   }
+
+  /* =========================
+     UPDATE TARGET ARC
+  ========================= */
+
+  let updatedTarget;
 
   if (
     extendFromStart
@@ -12602,6 +13453,10 @@ if (
         bestIntersection.targetAngle,
     };
   }
+
+  /* =========================
+     SAVE UPDATED OBJECT
+  ========================= */
 
   const updatedObjects =
     objects.map(
@@ -12675,26 +13530,56 @@ const offsetObject = (index) => {
     validIndexes.length === 0
   ) {
     window.alert(
-     "Offset is currently available for Line, Rectangle, Circle, Arc and Hatch."
-
+      "Offset is currently available for Line, Rectangle, Circle, Arc and Hatch."
     );
     return;
   }
 
+  /* =========================
+     FILTER EDITABLE OBJECTS
+  ========================= */
+
   const editableIndexes =
     validIndexes.filter(
-      (i) =>
-        !objects[i].locked
+      (i) => {
+        const object =
+          objects[i];
+
+        if (
+          !object ||
+          object.locked
+        ) {
+          return false;
+        }
+
+        const layerId =
+          object.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            layerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
     );
 
   if (
     editableIndexes.length === 0
   ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
+
+  /* =========================
+     OFFSET DISTANCE
+  ========================= */
 
   const input =
     window.prompt(
@@ -12702,15 +13587,21 @@ const offsetObject = (index) => {
       "50"
     );
 
-  if (input === null) {
+  if (
+    input === null
+  ) {
     return;
   }
 
   const distance =
-    Number(input);
+    Number(
+      input.trim()
+    );
 
   if (
-    !Number.isFinite(distance) ||
+    !Number.isFinite(
+      distance
+    ) ||
     distance <= 0
   ) {
     window.alert(
@@ -12725,24 +13616,70 @@ const offsetObject = (index) => {
 
   const offsetObjects = [];
 
+  /* =========================
+     CREATE OFFSET OBJECTS
+  ========================= */
+
   editableIndexes.forEach(
     (objectIndex) => {
       const original =
         objects[objectIndex];
 
-      let newObject = null;
+      if (
+        !original
+      ) {
+        return;
+      }
 
-      /* LINE OFFSET */
+      let newObject =
+        null;
+
+      /* =========================
+         LINE OFFSET
+      ========================= */
 
       if (
-        original.type === "line"
+        original.type ===
+        "line"
       ) {
-        const [
-          x1,
-          y1,
-          x2,
-          y2,
-        ] = original.points;
+        if (
+          !Array.isArray(
+            original.points
+          ) ||
+          original.points.length <
+            4
+        ) {
+          return;
+        }
+
+        const x1 =
+          Number(
+            original.points[0]
+          );
+
+        const y1 =
+          Number(
+            original.points[1]
+          );
+
+        const x2 =
+          Number(
+            original.points[2]
+          );
+
+        const y2 =
+          Number(
+            original.points[3]
+          );
+
+        if (
+          !Number.isFinite(x1) ||
+          !Number.isFinite(y1) ||
+          !Number.isFinite(x2) ||
+          !Number.isFinite(y2)
+        ) {
+          return;
+        }
 
         const dx =
           x2 - x1;
@@ -12751,25 +13688,32 @@ const offsetObject = (index) => {
           y2 - y1;
 
         const length =
-          Math.sqrt(
-            dx * dx +
-            dy * dy
+          Math.hypot(
+            dx,
+            dy
           );
 
-        if (length === 0) {
+        if (
+          length <
+          0.000001
+        ) {
           return;
         }
 
         const nx =
-          -dy / length;
+          -dy /
+          length;
 
         const ny =
-          dx / length;
+          dx /
+          length;
 
         newObject = {
           ...original,
+
           locked: false,
           hidden: false,
+
           points: [
             x1 +
               nx *
@@ -12790,105 +13734,207 @@ const offsetObject = (index) => {
         };
       }
 
-      /* RECTANGLE OFFSET */
+      /* =========================
+         RECTANGLE OFFSET
+      ========================= */
 
       else if (
         original.type ===
         "rectangle"
       ) {
+        const x =
+          Number(
+            original.x
+          );
+
+        const y =
+          Number(
+            original.y
+          );
+
+        const width =
+          Number(
+            original.width
+          );
+
+        const height =
+          Number(
+            original.height
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return;
+        }
+
         newObject = {
           ...original,
+
           locked: false,
           hidden: false,
 
           x:
-            original.x -
+            x -
             distance,
 
           y:
-            original.y -
+            y -
             distance,
 
           width:
             Math.abs(
-              original.width
+              width
             ) +
             distance * 2,
 
           height:
             Math.abs(
-              original.height
+              height
             ) +
             distance * 2,
         };
       }
 
-      /* CIRCLE OFFSET */
+      /* =========================
+         CIRCLE OFFSET
+      ========================= */
 
       else if (
         original.type ===
         "circle"
       ) {
+        const radius =
+          Number(
+            original.radius
+          );
+
+        if (
+          !Number.isFinite(
+            radius
+          ) ||
+          radius <= 0
+        ) {
+          return;
+        }
+
         newObject = {
           ...original,
+
           locked: false,
           hidden: false,
 
           radius:
-            original.radius +
+            radius +
             distance,
         };
       }
 
-      /* ARC OFFSET */
+      /* =========================
+         ARC OFFSET
+      ========================= */
 
       else if (
         original.type ===
         "arc"
       ) {
+        const radius =
+          Number(
+            original.radius
+          );
+
+        if (
+          !Number.isFinite(
+            radius
+          ) ||
+          radius <= 0
+        ) {
+          return;
+        }
+
         newObject = {
           ...original,
+
           locked: false,
           hidden: false,
 
           radius:
-            original.radius +
+            radius +
             distance,
         };
       }
 
-            /* HATCH OFFSET */
+      /* =========================
+         HATCH OFFSET
+      ========================= */
 
       else if (
         original.type ===
         "hatch"
       ) {
+        const x =
+          Number(
+            original.x
+          );
+
+        const y =
+          Number(
+            original.y
+          );
+
+        const width =
+          Number(
+            original.width
+          );
+
+        const height =
+          Number(
+            original.height
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return;
+        }
+
         newObject = {
           ...original,
+
           locked: false,
           hidden: false,
 
           x:
-            original.x -
+            x -
             distance,
 
           y:
-            original.y -
+            y -
             distance,
 
           width:
             Math.abs(
-              original.width
+              width
             ) +
             distance * 2,
 
           height:
             Math.abs(
-              original.height
+              height
             ) +
             distance * 2,
         };
       }
+
+      /* =========================
+         ADD OFFSET OBJECT
+      ========================= */
 
       if (
         newObject
@@ -12909,6 +13955,10 @@ const offsetObject = (index) => {
     return;
   }
 
+  /* =========================
+     ADD TO OBJECT LIST
+  ========================= */
+
   const newObjects = [
     ...objects,
     ...offsetObjects,
@@ -12917,6 +13967,10 @@ const offsetObject = (index) => {
   setObjects(
     newObjects
   );
+
+  /* =========================
+     SELECT NEW OFFSET OBJECTS
+  ========================= */
 
   const newIndexes =
     offsetObjects.map(
@@ -12930,15 +13984,19 @@ const offsetObject = (index) => {
   );
 
   setSelectedIndex(
-    newIndexes[
-      newIndexes.length - 1
-    ]
+    newIndexes.length > 0
+      ? newIndexes[
+          newIndexes.length - 1
+        ]
+      : null
   );
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
 
   /* =========================
@@ -12979,6 +14037,7 @@ const offsetObject = (index) => {
     };
   };
 
+
   /* =========================
      FILLET
   ========================= */
@@ -12987,6 +14046,238 @@ const filletObject = (
   firstIndex,
   secondIndex
 ) => {
+
+  /* =========================
+   FILLET SELECTION VALIDATION
+========================= */
+
+if (
+  firstIndex === null ||
+  secondIndex === null ||
+  firstIndex === secondIndex
+) {
+  window.alert(
+    "Select two different objects for Fillet."
+  );
+  return;
+}
+
+const firstObject =
+  objects[firstIndex];
+
+const secondObject =
+  objects[secondIndex];
+
+if (
+  !firstObject ||
+  !secondObject
+) {
+  window.alert(
+    "Selected objects were not found."
+  );
+  return;
+}
+
+/* =========================
+   OBJECT LOCK CHECK
+========================= */
+
+if (
+  firstObject.locked ||
+  secondObject.locked
+) {
+  window.alert(
+    "One or both selected objects are locked."
+  );
+  return;
+}
+
+/* =========================
+   LAYER LOCK CHECK
+========================= */
+
+const firstLayerId =
+  firstObject.layerId ||
+  "layer-0";
+
+const secondLayerId =
+  secondObject.layerId ||
+  "layer-0";
+
+if (
+  isLayerLocked(
+    firstLayerId
+  ) ||
+  isLayerLocked(
+    secondLayerId
+  )
+) {
+  window.alert(
+    "One or both selected objects are on locked layers."
+  );
+  return;
+}
+
+   /* =========================
+   HATCH + HATCH FILLET
+========================= */
+
+if (
+  objects[firstIndex]?.type === "hatch" &&
+  objects[secondIndex]?.type === "hatch"
+) {
+  const first = objects[firstIndex];
+  const second = objects[secondIndex];
+
+  if (
+    first.locked ||
+    second.locked
+  ) {
+    window.alert(
+      "One or both selected HATCH objects are locked."
+    );
+    return;
+  }
+
+  const radiusInput =
+    window.prompt(
+      "Enter fillet radius:",
+      "25"
+    );
+
+  if (radiusInput === null) {
+    return;
+  }
+
+  const radius =
+    Number(radiusInput);
+
+  if (
+    !Number.isFinite(radius) ||
+    radius <= 0
+  ) {
+    window.alert(
+      "Please enter a valid positive fillet radius."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const firstRight =
+    first.x +
+    first.width;
+
+  const firstBottom =
+    first.y +
+    first.height;
+
+  const secondRight =
+    second.x +
+    second.width;
+
+  const secondBottom =
+    second.y +
+    second.height;
+
+  const minX =
+    Math.min(
+      first.x,
+      second.x
+    );
+
+  const minY =
+    Math.min(
+      first.y,
+      second.y
+    );
+
+  const maxX =
+    Math.max(
+      firstRight,
+      secondRight
+    );
+
+  const maxY =
+    Math.max(
+      firstBottom,
+      secondBottom
+    );
+
+  const mergedHatch = {
+    ...first,
+
+    x: minX,
+    y: minY,
+
+    width:
+      maxX - minX,
+
+    height:
+      maxY - minY,
+
+    hatchSpacing:
+      first.hatchSpacing ||
+      second.hatchSpacing ||
+      12,
+
+    hatchAngle:
+      first.hatchAngle ??
+      second.hatchAngle ??
+      45,
+
+    hatchColor:
+      first.hatchColor ||
+      second.hatchColor ||
+      "#00aaff",
+
+    filletRadius:
+      radius,
+
+    trimEnabled: false,
+    trimStartPoint: null,
+    trimEndPoint: null,
+    trimPoint: null,
+
+    locked: false,
+    hidden: false,
+  };
+
+  const newObjects =
+    objects.filter(
+      (_, index) =>
+        index !== firstIndex &&
+        index !== secondIndex
+    );
+
+  newObjects.push(
+    mergedHatch
+  );
+
+  setObjects(
+    newObjects
+  );
+
+  const newIndex =
+    newObjects.length - 1;
+
+  setSelectedIndex(
+    newIndex
+  );
+
+  setSelectedIndexes([
+    newIndex,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  return;
+}
 
   const selectedLineIndexes =
     selectedIndexes.filter(
@@ -13413,20 +14704,224 @@ const filletObject = (
       newObjects.length - 1
     );
 
+    setSelectedIndexes([
+  newObjects.length - 1
+]);
+
     saveHistory(
       previousObjects,
       [...measurements]
     );
   };
-
- /* =========================
-   CHAMFER
-========================= */
-
-const chamferObject = (
+  const chamferObject = (
   firstIndex,
   secondIndex
 ) => {
+
+  /* =========================
+   HATCH + HATCH CHAMFER
+========================= */
+
+if (
+  objects[firstIndex]?.type === "hatch" &&
+  objects[secondIndex]?.type === "hatch"
+) {
+  const first = objects[firstIndex];
+  const second = objects[secondIndex];
+
+  if (
+    first.locked ||
+    second.locked
+  ) {
+    window.alert(
+      "One or both selected HATCH objects are locked."
+    );
+    return;
+  }
+
+  const distanceInput =
+    window.prompt(
+      "Enter chamfer distance:",
+      "25"
+    );
+
+  if (distanceInput === null) {
+    return;
+  }
+
+  const distance =
+    Number(distanceInput);
+
+  if (
+    !Number.isFinite(distance) ||
+    distance <= 0
+  ) {
+    window.alert(
+      "Please enter a valid positive chamfer distance."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const firstX =
+    Number(first.x) || 0;
+
+  const firstY =
+    Number(first.y) || 0;
+
+  const firstW =
+    Math.abs(Number(first.width) || 0);
+
+  const firstH =
+    Math.abs(Number(first.height) || 0);
+
+  const secondX =
+    Number(second.x) || 0;
+
+  const secondY =
+    Number(second.y) || 0;
+
+  const secondW =
+    Math.abs(Number(second.width) || 0);
+
+  const secondH =
+    Math.abs(Number(second.height) || 0);
+
+  const overlapLeft =
+    Math.max(
+      firstX,
+      secondX
+    );
+
+  const overlapTop =
+    Math.max(
+      firstY,
+      secondY
+    );
+
+  const overlapRight =
+    Math.min(
+      firstX + firstW,
+      secondX + secondW
+    );
+
+  const overlapBottom =
+    Math.min(
+      firstY + firstH,
+      secondY + secondH
+    );
+
+  if (
+    overlapLeft >= overlapRight ||
+    overlapTop >= overlapBottom
+  ) {
+    window.alert(
+      "The HATCH objects do not intersect."
+    );
+    return;
+  }
+
+  const newX =
+    Math.min(
+      firstX,
+      secondX
+    );
+
+  const newY =
+    Math.min(
+      firstY,
+      secondY
+    );
+
+  const newRight =
+    Math.max(
+      firstX + firstW,
+      secondX + secondW
+    );
+
+  const newBottom =
+    Math.max(
+      firstY + firstH,
+      secondY + secondH
+    );
+
+  const mergedHatch = {
+    ...first,
+
+    x: newX,
+    y: newY,
+
+    width:
+      newRight - newX,
+
+    height:
+      newBottom - newY,
+
+    chamferDistance:
+      distance,
+
+    hatchSpacing:
+      first.hatchSpacing ||
+      second.hatchSpacing ||
+      12,
+
+    hatchAngle:
+      first.hatchAngle ??
+      second.hatchAngle ??
+      45,
+
+    hatchColor:
+      first.hatchColor ||
+      second.hatchColor ||
+      "#00aaff",
+
+    trimEnabled: false,
+    trimStartPoint: null,
+    trimEndPoint: null,
+    trimPoint: null,
+
+    locked: false,
+    hidden: false,
+  };
+
+  const newObjects =
+    objects.filter(
+      (_, index) =>
+        index !== firstIndex &&
+        index !== secondIndex
+    );
+
+  newObjects.push(
+    mergedHatch
+  );
+
+  setObjects(
+    newObjects
+  );
+
+  const newIndex =
+    newObjects.length - 1;
+
+  setSelectedIndex(
+    newIndex
+  );
+
+  setSelectedIndexes([
+    newIndex,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  return;
+}
+
+
   const selectedLineIndexes =
     selectedIndexes.filter(
       (i) =>
@@ -13793,7 +15288,7 @@ const chamferObject = (
   );
 };
 
-  /* =========================
+ /* =========================
    ARRAY
 ========================= */
 
@@ -13810,26 +15305,57 @@ const arrayObject = (index) => {
       (i) =>
         i >= 0 &&
         i < objects.length &&
-        objects[i]
+        objects[i] &&
+        !objects[i].hidden
     );
 
   if (
     validIndexes.length === 0
   ) {
+    window.alert(
+      "Select an object first."
+    );
     return;
   }
 
+  /* =========================
+     FILTER EDITABLE OBJECTS
+  ========================= */
+
   const editableIndexes =
     validIndexes.filter(
-      (i) =>
-        !objects[i].locked
+      (i) => {
+        const object =
+          objects[i];
+
+        if (
+          !object ||
+          object.locked
+        ) {
+          return false;
+        }
+
+        const layerId =
+          object.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            layerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
     );
 
   if (
     editableIndexes.length === 0
   ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -13840,7 +15366,9 @@ const arrayObject = (index) => {
       "2"
     );
 
-  if (rowsInput === null) {
+  if (
+    rowsInput === null
+  ) {
     return;
   }
 
@@ -13850,7 +15378,9 @@ const arrayObject = (index) => {
       "3"
     );
 
-  if (columnsInput === null) {
+  if (
+    columnsInput === null
+  ) {
     return;
   }
 
@@ -13860,7 +15390,9 @@ const arrayObject = (index) => {
       "100"
     );
 
-  if (xSpacingInput === null) {
+  if (
+    xSpacingInput === null
+  ) {
     return;
   }
 
@@ -13870,21 +15402,31 @@ const arrayObject = (index) => {
       "100"
     );
 
-  if (ySpacingInput === null) {
+  if (
+    ySpacingInput === null
+  ) {
     return;
   }
 
   const rows =
-    Number(rowsInput);
+    Number(
+      rowsInput
+    );
 
   const columns =
-    Number(columnsInput);
+    Number(
+      columnsInput
+    );
 
   const xSpacing =
-    Number(xSpacingInput);
+    Number(
+      xSpacingInput
+    );
 
   const ySpacing =
-    Number(ySpacingInput);
+    Number(
+      ySpacingInput
+    );
 
   if (
     !Number.isInteger(rows) ||
@@ -13893,14 +15435,28 @@ const arrayObject = (index) => {
     columns < 1
   ) {
     window.alert(
-      "Rows and columns must be positive numbers."
+      "Rows and columns must be positive integers."
     );
     return;
   }
 
   if (
-    !Number.isFinite(xSpacing) ||
-    !Number.isFinite(ySpacing)
+    rows * columns >
+    1000
+  ) {
+    window.alert(
+      "Array is too large. Maximum 1000 objects."
+    );
+    return;
+  }
+
+  if (
+    !Number.isFinite(
+      xSpacing
+    ) ||
+    !Number.isFinite(
+      ySpacing
+    )
   ) {
     window.alert(
       "Spacing must be valid numbers."
@@ -13919,6 +15475,12 @@ const arrayObject = (index) => {
       const original =
         objects[sourceIndex];
 
+      if (
+        !original
+      ) {
+        return;
+      }
+
       for (
         let row = 0;
         row < rows;
@@ -13929,6 +15491,7 @@ const arrayObject = (index) => {
           column < columns;
           column++
         ) {
+          /* ORIGINAL OBJECT */
           if (
             row === 0 &&
             column === 0
@@ -13938,6 +15501,7 @@ const arrayObject = (index) => {
 
           const copy = {
             ...original,
+
             locked: false,
             hidden: false,
           };
@@ -13950,110 +15514,258 @@ const arrayObject = (index) => {
             row *
             ySpacing;
 
-          /* LINE */
+          /* =========================
+             LINE
+          ========================= */
 
           if (
             original.type ===
             "line"
           ) {
+            if (
+              !Array.isArray(
+                original.points
+              ) ||
+              original.points.length <
+                4
+            ) {
+              continue;
+            }
+
             copy.points = [
-              original.points[0] +
-                offsetX,
+              Number(
+                original.points[0]
+              ) + offsetX,
 
-              original.points[1] +
-                offsetY,
+              Number(
+                original.points[1]
+              ) + offsetY,
 
-              original.points[2] +
-                offsetX,
+              Number(
+                original.points[2]
+              ) + offsetX,
 
-              original.points[3] +
-                offsetY,
+              Number(
+                original.points[3]
+              ) + offsetY,
             ];
           }
 
-          /* POLYLINE */
+          /* =========================
+             POLYLINE
+          ========================= */
 
           else if (
             original.type ===
             "polyline"
           ) {
+            if (
+              !Array.isArray(
+                original.points
+              ) ||
+              original.points.length <
+                4
+            ) {
+              continue;
+            }
+
             copy.points =
               original.points.map(
-                (value, i) => {
-                  if (
-                    i % 2 === 0
-                  ) {
-                    return (
-                      value +
-                      offsetX
+                (
+                  value,
+                  i
+                ) => {
+                  const numericValue =
+                    Number(
+                      value
                     );
+
+                  if (
+                    !Number.isFinite(
+                      numericValue
+                    )
+                  ) {
+                    return value;
                   }
 
                   return (
-                    value +
-                    offsetY
+                    i % 2 === 0
+                      ? numericValue +
+                        offsetX
+                      : numericValue +
+                        offsetY
                   );
                 }
               );
           }
 
-          /* CIRCLE */
+          /* =========================
+             CIRCLE
+          ========================= */
 
           else if (
             original.type ===
             "circle"
           ) {
+            const x =
+              Number(
+                original.x
+              );
+
+            const y =
+              Number(
+                original.y
+              );
+
+            if (
+              !Number.isFinite(x) ||
+              !Number.isFinite(y)
+            ) {
+              continue;
+            }
+
             copy.x =
-              original.x +
+              x +
               offsetX;
 
             copy.y =
-              original.y +
+              y +
               offsetY;
           }
 
-          /* RECTANGLE */
+          /* =========================
+             RECTANGLE
+          ========================= */
 
           else if (
             original.type ===
             "rectangle"
           ) {
+            const x =
+              Number(
+                original.x
+              );
+
+            const y =
+              Number(
+                original.y
+              );
+
+            if (
+              !Number.isFinite(x) ||
+              !Number.isFinite(y)
+            ) {
+              continue;
+            }
+
             copy.x =
-              original.x +
+              x +
               offsetX;
 
             copy.y =
-              original.y +
+              y +
               offsetY;
           }
 
-          /* ARC */
+          /* =========================
+             ARC
+          ========================= */
 
           else if (
             original.type ===
             "arc"
           ) {
+            const x =
+              Number(
+                original.x
+              );
+
+            const y =
+              Number(
+                original.y
+              );
+
+            if (
+              !Number.isFinite(x) ||
+              !Number.isFinite(y)
+            ) {
+              continue;
+            }
+
             copy.x =
-              original.x +
+              x +
               offsetX;
 
             copy.y =
-              original.y +
+              y +
               offsetY;
           }
 
-          /* TEXT */
+          /* =========================
+             HATCH
+          ========================= */
+
+          else if (
+            original.type ===
+            "hatch"
+          ) {
+            const x =
+              Number(
+                original.x
+              );
+
+            const y =
+              Number(
+                original.y
+              );
+
+            if (
+              !Number.isFinite(x) ||
+              !Number.isFinite(y)
+            ) {
+              continue;
+            }
+
+            copy.x =
+              x +
+              offsetX;
+
+            copy.y =
+              y +
+              offsetY;
+          }
+
+          /* =========================
+             TEXT
+          ========================= */
 
           else if (
             original.type ===
             "text"
           ) {
+            const x =
+              Number(
+                original.x
+              );
+
+            const y =
+              Number(
+                original.y
+              );
+
+            if (
+              !Number.isFinite(x) ||
+              !Number.isFinite(y)
+            ) {
+              continue;
+            }
+
             copy.x =
-              original.x +
+              x +
               offsetX;
 
             copy.y =
-              original.y +
+              y +
               offsetY;
           }
 
@@ -14061,7 +15773,9 @@ const arrayObject = (index) => {
             continue;
           }
 
-          copies.push(copy);
+          copies.push(
+            copy
+          );
         }
       }
     }
@@ -14087,7 +15801,10 @@ const arrayObject = (index) => {
 
   const newIndexes =
     copies.map(
-      (_, copyIndex) =>
+      (
+        _,
+        copyIndex
+      ) =>
         objects.length +
         copyIndex
     );
@@ -14097,15 +15814,19 @@ const arrayObject = (index) => {
   );
 
   setSelectedIndex(
-    newIndexes[
-      newIndexes.length - 1
-    ]
+    newIndexes.length > 0
+      ? newIndexes[
+          newIndexes.length - 1
+        ]
+      : null
   );
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
 
 /* =========================
@@ -14125,26 +15846,47 @@ const scaleObject = (index) => {
       (i) =>
         i >= 0 &&
         i < objects.length &&
-        objects[i]
+        objects[i] &&
+        !objects[i].hidden
     );
 
   if (
     validIndexes.length === 0
   ) {
+    window.alert(
+      "Select an object first."
+    );
     return;
   }
 
   const editableIndexes =
     validIndexes.filter(
-      (i) =>
-        !objects[i].locked
+      (i) => {
+        const object =
+          objects[i];
+
+        if (
+          !object ||
+          object.locked
+        ) {
+          return false;
+        }
+
+        const layerId =
+          object.layerId ||
+          "layer-0";
+
+        return !isLayerLocked(
+          layerId
+        );
+      }
     );
 
   if (
     editableIndexes.length === 0
   ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -14155,12 +15897,16 @@ const scaleObject = (index) => {
       "2"
     );
 
-  if (factorInput === null) {
+  if (
+    factorInput === null
+  ) {
     return;
   }
 
   const factor =
-    Number(factorInput);
+    Number(
+      factorInput.trim()
+    );
 
   if (
     !Number.isFinite(factor) ||
@@ -14168,6 +15914,15 @@ const scaleObject = (index) => {
   ) {
     window.alert(
       "Please enter a valid positive scale factor."
+    );
+    return;
+  }
+
+  if (
+    factor > 1000
+  ) {
+    window.alert(
+      "Scale factor is too large. Maximum is 1000."
     );
     return;
   }
@@ -14183,125 +15938,365 @@ const scaleObject = (index) => {
       const original =
         objects[objectIndex];
 
+      if (
+        !original
+      ) {
+        return;
+      }
+
       const copy = {
         ...original,
+
         locked: false,
         hidden: false,
       };
 
-      /* LINE */
+      /* =========================
+         LINE
+      ========================= */
+
       if (
-        original.type === "line"
+        original.type ===
+        "line"
       ) {
+        if (
+          !Array.isArray(
+            original.points
+          ) ||
+          original.points.length <
+            4
+        ) {
+          return;
+        }
+
         copy.points =
           original.points.map(
-            (value) =>
-              value * factor
+            (value) => {
+              const numericValue =
+                Number(value);
+
+              return Number.isFinite(
+                numericValue
+              )
+                ? numericValue *
+                    factor
+                : value;
+            }
           );
       }
 
-      /* POLYLINE */
+      /* =========================
+         POLYLINE
+      ========================= */
+
       else if (
         original.type ===
         "polyline"
       ) {
+        if (
+          !Array.isArray(
+            original.points
+          ) ||
+          original.points.length <
+            4
+        ) {
+          return;
+        }
+
         copy.points =
           original.points.map(
-            (value) =>
-              value * factor
+            (value) => {
+              const numericValue =
+                Number(value);
+
+              return Number.isFinite(
+                numericValue
+              )
+                ? numericValue *
+                    factor
+                : value;
+            }
           );
       }
 
-      /* CIRCLE */
+      /* =========================
+         CIRCLE
+      ========================= */
+
       else if (
         original.type ===
         "circle"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const radius =
+          Number(
+            original.radius
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(radius) ||
+          radius <= 0
+        ) {
+          return;
+        }
+
         copy.x =
-          original.x * factor;
+          x * factor;
 
         copy.y =
-          original.y * factor;
+          y * factor;
 
         copy.radius =
-          original.radius *
-          factor;
+          radius * factor;
       }
 
-      /* RECTANGLE */
+      /* =========================
+         RECTANGLE
+      ========================= */
+
       else if (
         original.type ===
         "rectangle"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const width =
+          Number(
+            original.width
+          );
+
+        const height =
+          Number(
+            original.height
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return;
+        }
+
         copy.x =
-          original.x * factor;
+          x * factor;
 
         copy.y =
-          original.y * factor;
+          y * factor;
 
         copy.width =
-          original.width *
-          factor;
+          width * factor;
 
         copy.height =
-          original.height *
-          factor;
+          height * factor;
       }
 
-            /* HATCH */
-      else if (
-        original.type ===
-        "hatch"
-      ) {
-        copy.x =
-          original.x * factor;
+      /* =========================
+         ARC
+      ========================= */
 
-        copy.y =
-          original.y * factor;
-
-        copy.width =
-          original.width *
-          factor;
-
-        copy.height =
-          original.height *
-          factor;
-
-        copy.hatchSpacing =
-          (original.hatchSpacing ||
-            12) * factor;
-      }
-
-      /* ARC */
       else if (
         original.type ===
         "arc"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const radius =
+          Number(
+            original.radius
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(radius) ||
+          radius <= 0
+        ) {
+          return;
+        }
+
         copy.x =
-          original.x * factor;
+          x * factor;
 
         copy.y =
-          original.y * factor;
+          y * factor;
 
         copy.radius =
-          original.radius *
-          factor;
+          radius * factor;
       }
 
-      /* TEXT */
+      /* =========================
+         HATCH
+      ========================= */
+
+      else if (
+        original.type ===
+        "hatch"
+      ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const width =
+          Number(
+            original.width
+          );
+
+        const height =
+          Number(
+            original.height
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return;
+        }
+
+        copy.x =
+          x * factor;
+
+        copy.y =
+          y * factor;
+
+        copy.width =
+          width * factor;
+
+        copy.height =
+          height * factor;
+
+        const hatchSpacing =
+          Number(
+            original.hatchSpacing
+          );
+
+        copy.hatchSpacing =
+          (
+            Number.isFinite(
+              hatchSpacing
+            )
+              ? hatchSpacing
+              : 12
+          ) * factor;
+
+        if (
+          original.trimStartPoint
+        ) {
+          copy.trimStartPoint = {
+            x:
+              Number(
+                original
+                  .trimStartPoint
+                  .x
+              ) * factor,
+
+            y:
+              Number(
+                original
+                  .trimStartPoint
+                  .y
+              ) * factor,
+          };
+        }
+
+        if (
+          original.trimEndPoint
+        ) {
+          copy.trimEndPoint = {
+            x:
+              Number(
+                original
+                  .trimEndPoint
+                  .x
+              ) * factor,
+
+            y:
+              Number(
+                original
+                  .trimEndPoint
+                  .y
+              ) * factor,
+          };
+        }
+
+        if (
+          original.trimPoint
+        ) {
+          copy.trimPoint = {
+            x:
+              Number(
+                original
+                  .trimPoint
+                  .x
+              ) * factor,
+
+            y:
+              Number(
+                original
+                  .trimPoint
+                  .y
+              ) * factor,
+          };
+        }
+      }
+
+      /* =========================
+         TEXT
+      ========================= */
+
       else if (
         original.type ===
         "text"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const fontSize =
+          Number(
+            original.fontSize ||
+              24
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(fontSize)
+        ) {
+          return;
+        }
+
         copy.x =
-          original.x * factor;
+          x * factor;
 
         copy.y =
-          original.y * factor;
+          y * factor;
 
         copy.fontSize =
-          (original.fontSize ||
-            24) * factor;
+          fontSize * factor;
       }
 
       else {
@@ -14342,16 +16337,21 @@ const scaleObject = (index) => {
   );
 
   setSelectedIndex(
-    newIndexes[
-      newIndexes.length - 1
-    ]
+    newIndexes.length > 0
+      ? newIndexes[
+          newIndexes.length - 1
+        ]
+      : null
   );
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
 
 /* =========================
    MIRROR
@@ -14371,7 +16371,8 @@ const mirrorObject = (index) => {
       (objectIndex) =>
         objectIndex >= 0 &&
         objectIndex < objects.length &&
-        objects[objectIndex]
+        objects[objectIndex] &&
+        !objects[objectIndex].hidden
     );
 
   if (
@@ -14385,15 +16386,32 @@ const mirrorObject = (index) => {
 
   const editableIndexes =
     validIndexes.filter(
-      (objectIndex) =>
-        !objects[objectIndex].locked
+      (objectIndex) => {
+        const object =
+          objects[objectIndex];
+
+        if (
+          !object ||
+          object.locked
+        ) {
+          return false;
+        }
+
+        const layerId =
+          object.layerId ||
+          "layer-0";
+
+        return !isLayerLocked(
+          layerId
+        );
+      }
     );
 
   if (
     editableIndexes.length === 0
   ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -14436,6 +16454,12 @@ const mirrorObject = (index) => {
       const original =
         objects[objectIndex];
 
+      if (
+        !original
+      ) {
+        return;
+      }
+
       const copy = {
         ...original,
 
@@ -14448,22 +16472,44 @@ const mirrorObject = (index) => {
       ========================= */
 
       if (
-        original.type === "line"
+        original.type ===
+        "line"
       ) {
+        if (
+          !Array.isArray(
+            original.points
+          ) ||
+          original.points.length <
+            4
+        ) {
+          return;
+        }
+
         copy.points =
           original.points.map(
             (value, pointIndex) => {
+              const numericValue =
+                Number(value);
+
+              if (
+                !Number.isFinite(
+                  numericValue
+                )
+              ) {
+                return value;
+              }
+
               if (
                 pointIndex % 2 === 0
               ) {
                 return axis === "V"
-                  ? -value
-                  : value;
+                  ? -numericValue
+                  : numericValue;
               }
 
               return axis === "H"
-                ? -value
-                : value;
+                ? -numericValue
+                : numericValue;
             }
           );
       }
@@ -14476,20 +16522,41 @@ const mirrorObject = (index) => {
         original.type ===
         "polyline"
       ) {
+        if (
+          !Array.isArray(
+            original.points
+          ) ||
+          original.points.length <
+            4
+        ) {
+          return;
+        }
+
         copy.points =
           original.points.map(
             (value, pointIndex) => {
+              const numericValue =
+                Number(value);
+
+              if (
+                !Number.isFinite(
+                  numericValue
+                )
+              ) {
+                return value;
+              }
+
               if (
                 pointIndex % 2 === 0
               ) {
                 return axis === "V"
-                  ? -value
-                  : value;
+                  ? -numericValue
+                  : numericValue;
               }
 
               return axis === "H"
-                ? -value
-                : value;
+                ? -numericValue
+                : numericValue;
             }
           );
       }
@@ -14502,15 +16569,28 @@ const mirrorObject = (index) => {
         original.type ===
         "circle"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y)
+        ) {
+          return;
+        }
+
         copy.x =
           axis === "V"
-            ? -original.x
-            : original.x;
+            ? -x
+            : x;
 
         copy.y =
           axis === "H"
-            ? -original.y
-            : original.y;
+            ? -y
+            : y;
       }
 
       /* =========================
@@ -14521,18 +16601,45 @@ const mirrorObject = (index) => {
         original.type ===
         "rectangle"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const width =
+          Number(original.width);
+
+        const height =
+          Number(original.height);
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return;
+        }
+
         copy.x =
           axis === "V"
-            ? -original.x
-            : original.x;
+            ? -x - width
+            : x;
 
         copy.y =
           axis === "H"
-            ? -original.y
-            : original.y;
+            ? -y - height
+            : y;
+
+        copy.width =
+          width;
+
+        copy.height =
+          height;
       }
 
-            /* =========================
+      /* =========================
          HATCH
       ========================= */
 
@@ -14540,34 +16647,121 @@ const mirrorObject = (index) => {
         original.type ===
         "hatch"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const width =
+          Number(original.width);
+
+        const height =
+          Number(original.height);
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height)
+        ) {
+          return;
+        }
+
         copy.x =
           axis === "V"
-            ? -original.x -
-              original.width
-            : original.x;
+            ? -x - width
+            : x;
 
         copy.y =
           axis === "H"
-            ? -original.y -
-              original.height
-            : original.y;
+            ? -y - height
+            : y;
 
         copy.width =
-          original.width;
+          width;
 
         copy.height =
-          original.height;
+          height;
 
         copy.rotation =
           axis === "V"
             ? -(
-                original.rotation ||
-                0
+                Number(
+                  original.rotation ||
+                    0
+                )
               )
             : -(
-                original.rotation ||
-                0
+                Number(
+                  original.rotation ||
+                    0
+                )
               );
+
+        if (
+          original.trimStartPoint
+        ) {
+          copy.trimStartPoint = {
+            x:
+              axis === "V"
+                ? -Number(
+                    original
+                      .trimStartPoint
+                      .x
+                  )
+                : Number(
+                    original
+                      .trimStartPoint
+                      .x
+                  ),
+
+            y:
+              axis === "H"
+                ? -Number(
+                    original
+                      .trimStartPoint
+                      .y
+                  )
+                : Number(
+                    original
+                      .trimStartPoint
+                      .y
+                  ),
+          };
+        }
+
+        if (
+          original.trimEndPoint
+        ) {
+          copy.trimEndPoint = {
+            x:
+              axis === "V"
+                ? -Number(
+                    original
+                      .trimEndPoint
+                      .x
+                  )
+                : Number(
+                    original
+                      .trimEndPoint
+                      .x
+                  ),
+
+            y:
+              axis === "H"
+                ? -Number(
+                    original
+                      .trimEndPoint
+                      .y
+                  )
+                : Number(
+                    original
+                      .trimEndPoint
+                      .y
+                  ),
+          };
+        }
       }
 
       /* =========================
@@ -14575,17 +16769,37 @@ const mirrorObject = (index) => {
       ========================= */
 
       else if (
-        original.type === "arc"
+        original.type ===
+        "arc"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        const radius =
+          Number(
+            original.radius
+          );
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(radius)
+        ) {
+          return;
+        }
+
         copy.x =
           axis === "V"
-            ? -original.x
-            : original.x;
+            ? -x
+            : x;
 
         copy.y =
           axis === "H"
-            ? -original.y
-            : original.y;
+            ? -y
+            : y;
 
         if (
           axis === "V"
@@ -14597,11 +16811,7 @@ const mirrorObject = (index) => {
           copy.angleEnd =
             Math.PI -
             original.angleStart;
-        }
-
-        if (
-          axis === "H"
-        ) {
+        } else {
           copy.angleStart =
             -original.angleEnd;
 
@@ -14609,7 +16819,8 @@ const mirrorObject = (index) => {
             -original.angleStart;
         }
 
-        copy.rotation = 0;
+        copy.rotation =
+          0;
       }
 
       /* =========================
@@ -14617,41 +16828,52 @@ const mirrorObject = (index) => {
       ========================= */
 
       else if (
-        original.type === "text"
+        original.type ===
+        "text"
       ) {
+        const x =
+          Number(original.x);
+
+        const y =
+          Number(original.y);
+
+        if (
+          !Number.isFinite(x) ||
+          !Number.isFinite(y)
+        ) {
+          return;
+        }
+
         copy.x =
           axis === "V"
-            ? -original.x
-            : original.x;
+            ? -x
+            : x;
 
         copy.y =
           axis === "H"
-            ? -original.y
-            : original.y;
+            ? -y
+            : y;
 
-        if (
+        const rotation =
+          Number(
+            original.rotation ||
+              0
+          );
+
+        copy.rotation =
           axis === "H"
-        ) {
-          copy.rotation =
-            -(
-              original.rotation ||
-              0
-            );
-        } else {
-          copy.rotation =
-            180 -
-            (
-              original.rotation ||
-              0
-            );
-        }
+            ? -rotation
+            : 180 -
+              rotation;
       }
 
       else {
         return;
       }
 
-      copies.push(copy);
+      copies.push(
+        copy
+      );
     }
   );
 
@@ -14685,15 +16907,19 @@ const mirrorObject = (index) => {
   );
 
   setSelectedIndex(
-    newIndexes[
-      newIndexes.length - 1
-    ]
+    newIndexes.length > 0
+      ? newIndexes[
+          newIndexes.length - 1
+        ]
+      : null
   );
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
 
 /* =========================
@@ -14723,19 +16949,43 @@ const explodeObject = (index) => {
   }
 
   const editableIndexes =
-    validIndexes.filter(
-      (i) =>
-        !objects[i].locked
-    );
+  validIndexes.filter(
+    (i) => {
+      const object =
+        objects[i];
 
-  if (
-    editableIndexes.length === 0
-  ) {
-    window.alert(
-      "Selected object is locked."
-    );
-    return;
-  }
+      if (
+        !object ||
+        object.hidden ||
+        object.locked
+      ) {
+        return false;
+      }
+
+      const layerId =
+        object.layerId ||
+        "layer-0";
+
+      if (
+        isLayerLocked(
+          layerId
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    }
+  );
+
+ if (
+  editableIndexes.length === 0
+) {
+  window.alert(
+    "Selected object or its layer is locked."
+  );
+  return;
+}
 
   const previousObjects = [
     ...objects,
@@ -15240,15 +17490,11 @@ const startMove = (
   index,
   event
 ) => {
-  if (tool !== "move") {
+  if (
+    tool !== "move"
+  ) {
     return;
   }
-  if (isObjectLocked(index)) {
-  window.alert(
-    "This object is locked."
-  );
-  return;
-}
 
   const object =
     objects[index];
@@ -15257,11 +17503,79 @@ const startMove = (
     return;
   }
 
-  const indexesToMove =
+  /* =========================
+     CLICKED OBJECT CHECK
+  ========================= */
+
+  if (
+    object.hidden
+  ) {
+    window.alert(
+      "This object is hidden."
+    );
+    return;
+  }
+
+  if (
+    isObjectLocked(index)
+  ) {
+    window.alert(
+      "This object or its layer is locked."
+    );
+    return;
+  }
+
+  /* =========================
+     SELECTED OBJECTS
+  ========================= */
+
+  const requestedIndexes =
     selectedIndexes.length > 0 &&
     selectedIndexes.includes(index)
       ? [...selectedIndexes]
       : [index];
+
+  /* =========================
+     ONLY VISIBLE + EDITABLE
+  ========================= */
+
+  const indexesToMove =
+    requestedIndexes.filter(
+      (objectIndex) => {
+        const selectedObject =
+          objects[objectIndex];
+
+        if (
+          !selectedObject ||
+          selectedObject.hidden
+        ) {
+          return false;
+        }
+
+        if (
+          isObjectLocked(
+            objectIndex
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+  if (
+    indexesToMove.length === 0
+  ) {
+    window.alert(
+      "No unlocked visible objects can be moved."
+    );
+    return;
+  }
+
+  /* =========================
+     STAGE
+  ========================= */
 
   const stage =
     event.target.getStage();
@@ -15277,6 +17591,10 @@ const startMove = (
     return;
   }
 
+  /* =========================
+     START POINTER
+  ========================= */
+
   const startX =
     (pointer.x - position.x) /
     scale;
@@ -15285,9 +17603,15 @@ const startMove = (
     (pointer.y - position.y) /
     scale;
 
+  /* =========================
+     SAVE MOVE STATE
+  ========================= */
+
   moveStartRef.current = {
     index,
-    indexes: indexesToMove,
+
+    indexes:
+      indexesToMove,
 
     startPointer: {
       x: startX,
@@ -15296,7 +17620,9 @@ const startMove = (
 
     objects:
       JSON.parse(
-        JSON.stringify(objects)
+        JSON.stringify(
+          objects
+        )
       ),
 
     measurements:
@@ -15313,6 +17639,10 @@ const startMove = (
     index
   );
 };
+
+/* =========================
+   UPDATE MOVE
+========================= */
 
 const updateMove = (
   e
@@ -15366,18 +17696,45 @@ const updateMove = (
   }
 
   /* =========================
-     ONLY UNLOCKED OBJECTS MOVE
+     ONLY VISIBLE + UNLOCKED
+     OBJECTS MOVE
   ========================= */
 
   const editableIndexes =
     startData.indexes.filter(
-      (objectIndex) =>
-        startData.objects[
-          objectIndex
-        ] &&
-        !startData.objects[
-          objectIndex
-        ].locked
+      (objectIndex) => {
+        const original =
+          startData.objects[
+            objectIndex
+          ];
+
+        if (
+          !original ||
+          original.hidden
+        ) {
+          return false;
+        }
+
+        if (
+          original.locked
+        ) {
+          return false;
+        }
+
+        const layerId =
+          original.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            layerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
     );
 
   if (
@@ -15406,7 +17763,9 @@ const updateMove = (
           return original;
         }
 
-        /* LINE */
+        /* =========================
+           LINE
+        ========================= */
 
         if (
           original.type ===
@@ -15433,7 +17792,9 @@ const updateMove = (
           };
         }
 
-        /* POLYLINE */
+        /* =========================
+           POLYLINE
+        ========================= */
 
         if (
           original.type ===
@@ -15458,7 +17819,9 @@ const updateMove = (
           };
         }
 
-        /* OTHER OBJECTS */
+        /* =========================
+           OTHER OBJECTS
+        ========================= */
 
         return {
           ...original,
@@ -15479,6 +17842,36 @@ const updateMove = (
   );
 };
 
+/* =========================
+   FINISH MOVE
+========================= */
+
+const finishMove = () => {
+  const moveData =
+    moveStartRef.current;
+
+  if (!moveData) {
+    return;
+  }
+
+  /* =========================
+     SAVE HISTORY ONLY IF MOVED
+  ========================= */
+
+  if (moveData.moved) {
+    saveHistory(
+      moveData.objects,
+      moveData.measurements
+    );
+  }
+
+  /* =========================
+     CLEAR MOVE STATE
+  ========================= */
+
+  moveStartRef.current = null;
+};
+
   /* =========================
      JOIN
   ========================= */
@@ -15493,19 +17886,200 @@ const updateMove = (
     const second =
       objects[secondIndex];
 
-    if (!first || !second) {
-      window.alert(
-        "Object not found."
-      );
-      return;
-    }
-    if (
-  first.locked ||
-  second.locked
+        /* =========================
+     JOIN SELECTION VALIDATION
+  ========================= */
+
+  if (
+    firstIndex === null ||
+    secondIndex === null ||
+    firstIndex === secondIndex
+  ) {
+    window.alert(
+      "Select two different objects for Join."
+    );
+    return;
+  }
+
+  if (
+    !first ||
+    !second
+  ) {
+    window.alert(
+      "Selected objects were not found."
+    );
+    return;
+  }
+
+  /* =========================
+     OBJECT LOCK CHECK
+  ========================= */
+
+  if (
+    first.locked ||
+    second.locked
+  ) {
+    window.alert(
+      "One or both selected objects are locked."
+    );
+    return;
+  }
+
+  /* =========================
+     LAYER LOCK CHECK
+  ========================= */
+
+  const firstLayerId =
+    first.layerId ||
+    "layer-0";
+
+  const secondLayerId =
+    second.layerId ||
+    "layer-0";
+
+  if (
+    isLayerLocked(
+      firstLayerId
+    ) ||
+    isLayerLocked(
+      secondLayerId
+    )
+  ) {
+    window.alert(
+      "One or both selected objects are on locked layers."
+    );
+    return;
+  }
+
+
+
+/* =========================
+   HATCH + HATCH JOIN
+========================= */
+
+if (
+  first.type === "hatch" &&
+  second.type === "hatch"
 ) {
-  window.alert(
-    "One or both selected objects are locked."
+  const firstX =
+    Number(first.x) || 0;
+
+  const firstY =
+    Number(first.y) || 0;
+
+  const firstW =
+    Number(first.width) || 0;
+
+  const firstH =
+    Number(first.height) || 0;
+
+  const secondX =
+    Number(second.x) || 0;
+
+  const secondY =
+    Number(second.y) || 0;
+
+  const secondW =
+    Number(second.width) || 0;
+
+  const secondH =
+    Number(second.height) || 0;
+
+  const minX =
+    Math.min(
+      firstX,
+      secondX
+    );
+
+  const minY =
+    Math.min(
+      firstY,
+      secondY
+    );
+
+  const maxX =
+    Math.max(
+      firstX + firstW,
+      secondX + secondW
+    );
+
+  const maxY =
+    Math.max(
+      firstY + firstH,
+      secondY + secondH
+    );
+
+  const mergedHatch = {
+    ...first,
+
+    x: minX,
+    y: minY,
+
+    width:
+      maxX - minX,
+
+    height:
+      maxY - minY,
+
+    hatchSpacing:
+      first.hatchSpacing ||
+      second.hatchSpacing ||
+      12,
+
+    hatchAngle:
+      first.hatchAngle ??
+      second.hatchAngle ??
+      45,
+
+    hatchColor:
+      first.hatchColor ||
+      second.hatchColor ||
+      "#00aaff",
+
+    trimEnabled: false,
+    trimStartPoint: null,
+    trimEndPoint: null,
+    trimPoint: null,
+
+    locked: false,
+    hidden: false,
+  };
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const newObjects =
+    objects.filter(
+      (_, i) =>
+        i !== firstIndex &&
+        i !== secondIndex
+    );
+
+  newObjects.push(
+    mergedHatch
   );
+
+  setObjects(
+    newObjects
+  );
+
+  const newIndex =
+    newObjects.length - 1;
+
+  setSelectedIndex(
+    newIndex
+  );
+
+  setSelectedIndexes([
+    newIndex,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
   return;
 }
 
@@ -16340,7 +18914,7 @@ if (handle === "scale-grip") {
   }
   radius={12 / scale}
   fill="#ff9900"
-  draggable
+  draggable={tool === "move"}
   onMouseDown={(e) => {
     e.cancelBubble = true;
     startStretch(selectedIndex, "rotate-grip");
@@ -16812,57 +19386,83 @@ const addLayer = () => {
     );
   };
 
-  const toggleLayerVisibility = (
-    layerId
-  ) => {
-    setLayers((prev) =>
-      prev.map((item) =>
-        item.id === layerId
-          ? {
-              ...item,
-              visible:
-                !item.visible,
-            }
-          : item
-      )
-    );
+  /* =========================
+   TOGGLE LAYER VISIBILITY
+========================= */
 
-    if (
-      selectedIndex !== null
-    ) {
-      const selectedObject =
-        objects[
-          selectedIndex
-        ];
-
-      if (
-        selectedObject &&
-        (
-          selectedObject.layerId ||
-          "layer-0"
-        ) === layerId
-      ) {
-        setSelectedIndex(
-          null
-        );
-      }
-    }
-  };
-
-  const isLayerLocked = (
+const toggleLayerVisibility = (
   layerId
 ) => {
-  if (!layerId) {
-    return false;
-  }
-
-  return Boolean(
-    layers.find(
-      (layer) =>
-        layer.id === layerId
-    )?.locked
+  setLayers((prev) =>
+    prev.map((item) =>
+      item.id === layerId
+        ? {
+            ...item,
+            visible:
+              !item.visible,
+          }
+        : item
+    )
   );
+
+  /* =========================
+     CLEAR SELECTIONS
+     FROM THIS LAYER
+  ========================= */
+
+  const selectedLayerIndexes =
+    objects
+      .map((object, index) => {
+        const objectLayerId =
+          object?.layerId ||
+          "layer-0";
+
+        return objectLayerId ===
+          layerId
+          ? index
+          : null;
+      })
+      .filter(
+        (index) =>
+          index !== null
+      );
+
+  const selectedLayerSet =
+    new Set(
+      selectedLayerIndexes
+    );
+
+  const remainingSelected =
+    selectedIndexes.filter(
+      (index) =>
+        !selectedLayerSet.has(
+          index
+        )
+    );
+
+  setSelectedIndexes(
+    remainingSelected
+  );
+
+  if (
+    selectedIndex !== null &&
+    selectedLayerSet.has(
+      selectedIndex
+    )
+  ) {
+    setSelectedIndex(
+      remainingSelected.length > 0
+        ? remainingSelected[
+            remainingSelected.length - 1
+          ]
+        : null
+    );
+  }
 };
+
+/* =========================
+   TOGGLE LAYER LOCK
+========================= */
 
 const toggleLayerLock = (
   layerId
@@ -16877,6 +19477,10 @@ const toggleLayerLock = (
     return;
   }
 
+  /* =========================
+     LAYER 0 CANNOT LOCK
+  ========================= */
+
   if (
     layer.id === "layer-0"
   ) {
@@ -16885,6 +19489,10 @@ const toggleLayerLock = (
     );
     return;
   }
+
+  /* =========================
+     TOGGLE LOCK
+  ========================= */
 
   setLayers(
     (previousLayers) =>
@@ -16900,15 +19508,64 @@ const toggleLayerLock = (
       )
   );
 
+  /* =========================
+     LOCKING THIS LAYER
+     CLEAR ITS SELECTION
+  ========================= */
+
   if (
-    activeLayerId === layerId &&
     !layer.locked
   ) {
-    setSelectedIndex(
-      null
+    const layerIndexes =
+      objects
+        .map(
+          (object, index) => {
+            const objectLayerId =
+              object?.layerId ||
+              "layer-0";
+
+            return objectLayerId ===
+              layerId
+              ? index
+              : null;
+          }
+        )
+        .filter(
+          (index) =>
+            index !== null
+        );
+
+    const layerIndexSet =
+      new Set(
+        layerIndexes
+      );
+
+    const remainingSelected =
+      selectedIndexes.filter(
+        (index) =>
+          !layerIndexSet.has(
+            index
+          )
+      );
+
+    setSelectedIndexes(
+      remainingSelected
     );
 
-    setSelectedIndexes([]);
+    if (
+      selectedIndex !== null &&
+      layerIndexSet.has(
+        selectedIndex
+      )
+    ) {
+      setSelectedIndex(
+        remainingSelected.length > 0
+          ? remainingSelected[
+              remainingSelected.length - 1
+            ]
+          : null
+      );
+    }
   }
 };
 
@@ -17181,9 +19838,11 @@ const updateSelectedObject = (
   );
 };
 
-/* =========================
+
+ /* =========================
    DELETE SELECTED
 ========================= */
+
 const deleteSelected = () => {
   const indexesToDelete =
     selectedIndexes.length > 0
@@ -17234,25 +19893,54 @@ const deleteSelected = () => {
       null
     );
 
+    setFuture([]);
+
     return;
   }
 
   /* =========================
-     FILTER LOCKED OBJECTS
+     FILTER EDITABLE OBJECTS
   ========================= */
 
   const deletableIndexes =
     indexesToDelete.filter(
-      (index) =>
-        objects[index] &&
-        !objects[index].locked
+      (index) => {
+        const object =
+          objects[index];
+
+        if (!object) {
+          return false;
+        }
+
+        /* OBJECT LOCK */
+        if (
+          object.locked
+        ) {
+          return false;
+        }
+
+        /* LAYER LOCK */
+        const objectLayerId =
+          object.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            objectLayerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
     );
 
   if (
     deletableIndexes.length === 0
   ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -17290,6 +19978,8 @@ const deleteSelected = () => {
   setSelectedMeasurementIndex(
     null
   );
+
+  setFuture([]);
 };
 
 /* =========================
@@ -17448,10 +20138,17 @@ const clearDrawing = () => {
       Smooth touchpad zoom
     */
 
-    zoomFactor =
-      Math.exp(
-        -delta * 0.01
-      );
+   zoomFactor =
+  Math.exp(
+    -delta * 0.005
+  );
+
+/* Prevent one wheel event from
+   making the canvas jump too far */
+zoomFactor = Math.max(
+  0.85,
+  Math.min(1.15, zoomFactor)
+);
   } else {
     /*
       Normal mouse wheel
@@ -17718,32 +20415,30 @@ const canvasHeight =
     });
   };
 
-    /* =========================
-     MOBILE TOUCH CONTROLS
-  ========================= */
+/* =========================
+   MOBILE TOUCH CONTROLS
+========================= */
 
-  const getTouchDistance = (touches) => {
-    const dx =
-      touches[0].clientX -
-      touches[1].clientX;
+const getTouchDistance = (touches) => {
+  const dx =
+    touches[0].clientX -
+    touches[1].clientX;
 
-    const dy =
-      touches[0].clientY -
-      touches[1].clientY;
+  const dy =
+    touches[0].clientY -
+    touches[1].clientY;
 
-    return Math.hypot(dx, dy);
-  };
+  return Math.hypot(dx, dy);
+};
 
- const getTouchCenter = (touches) => {
+const getTouchCenter = (touches) => {
   const centerX =
     (touches[0].clientX +
-      touches[1].clientX) /
-    2;
+      touches[1].clientX) / 2;
 
   const centerY =
     (touches[0].clientY +
-      touches[1].clientY) /
-    2;
+      touches[1].clientY) / 2;
 
   const container =
     stageRef.current?.container();
@@ -17761,9 +20456,6 @@ const canvasHeight =
       (rect?.top || 0),
   };
 };
-/* =====================================================
-   MOBILE TOUCH — AUTOCAD STYLE LINE DRAWING
-===================================================== */
 
 const handleTouchStart = (e) => {
   const touches = e.evt.touches;
@@ -17773,8 +20465,8 @@ const handleTouchStart = (e) => {
   e.evt.preventDefault();
 
   /* =========================
-     2 FINGER
-     PAN / ZOOM
+     TWO FINGERS
+     PINCH + PAN
   ========================= */
 
   if (touches.length === 2) {
@@ -17786,79 +20478,91 @@ const handleTouchStart = (e) => {
         getTouchCenter(touches),
     };
 
+    /* Stop any one-finger action */
+    setIsPanning(false);
+    panStartRef.current = null;
+
     return;
   }
-
-/* =========================
-   1 FINGER
-========================= */
-
-if (touches.length === 1) {
-
-  lastTouchTimeRef.current =
-    Date.now();
-
-  const stage =
-    e.target.getStage();
-
-  if (!stage) return;
-
-  stage.setPointersPositions(
-    e.evt
-  );
-
-  const touch =
-    touches[0];
-
-  const rect =
-    stage.container()
-      .getBoundingClientRect();
-
-  touchStateRef.current = {
-    lastCenter: {
-      x:
-        touch.clientX -
-        rect.left,
-
-      y:
-        touch.clientY -
-        rect.top,
-    },
-
-    lastDistance: null,
-  };
 
   /* =========================
-     SELECT
-     → 1 FINGER PAN
+     ONE FINGER
   ========================= */
 
-  if (
-    tool === "select"
-  ) {
-    return;
-  }
+  if (touches.length === 1) {
+    lastTouchTimeRef.current = Date.now();
 
- /* =========================
-   LINE
-   =========================
-   First touch sirf crosshair move karega.
-   START POINT Tap button se set hoga.
+    const stage =
+      e.target.getStage();
+
+    if (!stage) return;
+
+    stage.setPointersPositions(e.evt);
+
+    /* =========================
+       SELECT = PAN CANVAS
+    ========================= */
+
+    if (tool === "select") {
+      const touch = touches[0];
+
+      const rect =
+        stage
+          .container()
+          .getBoundingClientRect();
+
+      panStartRef.current = {
+        mouseX:
+          touch.clientX -
+          rect.left,
+
+        mouseY:
+          touch.clientY -
+          rect.top,
+
+        positionX: position.x,
+        positionY: position.y,
+      };
+
+      setIsPanning(true);
+
+      return;
+    }
+
+    /* =========================
+       LINE = START DRAWING
+    ========================= */
+
+    if (tool === "line") {
+      handleMouseDown(e);
+      return;
+    }
+
+    /* =========================
+   OFFSET = SELECT OBJECT
 ========================= */
 
-if (tool === "line") {
+if (tool === "offset") {
+  handleMouseDown(e);
   return;
 }
 
-/* OTHER TOOLS */
-handleMouseDown(e);
+    /* =========================
+   MOVE = MOVE OBJECT
+========================= */
+
+if (tool === "move") {
+  handleMouseDown(e);
+  return;
 }
+
+    /* =========================
+       OTHER TOOLS
+    ========================= */
+
+    handleMouseDown(e);
+  }
 };
-
-
-/* =====================================================
-   MOBILE TOUCH MOVE
-===================================================== */
 
 const handleTouchMove = (e) => {
   const touches = e.evt.touches;
@@ -17867,12 +20571,12 @@ const handleTouchMove = (e) => {
 
   e.evt.preventDefault();
 
- /* =========================
-   2 FINGER PAN + PINCH ZOOM
-========================= */
+  /* =========================
+     TWO FINGERS
+     PINCH ZOOM + PAN
+  ========================= */
 
-if (touches.length === 2) {
-
+  if (touches.length === 2) {
   const center =
     getTouchCenter(touches);
 
@@ -17882,16 +20586,10 @@ if (touches.length === 2) {
   const oldScale = scale;
 
   const lastCenter =
-    touchStateRef.current
-      .lastCenter;
+    touchStateRef.current.lastCenter;
 
   const lastDistance =
-    touchStateRef.current
-      .lastDistance;
-
-  /* =========================
-     FIRST 2-FINGER FRAME
-  ========================= */
+    touchStateRef.current.lastDistance;
 
   if (
     !lastCenter ||
@@ -17905,30 +20603,24 @@ if (touches.length === 2) {
     return;
   }
 
-  /* =========================
-     PINCH ZOOM
-  ========================= */
-
   const zoomRatio =
     distance / lastDistance;
 
+  const safeZoomRatio = Math.max(
+    0.85,
+    Math.min(1.15, zoomRatio)
+  );
+
   let newScale =
-    oldScale * zoomRatio;
+    oldScale * safeZoomRatio;
 
   const MIN_ZOOM = 0.001;
   const MAX_ZOOM = 1000000;
 
   newScale = Math.max(
     MIN_ZOOM,
-    Math.min(
-      MAX_ZOOM,
-      newScale
-    )
+    Math.min(MAX_ZOOM, newScale)
   );
-
-  /* =========================
-     KEEP PINCH CENTER FIXED
-  ========================= */
 
   const worldPoint = {
     x:
@@ -17941,10 +20633,6 @@ if (touches.length === 2) {
         position.y) /
       oldScale,
   };
-
-  /* =========================
-     PAN + ZOOM
-  ========================= */
 
   const newPosition = {
     x:
@@ -17959,14 +20647,7 @@ if (touches.length === 2) {
   };
 
   setScale(newScale);
-
-  setPosition(
-    newPosition
-  );
-
-  /* =========================
-     SAVE TOUCH STATE
-  ========================= */
+  setPosition(newPosition);
 
   touchStateRef.current = {
     lastCenter: center,
@@ -17976,91 +20657,130 @@ if (touches.length === 2) {
   return;
 }
 
-
   /* =========================
-     1 FINGER
+     ONE FINGER
   ========================= */
 
   if (touches.length === 1) {
 
-    const stage =
-      e.target.getStage();
+    /* SELECT = PAN */
+    if (
+      tool === "select" &&
+      isPanning &&
+      panStartRef.current
+    ) {
+      const touch = touches[0];
 
-    if (!stage) return;
+      const stage =
+        e.target.getStage();
 
-    stage.setPointersPositions(
-      e.evt
-    );
+      if (!stage) return;
 
-    /*
-      LINE ke time:
-      finger move =
-      live preview
+      const rect =
+        stage
+          .container()
+          .getBoundingClientRect();
 
-      Actual line tabhi banegi
-      jab second tap hoga.
-    */
+      const currentX =
+        touch.clientX -
+        rect.left;
+
+      const currentY =
+        touch.clientY -
+        rect.top;
+
+      const dx =
+        currentX -
+        panStartRef.current.mouseX;
+
+      const dy =
+        currentY -
+        panStartRef.current.mouseY;
+
+      setPosition({
+        x:
+          panStartRef.current.positionX +
+          dx,
+
+        y:
+          panStartRef.current.positionY +
+          dy,
+      });
+
+      return;
+    }
+
+    /* =========================
+   OFFSET = OFFSET OBJECT
+========================= */
+
+if (
+  tool === "offset"
+) {
+  handleMouseMove(e);
+  return;
+}
+
+
+/* ========================
+ MOVE = MOVE OBJECT
+ ========================= */
+
+    if (
+      tool === "move" &&
+      moveStartRef.current
+    ) {
+      handleMouseMove(e);
+      return;
+    }
+
+        /* =========================
+       COPY = MOVE COPIED OBJECT
+    ========================= */
+
+    if (
+      tool === "copy" &&
+      copyStartRef.current
+    ) {
+      handleMouseMove(e);
+      return;
+    }
+
+    /* LINE / OTHER DRAWING TOOLS */
 
     handleMouseMove(e);
+
   }
 };
 
-
-/* =====================================================
-   MOBILE TOUCH END
-===================================================== */
-
 const handleTouchEnd = (e) => {
-
   e.evt.preventDefault();
 
   const touches =
     e.evt.touches;
 
   /* =========================
-     2 → 1 FINGER
-     TRANSITION
+     ONE FINGER REMAINS
+     AFTER PINCH
   ========================= */
 
-  if (
-    touches &&
-    touches.length === 1
-  ) {
-    const stage =
-      e.target.getStage();
+ if (
+  touches &&
+  touches.length === 1
+) {
+  touchStateRef.current = {
+    lastDistance: null,
+    lastCenter: null,
+  };
 
-    if (stage) {
-      stage.setPointersPositions(
-        e.evt
-      );
+  setIsPanning(false);
+  panStartRef.current = null;
 
-      const touch =
-        touches[0];
-
-      const rect =
-        stage.container()
-          .getBoundingClientRect();
-
-      touchStateRef.current = {
-        lastCenter: {
-          x:
-            touch.clientX -
-            rect.left,
-
-          y:
-            touch.clientY -
-            rect.top,
-        },
-
-        lastDistance: null,
-      };
-    }
-
-    return;
-  }
+  return;
+}
 
   /* =========================
-     ALL FINGERS RELEASED
+     TOUCH FINISHED
   ========================= */
 
   touchStateRef.current = {
@@ -18068,25 +20788,21 @@ const handleTouchEnd = (e) => {
     lastCenter: null,
   };
 
-  /* =========================
-     LINE
-     SECOND TAP IS HANDLED
-     BY TOUCH START
-  ========================= */
+setIsPanning(false);
+panStartRef.current = null;
 
-  if (
-    tool === "line"
-  ) {
-    return;
-  }
+/* =========================
+   TOUCH FINISHED
+========================= */
 
-  if (
-    tool === "polyline"
-  ) {
-    return;
-  }
+touchStateRef.current = {
+  lastDistance: null,
+  lastCenter: null,
+};
 
-  handleMouseUp(e);
+setIsPanning(false);
+panStartRef.current = null;
+handleMouseUp(e);
 };
 
   /* =========================
@@ -18505,6 +21221,10 @@ const duplicateSelected = () => {
   );
 };
 
+/* =========================
+   BRING TO FRONT
+========================= */
+
 const bringToFront = () => {
   if (
     selectedIndex === null ||
@@ -18517,18 +21237,18 @@ const bringToFront = () => {
   }
 
   if (
-    isObjectLocked(selectedIndex)
+    selectedIndex < 0 ||
+    selectedIndex >= objects.length
   ) {
-    window.alert(
-      "This object is locked."
-    );
     return;
   }
 
   if (
-    selectedIndex < 0 ||
-    selectedIndex >= objects.length
+    isObjectLocked(selectedIndex)
   ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
     return;
   }
 
@@ -18575,8 +21295,14 @@ const bringToFront = () => {
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
 
+
+/* =========================
+   SEND TO BACK
+========================= */
 
 const sendToBack = () => {
   if (
@@ -18590,18 +21316,18 @@ const sendToBack = () => {
   }
 
   if (
-    isObjectLocked(selectedIndex)
+    selectedIndex < 0 ||
+    selectedIndex >= objects.length
   ) {
-    window.alert(
-      "This object is locked."
-    );
     return;
   }
 
   if (
-    selectedIndex < 0 ||
-    selectedIndex >= objects.length
+    isObjectLocked(selectedIndex)
   ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
     return;
   }
 
@@ -18642,8 +21368,14 @@ const sendToBack = () => {
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
 
+
+/* =========================
+   BRING FORWARD
+========================= */
 
 const bringForward = () => {
   if (
@@ -18657,19 +21389,18 @@ const bringForward = () => {
   }
 
   if (
-    isObjectLocked(selectedIndex)
+    selectedIndex < 0 ||
+    selectedIndex >= objects.length - 1
   ) {
-    window.alert(
-      "This object is locked."
-    );
     return;
   }
 
   if (
-    selectedIndex < 0 ||
-    selectedIndex >=
-      objects.length - 1
+    isObjectLocked(selectedIndex)
   ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
     return;
   }
 
@@ -18716,11 +21447,19 @@ const bringForward = () => {
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
+
+/* =========================
+   REVERSE SELECTED DIRECTION
+========================= */
 
 const reverseSelectedDirection = () => {
   if (
     selectedIndex === null ||
+    selectedIndex === undefined ||
     !selectedObject
   ) {
     window.alert(
@@ -18743,7 +21482,7 @@ const reverseSelectedDirection = () => {
     isObjectLocked(selectedIndex)
   ) {
     window.alert(
-      "This object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -18786,8 +21525,7 @@ const reverseSelectedDirection = () => {
         object,
         index
       ) =>
-        index ===
-        selectedIndex
+        index === selectedIndex
           ? reversedObject
           : object
     );
@@ -18808,7 +21546,13 @@ const reverseSelectedDirection = () => {
   setSelectedIndexes([
     selectedIndex,
   ]);
+
+  setFuture([]);
 };
+
+/* =========================
+   CLEAR CURRENT LAYER
+========================= */
 
 const clearCurrentLayer = () => {
   const layerObjects =
@@ -18825,6 +21569,21 @@ const clearCurrentLayer = () => {
   ) {
     window.alert(
       "Current layer has no objects."
+    );
+    return;
+  }
+
+  /* =========================
+     CHECK CURRENT LAYER LOCK
+  ========================= */
+
+  if (
+    isLayerLocked(
+      activeLayerId
+    )
+  ) {
+    window.alert(
+      "Current layer is locked."
     );
     return;
   }
@@ -18898,6 +21657,11 @@ const clearCurrentLayer = () => {
   setFuture([]);
 };
 
+
+/* =========================
+   RESET VIEW
+========================= */
+
 const resetView = () => {
   setScale(1);
 
@@ -18914,6 +21678,11 @@ const resetView = () => {
   });
 };
 
+
+/* =========================
+   ROTATE SELECTED 90
+========================= */
+
 const rotateSelected90 = () => {
   if (
     selectedIndex === null ||
@@ -18924,12 +21693,17 @@ const rotateSelected90 = () => {
     );
     return;
   }
-  if (isObjectLocked(selectedIndex)) {
-  window.alert(
-    "This object is locked."
-  );
-  return;
-}
+
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
 
   const currentRotation =
     Number(
@@ -18945,6 +21719,11 @@ const rotateSelected90 = () => {
   );
 };
 
+
+/* =========================
+   RESET SELECTED ROTATION
+========================= */
+
 const resetSelectedRotation = () => {
   if (
     selectedIndex === null ||
@@ -18956,11 +21735,27 @@ const resetSelectedRotation = () => {
     return;
   }
 
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
   updateSelectedObject(
     "rotation",
     0
   );
 };
+
+
+/* =========================
+   INCREASE SELECTED TEXT SIZE
+========================= */
 
 const increaseSelectedTextSize = () => {
   if (
@@ -18982,6 +21777,17 @@ const increaseSelectedTextSize = () => {
     return;
   }
 
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
   const currentSize =
     Number(
       selectedObject.fontSize || 24
@@ -18998,6 +21804,11 @@ const increaseSelectedTextSize = () => {
     newSize
   );
 };
+
+
+/* =========================
+   DECREASE SELECTED TEXT SIZE
+========================= */
 
 const decreaseSelectedTextSize = () => {
   if (
@@ -19019,6 +21830,17 @@ const decreaseSelectedTextSize = () => {
     return;
   }
 
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
   const currentSize =
     Number(
       selectedObject.fontSize || 24
@@ -19035,6 +21857,11 @@ const decreaseSelectedTextSize = () => {
     newSize
   );
 };
+
+
+/* =========================
+   RESET SELECTED TEXT SIZE
+========================= */
 
 const resetSelectedTextSize = () => {
   if (
@@ -19056,11 +21883,27 @@ const resetSelectedTextSize = () => {
     return;
   }
 
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
   updateSelectedObject(
     "fontSize",
     24
   );
 };
+
+
+/* =========================
+   INCREASE SELECTED LINE WIDTH
+========================= */
 
 const increaseSelectedLineWidth = () => {
   if (
@@ -19069,6 +21912,17 @@ const increaseSelectedLineWidth = () => {
   ) {
     window.alert(
       "Select an object first."
+    );
+    return;
+  }
+
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -19090,6 +21944,11 @@ const increaseSelectedLineWidth = () => {
   );
 };
 
+
+/* =========================
+   DECREASE SELECTED LINE WIDTH
+========================= */
+
 const decreaseSelectedLineWidth = () => {
   if (
     selectedIndex === null ||
@@ -19097,6 +21956,17 @@ const decreaseSelectedLineWidth = () => {
   ) {
     window.alert(
       "Select an object first."
+    );
+    return;
+  }
+
+  if (
+    isObjectLocked(
+      selectedIndex
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -19118,15 +21988,26 @@ const decreaseSelectedLineWidth = () => {
   );
 };
 
+/* =========================
+   SELECT ALL LINES
+========================= */
+
 const selectAllLines = () => {
   const indexes = objects
-    .map((object, index) =>
-      object?.type === "line"
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return object?.type === "line"
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19137,16 +22018,27 @@ const selectAllLines = () => {
       : null
   );
 };
+
+/* =========================
+   SELECT ALL CIRCLES
+========================= */
 
 const selectAllCircles = () => {
   const indexes = objects
-    .map((object, index) =>
-      object?.type === "circle"
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return object?.type === "circle"
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19157,16 +22049,28 @@ const selectAllCircles = () => {
       : null
   );
 };
+
+
+/* =========================
+   SELECT ALL RECTANGLES
+========================= */
 
 const selectAllRectangles = () => {
   const indexes = objects
-    .map((object, index) =>
-      object?.type === "rectangle"
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return object?.type === "rectangle"
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19178,15 +22082,27 @@ const selectAllRectangles = () => {
   );
 };
 
+
+/* =========================
+   SELECT ALL TEXT
+========================= */
+
 const selectAllText = () => {
   const indexes = objects
-    .map((object, index) =>
-      object?.type === "text"
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return object?.type === "text"
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19204,13 +22120,20 @@ const selectAllText = () => {
 
 const selectAllPolylines = () => {
   const indexes = objects
-    .map((object, index) =>
-      object?.type === "polyline"
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return object?.type === "polyline"
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19229,13 +22152,20 @@ const selectAllPolylines = () => {
 
 const selectAllArcs = () => {
   const indexes = objects
-    .map((object, index) =>
-      object?.type === "arc"
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return object?.type === "arc"
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19261,15 +22191,22 @@ const selectAllDimensions = () => {
   ];
 
   const indexes = objects
-    .map((object, index) =>
-      dimensionTypes.includes(
+    .map((object, index) => {
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      return dimensionTypes.includes(
         object?.type
       )
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19300,6 +22237,13 @@ const selectAllVisible = () => {
 
   const indexes = objects
     .map((object, index) => {
+      /* HIDDEN OBJECTS ARE NOT VISIBLE */
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
       const layerId =
         object?.layerId ||
         "layer-0";
@@ -19311,7 +22255,8 @@ const selectAllVisible = () => {
         : null;
     })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -19323,14 +22268,21 @@ const selectAllVisible = () => {
   );
 };
 
+
 /* =========================
-   HIDE SELECTED OBJECT
+   HIDE SELECTED OBJECTS
 ========================= */
 
 const hideSelectedObject = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
   if (
-    selectedIndex === null ||
-    !selectedObject
+    indexes.length === 0
   ) {
     window.alert(
       "Select an object first."
@@ -19338,14 +22290,26 @@ const hideSelectedObject = () => {
     return;
   }
 
+  const editableIndexes =
+    indexes.filter(
+      (index) =>
+        objects[index] &&
+        !objects[index].locked
+    );
+
   if (
-    isObjectLocked(selectedIndex)
+    editableIndexes.length === 0
   ) {
     window.alert(
-      "This object is locked."
+      "Selected object is locked."
     );
     return;
   }
+
+  const indexSet =
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -19354,7 +22318,7 @@ const hideSelectedObject = () => {
   const updatedObjects =
     objects.map(
       (object, index) =>
-        index === selectedIndex
+        indexSet.has(index)
           ? {
               ...object,
               hidden: true,
@@ -19371,27 +22335,54 @@ const hideSelectedObject = () => {
     [...measurements]
   );
 
-  setSelectedIndex(
-    null
-  );
-
+  setSelectedIndex(null);
   setSelectedIndexes([]);
 };
 
 /* =========================
-   SHOW SELECTED OBJECT
+   SHOW ALL HIDDEN OBJECTS
 ========================= */
 
 const showAllHiddenObjects = () => {
+  const hiddenIndexes = objects
+    .map((object, index) =>
+      object?.hidden
+        ? index
+        : null
+    )
+    .filter(
+      (index) =>
+        index !== null
+    );
+
+  if (
+    hiddenIndexes.length === 0
+  ) {
+    window.alert(
+      "No hidden objects found."
+    );
+    return;
+  }
+
   const previousObjects = [
     ...objects,
   ];
 
+  const hiddenSet =
+    new Set(
+      hiddenIndexes
+    );
+
   const updatedObjects =
-    objects.map((object) => ({
-      ...object,
-      hidden: false,
-    }));
+    objects.map(
+      (object, index) =>
+        hiddenSet.has(index)
+          ? {
+              ...object,
+              hidden: false,
+            }
+          : object
+    );
 
   setObjects(
     updatedObjects
@@ -19408,24 +22399,36 @@ const showAllHiddenObjects = () => {
 ========================= */
 
 const toggleSelectedVisibility = () => {
-  if (
-    selectedIndex === null ||
-    !selectedObject
-  ) {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
     window.alert(
       "Select an object first."
     );
     return;
   }
 
-  if (
-    isObjectLocked(selectedIndex)
-  ) {
+  const editableIndexes =
+    indexes.filter(
+      (index) =>
+        objects[index] &&
+        !objects[index].locked
+    );
+
+  if (editableIndexes.length === 0) {
     window.alert(
-      "This object is locked."
+      "Selected object is locked."
     );
     return;
   }
+
+  const editableSet =
+    new Set(editableIndexes);
 
   const previousObjects = [
     ...objects,
@@ -19433,14 +22436,19 @@ const toggleSelectedVisibility = () => {
 
   const updatedObjects =
     objects.map(
-      (object, index) =>
-        index === selectedIndex
-          ? {
-              ...object,
-              hidden:
-                !object.hidden,
-            }
-          : object
+      (object, index) => {
+        if (
+          !editableSet.has(index)
+        ) {
+          return object;
+        }
+
+        return {
+          ...object,
+          hidden:
+            !object.hidden,
+        };
+      }
     );
 
   setObjects(
@@ -19452,6 +22460,7 @@ const toggleSelectedVisibility = () => {
     [...measurements]
   );
 };
+
 
 /* =========================
    NUDGE SELECTED OBJECTS
@@ -19608,6 +22617,7 @@ const nudgeSelectedDown = () => {
   );
 };
 
+
 /* =========================
    FIT ALL OBJECTS
 ========================= */
@@ -19646,16 +22656,28 @@ const fitAllObjects = () => {
             ];
 
           minX =
-            Math.min(minX, x);
+            Math.min(
+              minX,
+              x
+            );
 
           maxX =
-            Math.max(maxX, x);
+            Math.max(
+              maxX,
+              x
+            );
 
           minY =
-            Math.min(minY, y);
+            Math.min(
+              minY,
+              y
+            );
 
           maxY =
-            Math.max(maxY, y);
+            Math.max(
+              maxY,
+              y
+            );
         }
       }
 
@@ -19709,19 +22731,23 @@ const fitAllObjects = () => {
   const centerY =
     (minY + maxY) / 2;
 
- setPosition({
-  x:
-    (viewportSize.width <= 768
-      ? viewportSize.width
-      : viewportSize.width - 298) / 2 -
-    centerX * scale,
+  setPosition({
+    x:
+      (
+        viewportSize.width <= 768
+          ? viewportSize.width
+          : viewportSize.width - 298
+      ) / 2 -
+      centerX * scale,
 
-  y:
-    (viewportSize.width <= 768
-      ? viewportSize.height - 87 - 64
-      : viewportSize.height - 87) / 2 -
-    centerY * scale,
-});
+    y:
+      (
+        viewportSize.width <= 768
+          ? viewportSize.height - 87 - 64
+          : viewportSize.height - 87
+      ) / 2 -
+      centerY * scale,
+  });
 };
 
 
@@ -20359,7 +23385,6 @@ const rotateSelected45 = () => {
   );
 };
 
-
 /* =========================
    SET EXACT ROTATION
 ========================= */
@@ -20374,32 +23399,39 @@ const setExactRotation = () => {
     );
     return;
   }
-  if (isObjectLocked(selectedIndex)) {
-  window.alert(
-    "This object is locked."
-  );
-  return;
-}
+
+  if (
+    isObjectLocked(selectedIndex)
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
 
   const currentRotation =
     Number(
       selectedObject.rotation || 0
     );
 
-  const input = window.prompt(
-    "Enter rotation angle:",
-    String(currentRotation)
-  );
+  const input =
+    window.prompt(
+      "Enter rotation angle:",
+      String(currentRotation)
+    );
 
   if (input === null) {
     return;
   }
 
-  const angle = Number(
-    input.trim()
-  );
+  const angle =
+    Number(
+      input.trim()
+    );
 
-  if (!Number.isFinite(angle)) {
+  if (
+    !Number.isFinite(angle)
+  ) {
     window.alert(
       "Please enter a valid angle."
     );
@@ -20412,6 +23444,11 @@ const setExactRotation = () => {
   );
 };
 
+
+/* =========================
+   HIDE ALL SELECTED
+========================= */
+
 const hideAllSelected = () => {
   const indexes =
     selectedIndexes.length > 0
@@ -20420,7 +23457,9 @@ const hideAllSelected = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
+  if (
+    indexes.length === 0
+  ) {
     window.alert(
       "Select at least one object."
     );
@@ -20431,18 +23470,26 @@ const hideAllSelected = () => {
     indexes.filter(
       (index) =>
         objects[index] &&
-        !objects[index].locked
+        !objects[index].locked &&
+        !isLayerLocked(
+          objects[index].layerId ||
+            "layer-0"
+        )
     );
 
-  if (editableIndexes.length === 0) {
+  if (
+    editableIndexes.length === 0
+  ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
 
   const indexSet =
-    new Set(editableIndexes);
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -20470,7 +23517,14 @@ const hideAllSelected = () => {
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
+
+/* =========================
+   SHOW SELECTED OBJECTS
+========================= */
 
 const showSelectedObjects = () => {
   const indexes =
@@ -20480,7 +23534,9 @@ const showSelectedObjects = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
+  if (
+    indexes.length === 0
+  ) {
     window.alert(
       "Select at least one object."
     );
@@ -20491,18 +23547,26 @@ const showSelectedObjects = () => {
     indexes.filter(
       (index) =>
         objects[index] &&
-        !objects[index].locked
+        !objects[index].locked &&
+        !isLayerLocked(
+          objects[index].layerId ||
+            "layer-0"
+        )
     );
 
-  if (editableIndexes.length === 0) {
+  if (
+    editableIndexes.length === 0
+  ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
 
   const indexSet =
-    new Set(editableIndexes);
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -20527,7 +23591,14 @@ const showSelectedObjects = () => {
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
+
+/* =========================
+   LOCK SELECTED OBJECTS
+========================= */
 
 const lockSelectedObjects = () => {
   const indexes =
@@ -20537,32 +23608,71 @@ const lockSelectedObjects = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
-    window.alert("Select at least one object.");
+  if (
+    indexes.length === 0
+  ) {
+    window.alert(
+      "Select at least one object."
+    );
     return;
   }
 
-  const indexSet = new Set(indexes);
+  const editableIndexes =
+    indexes.filter(
+      (index) =>
+        objects[index] &&
+        !objects[index].locked &&
+        !isLayerLocked(
+          objects[index].layerId ||
+            "layer-0"
+        )
+    );
 
-  const previousObjects = [...objects];
+  if (
+    editableIndexes.length === 0
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
 
-  const updatedObjects = objects.map(
-    (object, index) =>
-      indexSet.has(index)
-        ? {
-            ...object,
-            locked: true,
-          }
-        : object
+  const indexSet =
+    new Set(
+      editableIndexes
+    );
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        indexSet.has(index)
+          ? {
+              ...object,
+              locked: true,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
   );
-
-  setObjects(updatedObjects);
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
+
+/* =========================
+   UNLOCK SELECTED OBJECTS
+========================= */
 
 const unlockSelectedObjects = () => {
   const indexes =
@@ -20572,33 +23682,61 @@ const unlockSelectedObjects = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
-    window.alert("Select at least one object.");
+  if (
+    indexes.length === 0
+  ) {
+    window.alert(
+      "Select at least one object."
+    );
     return;
   }
 
-  const indexSet = new Set(indexes);
+  const lockedIndexes =
+    indexes.filter(
+      (index) =>
+        objects[index]?.locked
+    );
 
-  const previousObjects = [...objects];
+  if (
+    lockedIndexes.length === 0
+  ) {
+    window.alert(
+      "No locked selected objects found."
+    );
+    return;
+  }
 
-  const updatedObjects = objects.map(
-    (object, index) =>
-      indexSet.has(index)
-        ? {
-            ...object,
-            locked: false,
-          }
-        : object
+  const lockedSet =
+    new Set(
+      lockedIndexes
+    );
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        lockedSet.has(index)
+          ? {
+              ...object,
+              locked: false,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
   );
-
-  setObjects(updatedObjects);
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
-};
 
+  setFuture([]);
+};
 /* =========================
    FLIP HORIZONTAL
 ========================= */
@@ -20611,7 +23749,9 @@ const flipSelectedHorizontal = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
+  if (
+    indexes.length === 0
+  ) {
     window.alert(
       "Select at least one object."
     );
@@ -20622,18 +23762,26 @@ const flipSelectedHorizontal = () => {
     indexes.filter(
       (index) =>
         objects[index] &&
-        !objects[index].locked
+        !objects[index].locked &&
+        !isLayerLocked(
+          objects[index].layerId ||
+            "layer-0"
+        )
     );
 
-  if (editableIndexes.length === 0) {
+  if (
+    editableIndexes.length === 0
+  ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
 
   const indexSet =
-    new Set(editableIndexes);
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -20642,12 +23790,20 @@ const flipSelectedHorizontal = () => {
   const updatedObjects =
     objects.map(
       (object, index) => {
-        if (!indexSet.has(index)) {
+        if (
+          !indexSet.has(index)
+        ) {
           return object;
         }
 
+        /* =========================
+           POINT-BASED OBJECTS
+        ========================= */
+
         if (
-          Array.isArray(object.points) &&
+          Array.isArray(
+            object.points
+          ) &&
           object.points.length >= 2
         ) {
           let minX = Infinity;
@@ -20694,17 +23850,26 @@ const flipSelectedHorizontal = () => {
 
           return {
             ...object,
-            points: newPoints,
+            points:
+              newPoints,
           };
         }
 
+        /* =========================
+           X-BASED OBJECTS
+        ========================= */
+
         if (
-          Number.isFinite(object.x)
+          Number.isFinite(
+            object.x
+          )
         ) {
           return {
             ...object,
             scaleX:
-              -(object.scaleX || 1),
+              -(
+                object.scaleX || 1
+              ),
           };
         }
 
@@ -20712,13 +23877,18 @@ const flipSelectedHorizontal = () => {
       }
     );
 
-  setObjects(updatedObjects);
+  setObjects(
+    updatedObjects
+  );
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
 
 /* =========================
    FLIP VERTICAL
@@ -20732,7 +23902,9 @@ const flipSelectedVertical = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
+  if (
+    indexes.length === 0
+  ) {
     window.alert(
       "Select at least one object."
     );
@@ -20743,18 +23915,26 @@ const flipSelectedVertical = () => {
     indexes.filter(
       (index) =>
         objects[index] &&
-        !objects[index].locked
+        !objects[index].locked &&
+        !isLayerLocked(
+          objects[index].layerId ||
+            "layer-0"
+        )
     );
 
-  if (editableIndexes.length === 0) {
+  if (
+    editableIndexes.length === 0
+  ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
 
   const indexSet =
-    new Set(editableIndexes);
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -20763,12 +23943,20 @@ const flipSelectedVertical = () => {
   const updatedObjects =
     objects.map(
       (object, index) => {
-        if (!indexSet.has(index)) {
+        if (
+          !indexSet.has(index)
+        ) {
           return object;
         }
 
+        /* =========================
+           POINT-BASED OBJECTS
+        ========================= */
+
         if (
-          Array.isArray(object.points) &&
+          Array.isArray(
+            object.points
+          ) &&
           object.points.length >= 2
         ) {
           let minY = Infinity;
@@ -20815,17 +24003,26 @@ const flipSelectedVertical = () => {
 
           return {
             ...object,
-            points: newPoints,
+            points:
+              newPoints,
           };
         }
 
+        /* =========================
+           Y-BASED OBJECTS
+        ========================= */
+
         if (
-          Number.isFinite(object.y)
+          Number.isFinite(
+            object.y
+          )
         ) {
           return {
             ...object,
             scaleY:
-              -(object.scaleY || 1),
+              -(
+                object.scaleY || 1
+              ),
           };
         }
 
@@ -20833,13 +24030,18 @@ const flipSelectedVertical = () => {
       }
     );
 
-  setObjects(updatedObjects);
+  setObjects(
+    updatedObjects
+  );
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
+
 /* =========================
    DUPLICATE ALL SELECTED
 ========================= */
@@ -20852,7 +24054,9 @@ const duplicateAllSelected = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
+  if (
+    indexes.length === 0
+  ) {
     window.alert(
       "Select at least one object."
     );
@@ -20861,14 +24065,43 @@ const duplicateAllSelected = () => {
 
   const editableIndexes =
     indexes.filter(
-      (index) =>
-        objects[index] &&
-        !objects[index].locked
+      (index) => {
+        const object =
+          objects[index];
+
+        if (!object) {
+          return false;
+        }
+
+        /* OBJECT LOCK */
+        if (
+          object.locked
+        ) {
+          return false;
+        }
+
+        /* LAYER LOCK */
+        const objectLayerId =
+          object.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            objectLayerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
     );
 
-  if (editableIndexes.length === 0) {
+  if (
+    editableIndexes.length === 0
+  ) {
     window.alert(
-      "Selected object is locked."
+      "Selected object or its layer is locked."
     );
     return;
   }
@@ -20883,37 +24116,57 @@ const duplicateAllSelected = () => {
 
   const duplicates =
     selectedObjects.map(
-      (object) => ({
-        ...object,
-        locked: false,
-        hidden: false,
+      (object) => {
+        const duplicate = {
+          ...object,
+          locked: false,
+          hidden: false,
+        };
 
-        ...(Array.isArray(
-          object.points
-        )
-          ? {
-              points:
-                object.points.map(
-                  (value) =>
-                    value + 25
-                ),
-            }
-          : {}),
+        /* =========================
+           POINTS
+        ========================= */
 
-        ...(object.x !== undefined
-          ? {
-              x:
-                object.x + 25,
-            }
-          : {}),
+        if (
+          Array.isArray(
+            object.points
+          )
+        ) {
+          duplicate.points =
+            object.points.map(
+              (value) =>
+                value + 25
+            );
+        }
 
-        ...(object.y !== undefined
-          ? {
-              y:
-                object.y + 25,
-            }
-          : {}),
-      })
+        /* =========================
+           X POSITION
+        ========================= */
+
+        if (
+          Number.isFinite(
+            object.x
+          )
+        ) {
+          duplicate.x =
+            object.x + 25;
+        }
+
+        /* =========================
+           Y POSITION
+        ========================= */
+
+        if (
+          Number.isFinite(
+            object.y
+          )
+        ) {
+          duplicate.y =
+            object.y + 25;
+        }
+
+        return duplicate;
+      }
     );
 
   const previousObjects = [
@@ -20960,6 +24213,11 @@ const duplicateAllSelected = () => {
   setFuture([]);
 };
 
+
+/* =========================
+   DUPLICATE WITH OFFSET
+========================= */
+
 const duplicateWithOffset = () => {
   const indexes =
     selectedIndexes.length > 0
@@ -20968,7 +24226,9 @@ const duplicateWithOffset = () => {
         ? [selectedIndex]
         : [];
 
-  if (indexes.length === 0) {
+  if (
+    indexes.length === 0
+  ) {
     window.alert(
       "Select at least one object."
     );
@@ -20977,33 +24237,68 @@ const duplicateWithOffset = () => {
 
   const editableIndexes =
     indexes.filter(
-      (index) =>
-        objects[index] &&
-        !objects[index].locked
+      (index) => {
+        const object =
+          objects[index];
+
+        if (!object) {
+          return false;
+        }
+
+        /* OBJECT LOCK */
+        if (
+          object.locked
+        ) {
+          return false;
+        }
+
+        /* LAYER LOCK */
+        const objectLayerId =
+          object.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            objectLayerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
     );
-
-  if (editableIndexes.length === 0) {
-    window.alert(
-      "Selected object is locked."
-    );
-    return;
-  }
-
-  const input = window.prompt(
-    "Enter duplicate offset:",
-    "25"
-  );
-
-  if (input === null) {
-    return;
-  }
-
-  const offset = Number(
-    input.trim()
-  );
 
   if (
-    !Number.isFinite(offset) ||
+    editableIndexes.length === 0
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
+  const input =
+    window.prompt(
+      "Enter duplicate offset:",
+      "25"
+    );
+
+  if (
+    input === null
+  ) {
+    return;
+  }
+
+  const offset =
+    Number(
+      input.trim()
+    );
+
+  if (
+    !Number.isFinite(
+      offset
+    ) ||
     offset <= 0
   ) {
     window.alert(
@@ -21029,6 +24324,10 @@ const duplicateWithOffset = () => {
           hidden: false,
         };
 
+        /* =========================
+           POINTS
+        ========================= */
+
         if (
           Array.isArray(
             object.points
@@ -21041,6 +24340,10 @@ const duplicateWithOffset = () => {
             );
         }
 
+        /* =========================
+           X POSITION
+        ========================= */
+
         if (
           Number.isFinite(
             object.x
@@ -21049,6 +24352,10 @@ const duplicateWithOffset = () => {
           duplicate.x =
             object.x + offset;
         }
+
+        /* =========================
+           Y POSITION
+        ========================= */
 
         if (
           Number.isFinite(
@@ -21110,21 +24417,52 @@ const duplicateWithOffset = () => {
 ========================= */
 
 const unlockEveryObject = () => {
-  const previousObjects = [...objects];
+  const lockedIndexes = objects
+    .map((object, index) =>
+      object?.locked
+        ? index
+        : null
+    )
+    .filter(
+      (index) =>
+        index !== null
+    );
 
-  const updatedObjects = objects.map(
-    (object) => ({
-      ...object,
-      locked: false,
-    })
+  if (lockedIndexes.length === 0) {
+    window.alert(
+      "No locked objects found."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const lockedSet =
+    new Set(lockedIndexes);
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        lockedSet.has(index)
+          ? {
+              ...object,
+              locked: false,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
   );
-
-  setObjects(updatedObjects);
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
+
+  setFuture([]);
 };
 
 
@@ -21133,23 +24471,53 @@ const unlockEveryObject = () => {
 ========================= */
 
 const showEverything = () => {
-  const previousObjects = [...objects];
+  const hiddenIndexes = objects
+    .map((object, index) =>
+      object?.hidden
+        ? index
+        : null
+    )
+    .filter(
+      (index) =>
+        index !== null
+    );
 
-  const updatedObjects = objects.map(
-    (object) => ({
-      ...object,
-      hidden: false,
-    })
+  if (hiddenIndexes.length === 0) {
+    window.alert(
+      "No hidden objects found."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const hiddenSet =
+    new Set(hiddenIndexes);
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        hiddenSet.has(index)
+          ? {
+              ...object,
+              hidden: false,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
   );
-
-  setObjects(updatedObjects);
 
   saveHistory(
     previousObjects,
     [...measurements]
   );
-};
 
+  setFuture([]);
+};
 
 /* =========================
    SELECT LOCKED OBJECTS
@@ -21163,7 +24531,8 @@ const selectLockedObjects = () => {
         : null
     )
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -21188,7 +24557,8 @@ const selectHiddenObjects = () => {
         : null
     )
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -21200,20 +24570,24 @@ const selectHiddenObjects = () => {
   );
 };
 
-
 /* =========================
    SELECT UNLOCKED OBJECTS
 ========================= */
 
 const selectUnlockedObjects = () => {
   const indexes = objects
-    .map((object, index) =>
-      !object?.locked
+    .map((object, index) => {
+      if (object?.hidden) {
+        return null;
+      }
+
+      return !object?.locked
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -21232,13 +24606,18 @@ const selectUnlockedObjects = () => {
 
 const selectObjectsWithoutLayer = () => {
   const indexes = objects
-    .map((object, index) =>
-      !object?.layerId
+    .map((object, index) => {
+      if (object?.hidden) {
+        return null;
+      }
+
+      return !object?.layerId
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
   setSelectedIndexes(indexes);
@@ -21285,7 +24664,9 @@ const resetSelectedColor = () => {
   }
 
   const indexSet =
-    new Set(editableIndexes);
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -21311,6 +24692,7 @@ const resetSelectedColor = () => {
     [...measurements]
   );
 };
+
 
 /* =========================
    RESET SELECTED WIDTH
@@ -21346,7 +24728,9 @@ const resetSelectedWidth = () => {
   }
 
   const indexSet =
-    new Set(editableIndexes);
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -21372,6 +24756,7 @@ const resetSelectedWidth = () => {
     [...measurements]
   );
 };
+
 
 /* =========================
    RESET SELECTED OBJECT
@@ -21406,8 +24791,10 @@ const resetSelectedObject = () => {
     return;
   }
 
-  const indexSet =
-    new Set(editableIndexes);
+  const editableSet =
+    new Set(
+      editableIndexes
+    );
 
   const previousObjects = [
     ...objects,
@@ -21416,16 +24803,17 @@ const resetSelectedObject = () => {
   const updatedObjects =
     objects.map(
       (object, index) => {
-        if (!indexSet.has(index)) {
+        if (
+          !editableSet.has(index)
+        ) {
           return object;
         }
 
         return {
           ...object,
-          rotation: 0,
-          hidden: false,
           color: "#ffffff",
           strokeWidth: 2,
+          rotation: 0,
         };
       }
     );
@@ -21476,6 +24864,10 @@ const isObjectLocked = (index) => {
   );
 };
 
+/* =========================
+   DELETE ALL HIDDEN OBJECTS
+========================= */
+
 const deleteAllHiddenObjects = () => {
   const hiddenIndexes = objects
     .map((object, index) =>
@@ -21484,10 +24876,13 @@ const deleteAllHiddenObjects = () => {
         : null
     )
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
-  if (hiddenIndexes.length === 0) {
+  if (
+    hiddenIndexes.length === 0
+  ) {
     window.alert(
       "No hidden objects found."
     );
@@ -21498,10 +24893,12 @@ const deleteAllHiddenObjects = () => {
     hiddenIndexes.filter(
       (index) =>
         objects[index] &&
-        !objects[index].locked
+        !isObjectLocked(index)
     );
 
-  if (deletableIndexes.length === 0) {
+  if (
+    deletableIndexes.length === 0
+  ) {
     window.alert(
       "All hidden objects are locked."
     );
@@ -21538,6 +24935,7 @@ const deleteAllHiddenObjects = () => {
 
   setSelectedIndex(null);
   setSelectedIndexes([]);
+
   setSelectedMeasurementIndex(
     null
   );
@@ -21551,15 +24949,24 @@ const deleteAllHiddenObjects = () => {
 };
 
 const selectByLayerPrompt = () => {
-  if (!layers || layers.length === 0) {
-    window.alert("No layers available.");
+  if (
+    !layers ||
+    layers.length === 0
+  ) {
+    window.alert(
+      "No layers available."
+    );
     return;
   }
 
   const layerList = layers
     .map(
       (layer, index) =>
-        `${index + 1}. ${layer.name}`
+        `${index + 1}. ${layer.name}${
+          layer.visible
+            ? ""
+            : " (Hidden)"
+        }`
     )
     .join("\n");
 
@@ -21582,29 +24989,70 @@ const selectByLayerPrompt = () => {
     layerNumber < 1 ||
     layerNumber > layers.length
   ) {
-    window.alert("Invalid layer number.");
+    window.alert(
+      "Enter a valid layer number."
+    );
     return;
   }
 
-  const targetLayer =
+  const selectedLayer =
     layers[layerNumber - 1];
 
+  if (!selectedLayer) {
+    window.alert(
+      "Layer not found."
+    );
+    return;
+  }
+
+  if (!selectedLayer.visible) {
+    window.alert(
+      "This layer is hidden."
+    );
+    return;
+  }
+
+  const selectedLayerId =
+    selectedLayer.id;
+
   const indexes = objects
-    .map((object, index) =>
-      (object?.layerId || "layer-0") ===
-      targetLayer.id
+    .map((object, index) => {
+      /* HIDDEN OBJECTS ARE NOT SELECTABLE */
+      if (
+        object?.hidden
+      ) {
+        return null;
+      }
+
+      const objectLayerId =
+        object?.layerId ||
+        "layer-0";
+
+      return objectLayerId ===
+        selectedLayerId
         ? index
-        : null
-    )
+        : null;
+    })
     .filter(
-      (index) => index !== null
+      (index) =>
+        index !== null
     );
 
-  setSelectedIndexes(indexes);
+  if (indexes.length === 0) {
+    window.alert(
+      "No visible objects found on this layer."
+    );
+  }
+
+  setSelectedIndexes(
+    indexes
+  );
 
   setSelectedIndex(
     indexes.length > 0
-      ? indexes[indexes.length - 1]
+      ? indexes[
+          indexes.length - 1
+        ]
       : null
   );
 };
@@ -23918,87 +27366,286 @@ setArcPoints([]);
         ]
       : null;
 
+      /* =====================================================
+   HOME / RECENT SCREEN
+===================================================== */
+
+if (showHome) {
+  return (
+    <div className="cad-home">
+
+      {/* HEADER */}
+      <div className="cad-home-header">
+
+        <div className="cad-home-brand">
+          <div className="cad-home-menu">☰</div>
+
+          <div>
+            <div className="cad-home-title">
+              AutoCAD
+            </div>
+
+            <div className="cad-home-subtitle">
+              Mobile
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="cad-home-profile"
+        >
+          👤
+        </button>
+
+      </div>
+
+
+      {/* TRIAL / ACCOUNT BANNER */}
+      <div className="cad-home-banner">
+
+        <div>
+          <strong>
+            AutoCAD
+          </strong>
+
+          <div>
+            Start creating your drawings
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowHome(false)}
+        >
+          Continue
+        </button>
+
+      </div>
+
+
+      {/* RECENT */}
+      <section className="cad-home-section">
+
+        <div className="cad-home-section-title">
+          Recent
+        </div>
+
+        <button
+          type="button"
+          className="cad-recent-card"
+          onClick={() => setShowHome(false)}
+        >
+
+          <div className="cad-recent-preview">
+            <div className="cad-recent-line"></div>
+            <div className="cad-recent-line second"></div>
+          </div>
+
+          <div className="cad-recent-info">
+
+            <strong>
+              Drawing1.dwg
+            </strong>
+
+            <span>
+              Recent drawing
+            </span>
+
+          </div>
+
+          <span className="cad-recent-arrow">
+            ›
+          </span>
+
+        </button>
+
+      </section>
+
+
+      {/* SOURCES */}
+      <section className="cad-home-section">
+
+        <div className="cad-home-section-title">
+          Sources
+        </div>
+
+
+        <button
+          type="button"
+          className="cad-source-row"
+        >
+          <span className="cad-source-icon">
+            ☁
+          </span>
+
+          <span>
+            AutoCAD Web
+          </span>
+
+          <span className="cad-source-arrow">
+            ›
+          </span>
+        </button>
+
+
+        <button
+          type="button"
+          className="cad-source-row"
+          onClick={openDrawing}
+        >
+          <span className="cad-source-icon">
+            📂
+          </span>
+
+          <span>
+            Open from device
+          </span>
+
+          <span className="cad-source-arrow">
+            ›
+          </span>
+        </button>
+
+
+        <button
+          type="button"
+          className="cad-source-row"
+        >
+          <span className="cad-source-icon">
+            📁
+          </span>
+
+          <span>
+            Autodesk Projects
+          </span>
+
+          <span className="cad-source-arrow">
+            ›
+          </span>
+        </button>
+
+
+        <button
+          type="button"
+          className="cad-source-row"
+        >
+          <span className="cad-source-icon">
+            ＋
+          </span>
+
+          <span>
+            Add Storage Source
+          </span>
+
+          <span className="cad-source-arrow">
+            ›
+          </span>
+        </button>
+
+      </section>
+
+
+      {/* NEW DRAWING */}
+      <button
+        type="button"
+        className="cad-new-drawing"
+        onClick={() => setShowHome(false)}
+      >
+        ＋ New Drawing
+      </button>
+
+    </div>
+  );
+}
+
   return (
     
   
     <div className="app">
 
 
-      {/* TOP BAR */}
+  {/* TOP BAR */}
 
- <div
+<div
   className="mobile-topbar"
   onTouchStart={(e) => e.stopPropagation()}
   onTouchMove={(e) => e.stopPropagation()}
   onTouchEnd={(e) => e.stopPropagation()}
   onPointerDown={(e) => e.stopPropagation()}
 >
-  {/* SELECT */}
+
+  {/* HOME */}
   <button
     type="button"
     onClick={(e) => {
       e.stopPropagation();
-      changeTool("select");
+      setShowHome(true);
     }}
-    title="Select"
+    title="Home"
   >
-    ✕
+    ☰
   </button>
 
-  {/* UNDO */}
- <button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
+  {/* DRAWING NAME */}
+  <div className="mobile-topbar-title">
+    Drawing1.dwg
+  </div>
 
-    try {
-      undo();
-    } catch (error) {
-      console.error("Undo failed:", error);
-    }
-  }}
->
-  ↶
-</button>
+  {/* UNDO */}
+  <button
+    type="button"
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
+
+      try {
+        undo();
+      } catch (error) {
+        console.error("Undo failed:", error);
+      }
+    }}
+  >
+    ↶
+  </button>
 
   {/* REDO */}
- <button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
+  <button
+    type="button"
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
 
-    try {
-      redo();
-    } catch (error) {
-      console.error("Redo failed:", error);
-    }
-  }}
->
-  ↷
-</button>
+      try {
+        redo();
+      } catch (error) {
+        console.error("Redo failed:", error);
+      }
+    }}
+  >
+    ↷
+  </button>
 
   {/* SAVE */}
- <button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
+  <button
+    type="button"
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
 
-    try {
-      saveDrawing();
-    } catch (error) {
-      console.error("Save failed:", error);
-      window.alert("Save nahi ho paya.");
-    }
-  }}
->
-  💾
-</button>
+      try {
+        saveDrawing();
+      } catch (error) {
+        console.error("Save failed:", error);
+        window.alert("Save nahi ho paya.");
+      }
+    }}
+  >
+    💾
+  </button>
 
   {/* ZOOM FIT */}
   <button
@@ -24013,37 +27660,40 @@ setArcPoints([]);
   </button>
 
   {/* RESET VIEW */}
- <button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    const centerX = viewportSize.width / 2;
-    const centerY =
-      (viewportSize.height - 87 - 64) / 2;
-
-    setScale(1);
-    setPosition({
-      x: centerX,
-      y: centerY,
-    });
-  }}
->
-  ⛶
-</button>
-
-
-  {/* MORE / PROPERTIES */}
   <button
+    type="button"
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
+
+      const centerX =
+        viewportSize.width / 2;
+
+      const centerY =
+        (viewportSize.height - 87 - 64) / 2;
+
+      setScale(1);
+
+      setPosition({
+        x: centerX,
+        y: centerY,
+      });
+    }}
+    title="Reset View"
+  >
+    ⛶
+  </button>
+
+ {/* MORE / PROPERTIES */}
+<button
   type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
   onClick={(e) => {
     e.stopPropagation();
+
     setShowMobileProperties((prev) => !prev);
   }}
+  title="More"
 >
   ⋮
 </button>
@@ -24064,11 +27714,14 @@ setArcPoints([]);
           New
         </button>
 
-        <button
-          onClick={openDrawing}
-        >
-          Open
-        </button>
+      <button
+  type="button"
+  onClick={() => {
+    window.alert("BUTTON CLICK HO RAHA HAI");
+  }}
+>
+  Open
+</button>
 
         <button
   type="button"
@@ -26247,26 +29900,30 @@ stroke="#ffd54f"
   />
 )}
 
-{/* LINE LIVE PREVIEW */}
+{/* =========================
+   LINE LIVE PREVIEW
+========================= */}
 
 {linePreview &&
   (tool === "line" || tool === "polyline") &&
   !showLineInput && (
-  <Line
-    points={[
-      linePreview.x1,
-      linePreview.y1,
-      linePreview.x2,
-      linePreview.y2,
-    ]}
-    stroke="cyan"
-    strokeWidth={2 / scale}
-    dash={[8, 6]}
-    listening={false}
-  />
+   <Line
+  points={[
+    linePreview.x1,
+    linePreview.y1,
+    linePreview.x2,
+    linePreview.y2,
+  ]}
+  stroke="#00ff66"
+  strokeWidth={1}
+  strokeScaleEnabled={false}
+  dash={[8, 6]}
+  listening={false}
+/>
 )}
 
-{(tool === "line" || tool === "polyline") &&
+{viewportSize.width > 768 &&
+  (tool === "line" || tool === "polyline") &&
   linePreview &&
   !showLineInput && (
     <Group
@@ -26373,39 +30030,41 @@ stroke="#ffd54f"
 {(tool === "line" || tool === "polyline") && (
   <>
     {/* SMALL HORIZONTAL CROSSHAIR */}
-    <Line
-      points={[
-        mousePosition.x - 10 / scale,
-        mousePosition.y,
-        mousePosition.x + 10 / scale,
-        mousePosition.y,
-      ]}
-      stroke="#808080"
-      strokeWidth={1.2 / scale}
-      listening={false}
-    />
+  <Line
+  points={[
+    mousePosition.x - 10 / scale,
+    mousePosition.y,
+    mousePosition.x + 10 / scale,
+    mousePosition.y,
+  ]}
+  stroke="#808080"
+  strokeWidth={1}
+  strokeScaleEnabled={false}
+  listening={false}
+/>
 
-    {/* SMALL VERTICAL CROSSHAIR */}
-    <Line
-      points={[
-        mousePosition.x,
-        mousePosition.y - 10 / scale,
-        mousePosition.x,
-        mousePosition.y + 10 / scale,
-      ]}
-      stroke="#808080"
-      strokeWidth={1.2 / scale}
-      listening={false}
-    />
+<Line
+  points={[
+    mousePosition.x,
+    mousePosition.y - 10 / scale,
+    mousePosition.x,
+    mousePosition.y + 10 / scale,
+  ]}
+  stroke="#808080"
+  strokeWidth={1}
+  strokeScaleEnabled={false}
+  listening={false}
+/>
 
     {/* CENTER POINT */}
     <Circle
-      x={mousePosition.x}
-      y={mousePosition.y}
-      radius={2 / scale}
-      fill="#00e5ff"
-      listening={false}
-    />
+  x={mousePosition.x}
+  y={mousePosition.y}
+  radius={2}
+  fill="#00ff66"
+  strokeScaleEnabled={false}
+  listening={false}
+/>
 
     {/* LIVE COORDINATES */}
     <Text
@@ -26419,7 +30078,9 @@ stroke="#ffd54f"
   </>
 )}
 
-{tool === "line" && !showLineInput && (
+{viewportSize.width > 768 &&
+  tool === "line" &&
+  !showLineInput && (
   <Group
     x={mousePosition.x - 19 / scale}
     y={mousePosition.y - 40 / scale}
@@ -26780,9 +30441,9 @@ onTouchStart={(e) => {
     </>
   )}
 
-{(tool === "line" || tool === "polyline") && 
-  polarEnabled && 
-  lineStart && 
+{(tool === "line" || tool === "polyline") &&
+  polarEnabled &&
+  lineStart &&
   !showLineInput && (
     <>
       <Line
@@ -26794,10 +30455,10 @@ onTouchStart={(e) => {
           snapPoint?.y ??
             mousePosition.y,
         ]}
-        stroke="#00b8d4"
-
-       strokeWidth={0.8 / scale}
-        dash={[8 / scale, 6 / scale]}
+       stroke="#00ff66"
+        strokeWidth={1}
+        strokeScaleEnabled={false}
+        dash={[8, 6]}
         listening={false}
       />
 
@@ -26819,7 +30480,7 @@ onTouchStart={(e) => {
         }
         text="POLAR"
         fontSize={12 / scale}
-        fill="#00d9ff"
+       fill="#00ff66"
         listening={false}
       />
     </>
@@ -26828,37 +30489,33 @@ onTouchStart={(e) => {
  {objectSnapTrackingEnabled &&
   snapPoint && (
     <>
-      <Line
-        points={[
-          -100000,
-          snapPoint.y,
-          100000,
-          snapPoint.y,
-        ]}
-        stroke="#7b61a8"
-        strokeWidth={1 / scale}
-        dash={[
-          8 / scale,
-          6 / scale,
-        ]}
-        listening={false}
-      />
+   <Line
+  points={[
+    -100000,
+    snapPoint.y,
+    100000,
+    snapPoint.y,
+  ]}
+  stroke="#00ff66"
+  strokeWidth={1}
+  strokeScaleEnabled={false}
+  dash={[8, 6]}
+  listening={false}
+/>
 
-      <Line
-        points={[
-          snapPoint.x,
-          -100000,
-          snapPoint.x,
-          100000,
-        ]}
-       stroke="#7b61a8"
-        strokeWidth={1 / scale}
-        dash={[
-          8 / scale,
-          6 / scale,
-        ]}
-        listening={false}
-      />
+<Line
+  points={[
+    snapPoint.x,
+    -100000,
+    snapPoint.x,
+    100000,
+  ]}
+  stroke="#00ff66"
+  strokeWidth={1}
+  strokeScaleEnabled={false}
+  dash={[8, 6]}
+  listening={false}
+/>
 
       <Text
         x={
@@ -26871,7 +30528,7 @@ onTouchStart={(e) => {
         }
         text="TRACK"
         fontSize={11 / scale}
-        fill="#7b61a8"
+        fill="#00ff66"
         listening={false}
       />
     </>
@@ -26895,7 +30552,7 @@ onTouchStart={(e) => {
       text={snapType}
       fontSize={12 / scale}
       fontStyle="bold"
-      fill="#ffd400"
+      fill="#00ff66"
       listening={false}
     />
   )}
@@ -26904,7 +30561,8 @@ onTouchStart={(e) => {
    LIVE LINE INFO
 ========================= */}
 
-{dynamicInputEnabled &&
+{viewportSize.width > 768 &&
+  dynamicInputEnabled &&
   (tool === "line" || tool === "polyline") &&
   lineStart &&
   linePreview &&
@@ -28481,9 +32139,21 @@ if (
     return null;
   }
 
+  /* =========================
+   HIDDEN OBJECT
+========================= */
+
+if (object?.hidden) {
+  return null;
+}
+
   const selected =
     selectedIndex === index ||
     selectedIndexes.includes(index);
+  
+  const joinSelected =
+  tool === "join" &&
+  selectedIndexes.includes(index);
 
   if (
     !selected &&
@@ -28557,6 +32227,326 @@ if (tool === "move") {
 }
 
 /* =========================
+   OFFSET LIVE PREVIEW
+========================= */
+
+{offsetPreview &&
+  offsetPreview.index !== null &&
+  objects[offsetPreview.index] && (
+    <Group
+      opacity={0.45}
+      listening={false}
+    >
+      {(() => {
+        const original =
+          objects[offsetPreview.index];
+
+        const distance =
+          Math.abs(
+            Number(
+              offsetPreview.distance || 0
+            )
+          );
+
+        const sign =
+          offsetPreview.sign === -1
+            ? -1
+            : 1;
+
+        /* =========================
+           LINE
+        ========================= */
+
+        if (
+          original.type === "line" &&
+          original.points?.length >= 4
+        ) {
+          const [
+            x1,
+            y1,
+            x2,
+            y2,
+          ] = original.points;
+
+          const dx =
+            x2 - x1;
+
+          const dy =
+            y2 - y1;
+
+          const length =
+            Math.hypot(
+              dx,
+              dy
+            );
+
+          if (
+            !Number.isFinite(
+              length
+            ) ||
+            length <= 0
+          ) {
+            return null;
+          }
+
+          const nx =
+            (-dy / length) *
+            sign;
+
+          const ny =
+            (dx / length) *
+            sign;
+
+          return (
+            <Line
+              points={[
+                x1 +
+                  nx * distance,
+
+                y1 +
+                  ny * distance,
+
+                x2 +
+                  nx * distance,
+
+                y2 +
+                  ny * distance,
+              ]}
+              stroke="#00ff00"
+              strokeWidth={
+                2 / scale
+              }
+              dash={[
+                8 / scale,
+                6 / scale,
+              ]}
+            />
+          );
+        }
+
+        /* =========================
+           CIRCLE
+        ========================= */
+
+        if (
+          original.type === "circle"
+        ) {
+          const radius =
+            Number(
+              original.radius || 0
+            );
+
+          const newRadius =
+            radius +
+            distance * sign;
+
+          if (
+            !Number.isFinite(
+              newRadius
+            ) ||
+            newRadius <= 0
+          ) {
+            return null;
+          }
+
+          return (
+            <Circle
+              x={original.x}
+              y={original.y}
+              radius={newRadius}
+              stroke="#00ff00"
+              strokeWidth={
+                2 / scale
+              }
+              dash={[
+                8 / scale,
+                6 / scale,
+              ]}
+            />
+          );
+        }
+
+        /* =========================
+           ARC
+        ========================= */
+
+        if (
+          original.type === "arc"
+        ) {
+          const radius =
+            Number(
+              original.radius || 0
+            );
+
+          const newRadius =
+            radius +
+            distance * sign;
+
+          if (
+            !Number.isFinite(
+              newRadius
+            ) ||
+            newRadius <= 0
+          ) {
+            return null;
+          }
+
+          return (
+            <Arc
+              x={original.x}
+              y={original.y}
+              innerRadius={0}
+              outerRadius={newRadius}
+              angle={
+                original.angle ||
+                360
+              }
+              rotation={
+                original.rotation ||
+                0
+              }
+              stroke="#00ff00"
+              strokeWidth={
+                2 / scale
+              }
+              dash={[
+                8 / scale,
+                6 / scale,
+              ]}
+            />
+          );
+        }
+
+        /* =========================
+           RECTANGLE
+        ========================= */
+
+        if (
+          original.type ===
+          "rectangle"
+        ) {
+          const width =
+            Math.abs(
+              Number(
+                original.width || 0
+              )
+            );
+
+          const height =
+            Math.abs(
+              Number(
+                original.height || 0
+              )
+            );
+
+          const newWidth =
+            width +
+            distance * 2 * sign;
+
+          const newHeight =
+            height +
+            distance * 2 * sign;
+
+          if (
+            newWidth <= 0 ||
+            newHeight <= 0
+          ) {
+            return null;
+          }
+
+          return (
+            <Rect
+              x={
+                original.x -
+                distance * sign
+              }
+              y={
+                original.y -
+                distance * sign
+              }
+              width={newWidth}
+              height={newHeight}
+              stroke="#00ff00"
+              strokeWidth={
+                2 / scale
+              }
+              dash={[
+                8 / scale,
+                6 / scale,
+              ]}
+              fillEnabled={false}
+            />
+          );
+        }
+
+        /* =========================
+           HATCH
+        ========================= */
+
+        if (
+          original.type ===
+          "hatch"
+        ) {
+          const width =
+            Math.abs(
+              Number(
+                original.width || 0
+              )
+            );
+
+          const height =
+            Math.abs(
+              Number(
+                original.height || 0
+              )
+            );
+
+          const newWidth =
+            width +
+            distance * 2 * sign;
+
+          const newHeight =
+            height +
+            distance * 2 * sign;
+
+          if (
+            newWidth <= 0 ||
+            newHeight <= 0
+          ) {
+            return null;
+          }
+
+          return (
+            <Rect
+              x={
+                original.x -
+                distance * sign
+              }
+              y={
+                original.y -
+                distance * sign
+              }
+              width={newWidth}
+              height={newHeight}
+              stroke="#00ff00"
+              strokeWidth={
+                2 / scale
+              }
+              dash={[
+                8 / scale,
+                6 / scale,
+              ]}
+              fillEnabled={false}
+            />
+          );
+        }
+
+        return null;
+      })()}
+    </Group>
+  )}
+
+/* =========================
    LINE
 ========================= */
 
@@ -28569,14 +32559,25 @@ if (
       <Line
         {...commonProps}
         points={object.points}
-        stroke={
-          selected
-             ? "#00aaff"
-            : object.color ||
-              "#ffffff"
-        }
-      strokeWidth={
-  (selected ? 3 : (object.strokeWidth || 2)) / scale
+      stroke={
+  joinSelected
+    ? "#00ff66"
+    : selected
+      ? "#00aaff"
+      : object.color ||
+        "#ffffff"
+}
+   strokeWidth={
+  Math.max(
+    2,
+    (
+      joinSelected
+        ? 4
+        : selected
+          ? 3
+          : (object.strokeWidth || 2)
+    ) / scale
+  )
 }
         hitStrokeWidth={25}
         rotation={
@@ -28682,11 +32683,13 @@ rotation={
         (180 / Math.PI)
     : object.rotation || 0
 }
-    stroke={
-      selectedIndex === index
-        ? "yellow"
-        : object.color || "#ffffff"
-    }
+   stroke={
+  joinSelected
+    ? "#00ff66"
+    : selectedIndex === index
+      ? "yellow"
+      : object.color || "#ffffff"
+}
    strokeWidth={
   selectedIndex === index
     ? 4 / scale
@@ -28731,7 +32734,7 @@ rotation={
       fill="#00aaff"
       stroke="white"
       strokeWidth={2 / scale}
-      draggable
+      draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -28768,7 +32771,7 @@ rotation={
       fill="#00aaff"
       stroke="white"
       strokeWidth={2 / scale}
-      draggable
+     draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -28807,7 +32810,7 @@ rotation={
       fill="#ff9900"
       stroke="white"
       strokeWidth={2 / scale}
-      draggable
+     draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -28836,7 +32839,7 @@ rotation={
       fill="#ff9900"
       stroke="white"
       strokeWidth={2 / scale}
-      draggable
+     draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -28898,7 +32901,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+           draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -28922,7 +32925,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+           draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -28946,7 +32949,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+            draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -28973,7 +32976,8 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+           draggable={tool === "move"}
+
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -29000,7 +33004,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+           draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -29027,7 +33031,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+            draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -29051,7 +33055,7 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+            draggable={tool === "move"}
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -29075,7 +33079,8 @@ if (
             fill="#00aaff"
             stroke="white"
             strokeWidth={2 / scale}
-            draggable
+           draggable={tool === "move"}
+        
             onMouseDown={(e) => {
               e.cancelBubble = true;
             }}
@@ -29690,7 +33695,7 @@ onDblTap={() => {
     fill="#00aaff"
     stroke="black"
     strokeWidth={2 / scale}
-    draggable
+    draggable={tool === "move"}
     onMouseDown={(e) => {
       e.cancelBubble = true;
     }}
@@ -29721,7 +33726,7 @@ onDblTap={() => {
                           fill="#00aaff"
                           stroke="black"
                           strokeWidth={2 / scale}
-                          draggable
+                          draggable={tool === "move"}
                           onMouseDown={(
                             e
                           ) => {
@@ -29787,7 +33792,7 @@ y={
   fill="#ff9900"
   stroke="white"
   strokeWidth={2 / scale}
-  draggable
+  draggable={tool === "move"}
   onMouseDown={(e) => {
     e.cancelBubble = true;
   }}
@@ -29948,7 +33953,7 @@ y={
       fill="#ff00ff"
       stroke="white"
       strokeWidth={2 / scale}
-      draggable
+      draggable={tool === "move"}
 
       onMouseDown={(e) => {
         e.cancelBubble = true;
@@ -30001,7 +34006,7 @@ DIMENSION HANDLES
   fill="#00aaff"
   stroke="black"
   strokeWidth={2 / scale}
-  draggable
+  draggable={tool === "move"}
 
   onMouseDown={(e) => {
     e.cancelBubble = true;
@@ -30071,7 +34076,7 @@ const y = snappedPoint.y;
   fill="#00aaff"
   stroke="black"
   strokeWidth={2 / scale}
-  draggable
+  draggable={tool === "move"}
 
   onMouseDown={(e) => {
     e.cancelBubble = true;
@@ -30155,7 +34160,7 @@ const y = snappedPoint.y;
         fill="#00aaff"
         stroke="black"
         strokeWidth={2 / scale}
-        draggable
+        draggable={tool === "move"}
 
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -30240,7 +34245,7 @@ const y = snappedPoint.y;
         fill="#00aaff"
         stroke="black"
         strokeWidth={2 / scale}
-        draggable
+        draggable={tool === "move"}
 
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -30312,7 +34317,7 @@ const y = snappedPoint.y;
         fill="#00aaff"
         stroke="black"
         strokeWidth={2 / scale}
-        draggable
+        draggable={tool === "move"}
 
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -30400,7 +34405,7 @@ const y = snappedPoint.y;
         fill="#00aaff"
         stroke="black"
         strokeWidth={2 / scale}
-        draggable
+        draggable={tool === "move"}
 
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -30492,7 +34497,7 @@ const y = snappedPoint.y;
         fill="#00aaff"
         stroke="black"
         strokeWidth={2 / scale}
-        draggable
+        draggable={tool === "move"}
 
         onMouseDown={(e) => {
           e.cancelBubble = true;
@@ -31684,7 +35689,12 @@ const y = snappedPoint.y;
 
         </main>
 
-        <div className="mobile-command-bar">
+<div
+  className="mobile-command-bar"
+  onTouchStart={(e) => e.stopPropagation()}
+  onTouchMove={(e) => e.stopPropagation()}
+  onTouchEnd={(e) => e.stopPropagation()}
+>
 
  <button
   type="button"
@@ -32480,10 +36490,23 @@ const y = snappedPoint.y;
 
 <button
   type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
+  className={
+    tool === "join"
+      ? "mobile-tool-button active"
+      : "mobile-tool-button"
+  }
+  onPointerDown={(e) => {
+    e.stopPropagation();
+  }}
+  onTouchStart={(e) => {
+    e.stopPropagation();
+  }}
   onClick={(e) => {
     e.stopPropagation();
+
+    setSelectedIndexes([]);
+    setSelectedIndex(null);
+
     changeTool("join");
   }}
 >
@@ -33111,8 +37134,6 @@ const y = snappedPoint.y;
 {/* OPEN */}
 <button
   type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
   onClick={(e) => {
     e.stopPropagation();
     openDrawing();
@@ -33120,6 +37141,7 @@ const y = snappedPoint.y;
 >
   📂 Open
 </button>
+
 
 <input
   id="dxfImportInput"
@@ -35488,7 +39510,7 @@ const foundIndex =
       fill="yellow"
       stroke="black"
       strokeWidth={2 / scale}
-      draggable
+      draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -35531,7 +39553,7 @@ const foundIndex =
       fill="yellow"
       stroke="black"
       strokeWidth={2 / scale}
-      draggable
+      draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -35574,7 +39596,7 @@ const foundIndex =
       fill="yellow"
       stroke="black"
       strokeWidth={2 / scale}
-      draggable
+      draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
@@ -35623,7 +39645,7 @@ const foundIndex =
   fill="yellow"
   stroke="black"
   strokeWidth={2 / scale}
-  draggable
+  draggable={tool === "move"}
   onMouseDown={(e) => {
     e.cancelBubble = true;
   }}
@@ -35669,7 +39691,7 @@ const foundIndex =
       fill="#00aaff"
       stroke="white"
       strokeWidth={2 / scale}
-      draggable
+      draggable={tool === "move"}
       onMouseDown={(e) => {
         e.cancelBubble = true;
       }}
