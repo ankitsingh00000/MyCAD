@@ -12,6 +12,7 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
+  padding: 0;
 }
 
 body {
@@ -21,7 +22,9 @@ body {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font-family: inherit;
 }
 
@@ -48,17 +51,20 @@ button {
   overflow: hidden;
 }
 
+
 /* =========================================================
    DESKTOP TOP BAR
 ========================================================= */
 
 .topbar {
   position: fixed;
+
   top: 0;
   left: 0;
   right: 0;
 
   width: 100%;
+
   height: 55px;
   min-height: 55px;
 
@@ -69,6 +75,7 @@ button {
   padding: 0 15px;
 
   background: #252525;
+
   border-bottom: 1px solid #444;
 
   overflow: hidden;
@@ -90,41 +97,14 @@ button {
   padding: 8px 14px;
 
   color: #ffffff;
+
   background: #333333;
 
   border: 1px solid #555555;
+
   border-radius: 4px;
 
   pointer-events: auto;
-
-  cursor: pointer;
-}
-
-.topbar button:hover {
-  background: #444444;
-}
-
-.spacer {
-  flex: 1;
-}
-
-
-.topbar button {
-  position: relative;
-
-  z-index: 100001;
-
-  pointer-events: auto;
-
-  flex: 0 0 auto;
-
-  padding: 8px 14px;
-
-  color: #ffffff;
-  background: #333333;
-
-  border: 1px solid #555555;
-  border-radius: 4px;
 
   cursor: pointer;
 
@@ -134,11 +114,21 @@ button {
   touch-action: manipulation;
 }
 
+.topbar button:hover {
+  background: #444444;
+}
+
+.topbar button:active {
+  transform: translateY(1px);
+}
+
 .logo {
   position: relative;
+
   z-index: 100001;
 
   font-size: 22px;
+
   font-weight: bold;
 
   margin-right: 20px;
@@ -150,26 +140,9 @@ button {
   pointer-events: none;
 }
 
-
-/* =========================================================
-   TOPBAR HOVER
-========================================================= */
-
-.topbar button:hover {
-  background: #444444;
-}
-
-.topbar button:active {
-  transform: translateY(1px);
-}
-
-
-/* =========================================================
-   SPACER
-========================================================= */
-
 .spacer {
   flex: 1;
+
   pointer-events: none;
 }
 
@@ -197,6 +170,7 @@ button {
   height: calc(100vh - 55px);
 }
 
+
 /* =========================================================
    DESKTOP LEFT TOOLBAR
 ========================================================= */
@@ -217,7 +191,9 @@ button {
   padding: 10px 8px;
 
   display: flex;
+
   flex-direction: column;
+
   align-items: center;
 
   gap: 8px;
@@ -250,6 +226,7 @@ button {
   flex: 0 0 auto;
 
   display: flex;
+
   align-items: center;
   justify-content: center;
 
@@ -257,15 +234,19 @@ button {
   margin: 0;
 
   border: 1px solid #555555;
+
   border-radius: 4px;
 
   background: #333333;
+
   color: #ffffff;
 
   font-size: 11px;
+
   line-height: 1.1;
 
   white-space: normal;
+
   word-break: break-word;
 
   overflow: hidden;
@@ -296,8 +277,6 @@ button {
 .workspace {
   position: relative;
 
-  z-index: 1;
-
   flex: 1;
 
   min-width: 0;
@@ -308,14 +287,7 @@ button {
   background: #1b1b1b !important;
 
   touch-action: none !important;
-
-  pointer-events: auto;
 }
-
-
-/* =========================================================
-   CANVAS
-========================================================= */
 
 .workspace canvas {
   display: block;
@@ -324,9 +296,6 @@ button {
 
   left: 0;
   top: 0;
-
-  max-width: 100%;
-  max-height: 100%;
 
   touch-action: none !important;
 }
@@ -360,6 +329,7 @@ button {
     );
 
   background-size: 25px 25px;
+
   background-position: 0 0;
 }
 
@@ -407,6 +377,7 @@ button {
   min-height: 32px;
 
   display: flex;
+
   align-items: center;
 
   gap: 25px;
@@ -428,8 +399,7 @@ button {
 
 
 /* =========================================================
-   MOBILE COMMAND DEFAULT
-   Hidden on desktop
+   MOBILE DEFAULT
 ========================================================= */
 
 .mobile-command-bar {
@@ -474,6 +444,7 @@ button.active:active {
 
 button:not(.active) {
   background: #333333 !important;
+
   color: #dddddd !important;
 
   border: 1px solid #555555 !important;
@@ -481,6 +452,7 @@ button:not(.active) {
 
 button:not(.active):hover {
   background: #444444 !important;
+
   color: #ffffff !important;
 }
 
@@ -497,83 +469,244 @@ button:disabled {
 
 
 /* =========================================================
-   MOBILE ONLY
+   MOBILE ONLY — FINAL
 ========================================================= */
 
 @media (max-width: 768px) {
 
   /* -------------------------------------------------------
-     GENERAL
+     GENERAL MOBILE
   ------------------------------------------------------- */
 
-  button,
-  canvas {
-    -webkit-user-select: none;
-    user-select: none;
+  * {
+    box-sizing: border-box !important;
+  }
 
-    -webkit-tap-highlight-color: transparent;
+  button,
+  canvas,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  button {
+    cursor: pointer !important;
+
+    touch-action: manipulation !important;
+
+    pointer-events: auto !important;
+  }
+
+  input,
+  textarea,
+  select {
+    touch-action: manipulation !important;
+
+    user-select: text !important;
+
+    -webkit-user-select: text !important;
+  }
+
+  canvas {
+    display: block !important;
+
+    max-width: none !important;
+    max-height: none !important;
+
+    touch-action: none !important;
   }
 
 
   /* -------------------------------------------------------
-     TOP BAR
+     DESKTOP TOPBAR HIDDEN ON MOBILE
   ------------------------------------------------------- */
 
   .topbar {
+    display: none !important;
+  }
+
+
+  /* -------------------------------------------------------
+     MOBILE TOPBAR
+  ------------------------------------------------------- */
+
+  .mobile-topbar {
     position: fixed !important;
 
     top: 0 !important;
+
     left: 0 !important;
+
     right: 0 !important;
 
     width: 100% !important;
 
     height: 56px !important;
+
     min-height: 56px !important;
 
-    z-index: 3000 !important;
+    max-height: 56px !important;
 
     display: flex !important;
+
+    flex-direction: row !important;
+
     align-items: center !important;
 
-    gap: 6px !important;
+    gap: 4px !important;
 
-    padding: 6px 8px !important;
+    padding: 0 6px !important;
 
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-
-    white-space: nowrap !important;
+    margin: 0 !important;
 
     box-sizing: border-box !important;
 
-    flex: none !important;
+    background: #252525 !important;
+
+    border-bottom: 1px solid #444444 !important;
+
+    z-index: 999999 !important;
+
+    overflow-x: auto !important;
+
+    overflow-y: hidden !important;
+
+    scrollbar-width: none !important;
+
+    -webkit-overflow-scrolling: touch !important;
+
+    pointer-events: auto !important;
+
+    touch-action: pan-x !important;
+
+    user-select: none !important;
+
+    -webkit-user-select: none !important;
   }
 
-  .topbar button {
+  .mobile-topbar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .mobile-topbar button {
+    position: relative !important;
+
     flex: 0 0 auto !important;
 
-    min-width: 48px !important;
+    min-width: 44px !important;
+
+    width: auto !important;
 
     height: 44px !important;
 
-    padding: 6px 10px !important;
+    min-height: 44px !important;
 
-    font-size: 14px !important;
+    max-height: 44px !important;
+
+    padding: 0 10px !important;
+
+    margin: 0 2px !important;
+
+    display: flex !important;
+
+    align-items: center !important;
+
+    justify-content: center !important;
+
+    box-sizing: border-box !important;
+
+    border: 1px solid #555555 !important;
+
+    border-radius: 6px !important;
+
+    background: #303030 !important;
+
+    color: #ffffff !important;
+
+    font-size: 20px !important;
+
+    line-height: 1 !important;
+
+    white-space: nowrap !important;
+
+    pointer-events: auto !important;
+
+    touch-action: manipulation !important;
+
+    user-select: none !important;
+
+    -webkit-user-select: none !important;
+
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .mobile-topbar button:active {
+    background: #087fb0 !important;
+
+    transform: scale(0.96) !important;
+  }
+
+  .mobile-topbar button:disabled {
+    opacity: 0.4 !important;
+
+    pointer-events: none !important;
+  }
+
+  .mobile-topbar > div {
+    display: flex !important;
+
+    align-items: center !important;
+
+    gap: 4px !important;
+
+    height: 100% !important;
+
+    flex: 0 0 auto !important;
 
     pointer-events: auto !important;
   }
 
-  .logo {
-    flex: 0 0 auto !important;
+  .mobile-topbar-title {
+    flex: 1 1 auto !important;
 
-    margin-right: 8px !important;
+    min-width: 0 !important;
 
-    font-size: 16px !important;
+    margin: 0 6px !important;
+
+    color: #ffffff !important;
+
+    font-size: 14px !important;
+
+    font-weight: 600 !important;
+
+    text-align: center !important;
+
+    white-space: nowrap !important;
+
+    overflow: hidden !important;
+
+    text-overflow: ellipsis !important;
+
+    pointer-events: none !important;
   }
 
-  .spacer {
-    display: none !important;
+  .mobile-topbar span {
+    color: #ffffff !important;
+
+    font-size: 13px !important;
+
+    white-space: nowrap !important;
+
+    pointer-events: none !important;
+  }
+
+  .mobile-topbar button svg {
+    width: 22px !important;
+
+    height: 22px !important;
+
+    pointer-events: none !important;
   }
 
 
@@ -582,19 +715,24 @@ button:disabled {
   ------------------------------------------------------- */
 
   .main {
+    position: relative !important;
+
     width: 100% !important;
+
     height: 100% !important;
 
     min-width: 0 !important;
+
     min-height: 0 !important;
 
+    margin: 0 !important;
+
+    padding: 0 !important;
+
     overflow: hidden !important;
+
+    box-sizing: border-box !important;
   }
-
-
-  /* -------------------------------------------------------
-     RIGHT PANEL HIDE
-  ------------------------------------------------------- */
 
   .main > aside:nth-of-type(2) {
     display: none !important;
@@ -603,23 +741,36 @@ button:disabled {
 
   /* -------------------------------------------------------
      WORKSPACE
+     
+     TOPBAR = 56px
+     TOOLBAR = 64px
+     COMMAND BAR = 170px
+     
+     TOTAL BOTTOM = 234px
   ------------------------------------------------------- */
 
   .workspace {
     position: fixed !important;
 
     left: 0 !important;
+
     right: 0 !important;
 
     top: 56px !important;
+
     bottom: 234px !important;
 
     width: 100% !important;
 
+    height: auto !important;
+
     min-width: 0 !important;
+
     min-height: 0 !important;
 
     margin: 0 !important;
+
+    padding: 0 !important;
 
     overflow: hidden !important;
 
@@ -627,7 +778,11 @@ button:disabled {
 
     background: #1b1b1b !important;
 
+    box-sizing: border-box !important;
+
     touch-action: none !important;
+
+    pointer-events: auto !important;
 
     z-index: 1 !important;
   }
@@ -636,9 +791,18 @@ button:disabled {
     position: absolute !important;
 
     left: 0 !important;
+
     top: 0 !important;
 
+    width: 100% !important;
+
+    height: 100% !important;
+
+    display: block !important;
+
     touch-action: none !important;
+
+    pointer-events: auto !important;
   }
 
 
@@ -650,6 +814,7 @@ button:disabled {
     position: fixed !important;
 
     left: 0 !important;
+
     right: 0 !important;
 
     bottom: 170px !important;
@@ -657,7 +822,9 @@ button:disabled {
     width: 100% !important;
 
     height: 64px !important;
+
     min-height: 64px !important;
+
     max-height: 64px !important;
 
     display: flex !important;
@@ -670,7 +837,10 @@ button:disabled {
 
     padding: 6px !important;
 
+    margin: 0 !important;
+
     overflow-x: auto !important;
+
     overflow-y: hidden !important;
 
     z-index: 2500 !important;
@@ -678,7 +848,11 @@ button:disabled {
     background: #252525 !important;
 
     border-top: 1px solid #333333 !important;
+
     border-bottom: 1px solid #333333 !important;
+
+    border-left: none !important;
+
     border-right: none !important;
 
     box-sizing: border-box !important;
@@ -688,6 +862,12 @@ button:disabled {
     -webkit-overflow-scrolling: touch !important;
 
     scrollbar-width: none !important;
+
+    pointer-events: auto !important;
+
+    user-select: none !important;
+
+    -webkit-user-select: none !important;
   }
 
   .toolbar::-webkit-scrollbar {
@@ -702,18 +882,40 @@ button:disabled {
     min-width: 52px !important;
 
     height: 52px !important;
+
     min-height: 52px !important;
+
+    max-height: 52px !important;
 
     padding: 4px 8px !important;
 
+    margin: 0 !important;
+
+    display: flex !important;
+
+    align-items: center !important;
+
+    justify-content: center !important;
+
+    box-sizing: border-box !important;
+
     font-size: 15px !important;
 
+    line-height: 1.1 !important;
+
     white-space: nowrap !important;
+
     word-break: normal !important;
+
+    pointer-events: auto !important;
 
     touch-action: manipulation !important;
 
-    pointer-events: auto !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .toolbar button:active {
+    transform: scale(0.96) !important;
   }
 
 
@@ -725,31 +927,36 @@ button:disabled {
     position: fixed !important;
 
     left: 0 !important;
+
     right: 0 !important;
+
     bottom: 0 !important;
 
     width: 100% !important;
 
     height: 170px !important;
+
     min-height: 170px !important;
+
     max-height: 170px !important;
 
     display: flex !important;
 
     flex-direction: column !important;
 
-    padding: 6px 8px !important;
+    padding: 0 !important;
+
     margin: 0 !important;
 
-    background: #252525 !important;
+    box-sizing: border-box !important;
+
+    background: #202020 !important;
 
     color: #ffffff !important;
 
-    border-top: 1px solid #333333 !important;
+    border-top: 1px solid #444444 !important;
 
     z-index: 1000000 !important;
-
-    box-sizing: border-box !important;
 
     overflow: hidden !important;
 
@@ -758,6 +965,7 @@ button:disabled {
     touch-action: manipulation !important;
 
     user-select: none !important;
+
     -webkit-user-select: none !important;
   }
 
@@ -767,89 +975,60 @@ button:disabled {
   ------------------------------------------------------- */
 
   .mobile-command-status {
-    flex: 0 0 22px !important;
+    flex: 0 0 24px !important;
 
     width: 100% !important;
 
-    height: 22px !important;
-    min-height: 22px !important;
+    height: 24px !important;
+
+    min-height: 24px !important;
+
+    max-height: 24px !important;
 
     display: flex !important;
 
     align-items: center !important;
-    justify-content: center !important;
 
     margin: 0 !important;
-    padding: 0 !important;
 
-    color: #b8b8b8 !important;
+    padding: 0 10px !important;
+
+    box-sizing: border-box !important;
+
+    color: #ffffff !important;
+
+    background: #202020 !important;
 
     font-size: 12px !important;
 
-    line-height: 22px !important;
+    line-height: 24px !important;
 
-    text-align: center !important;
+    text-align: left !important;
 
     white-space: nowrap !important;
 
     overflow: hidden !important;
+
+    text-overflow: ellipsis !important;
 
     pointer-events: none !important;
   }
 
 
   /* -------------------------------------------------------
-     COMMAND TITLE
-  ------------------------------------------------------- */
-
-  .mobile-command-title {
-    flex: 0 0 32px !important;
-
-    width: 100% !important;
-
-    height: 32px !important;
-    min-height: 32px !important;
-
-    display: flex !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    margin: 0 !important;
-    padding: 0 !important;
-
-    color: #ffffff !important;
-
-    font-size: 15px !important;
-
-    line-height: 32px !important;
-
-    text-align: center !important;
-
-    white-space: nowrap !important;
-
-    overflow: hidden !important;
-
-    pointer-events: none !important;
-  }
-
-  .mobile-command-title strong {
-    color: #ffffff !important;
-  }
-
-
-  /* -------------------------------------------------------
-     MOBILE QUICK ACTIONS
+     QUICK ACTIONS
   ------------------------------------------------------- */
 
   .mobile-quick-actions {
+    flex: 0 0 64px !important;
+
     width: 100% !important;
 
-    height: 58px !important;
-    min-height: 58px !important;
-    max-height: 58px !important;
+    height: 64px !important;
 
-    flex: 0 0 58px !important;
+    min-height: 64px !important;
+
+    max-height: 64px !important;
 
     display: flex !important;
 
@@ -859,26 +1038,35 @@ button:disabled {
 
     align-items: center !important;
 
-    gap: 6px !important;
+    gap: 8px !important;
 
     margin: 0 !important;
-    padding: 3px !important;
+
+    padding: 8px !important;
 
     box-sizing: border-box !important;
 
     overflow-x: auto !important;
+
     overflow-y: hidden !important;
 
-    touch-action: pan-x !important;
+    scrollbar-width: none !important;
 
     -webkit-overflow-scrolling: touch !important;
 
-    scrollbar-width: none !important;
+    touch-action: pan-x !important;
 
     pointer-events: auto !important;
 
     user-select: none !important;
+
     -webkit-user-select: none !important;
+
+    background: #202020 !important;
+
+    border-top: 1px solid #444444 !important;
+
+    border-bottom: 1px solid #444444 !important;
   }
 
   .mobile-quick-actions::-webkit-scrollbar {
@@ -888,52 +1076,70 @@ button:disabled {
   .mobile-quick-actions button {
     flex: 0 0 auto !important;
 
-    min-width: 72px !important;
+    min-width: 78px !important;
+
     width: auto !important;
 
-    height: 40px !important;
-    min-height: 40px !important;
+    height: 46px !important;
 
-    padding: 4px 10px !important;
+    min-height: 46px !important;
+
+    padding: 8px 12px !important;
 
     margin: 0 !important;
 
+    box-sizing: border-box !important;
+
     border: 1px solid #555555 !important;
-    border-radius: 5px !important;
+
+    border-radius: 6px !important;
 
     background: #303030 !important;
+
     color: #ffffff !important;
 
-    font-size: 12px !important;
+    font-size: 13px !important;
 
-    line-height: 1 !important;
+    font-weight: 600 !important;
+
+    line-height: 1.1 !important;
 
     white-space: nowrap !important;
 
     pointer-events: auto !important;
 
     touch-action: manipulation !important;
+
+    -webkit-tap-highlight-color: transparent !important;
   }
 
   .mobile-quick-actions button:active {
     background: #087fb0 !important;
 
-    transform: scale(0.96);
+    transform: scale(0.97) !important;
+  }
+
+  .mobile-quick-actions button.active {
+    background: #087fb0 !important;
+
+    border-color: #00aaff !important;
   }
 
 
   /* -------------------------------------------------------
-     MOBILE COMMAND CONTROLS
+     COMMAND CONTROLS
   ------------------------------------------------------- */
 
   .mobile-command-controls {
+    flex: 0 0 54px !important;
+
     width: 100% !important;
 
-    height: 46px !important;
-    min-height: 46px !important;
-    max-height: 46px !important;
+    height: 54px !important;
 
-    flex: 0 0 46px !important;
+    min-height: 54px !important;
+
+    max-height: 54px !important;
 
     display: flex !important;
 
@@ -943,13 +1149,14 @@ button:disabled {
 
     gap: 6px !important;
 
-    margin: 3px 0 0 0 !important;
+    margin: 0 !important;
 
-    padding: 0 !important;
+    padding: 6px 8px !important;
 
     box-sizing: border-box !important;
 
     overflow-x: auto !important;
+
     overflow-y: hidden !important;
 
     scrollbar-width: none !important;
@@ -959,6 +1166,10 @@ button:disabled {
     touch-action: pan-x !important;
 
     -webkit-overflow-scrolling: touch !important;
+
+    background: #181818 !important;
+
+    border-top: 1px solid #444444 !important;
   }
 
   .mobile-command-controls::-webkit-scrollbar {
@@ -968,38 +1179,47 @@ button:disabled {
   .mobile-command-controls button {
     flex: 0 0 auto !important;
 
-    width: auto !important;
-
     min-width: 64px !important;
 
     height: 42px !important;
+
     min-height: 42px !important;
+
+    max-height: 42px !important;
 
     padding: 0 10px !important;
 
     margin: 0 !important;
 
+    box-sizing: border-box !important;
+
     border: 1px solid #555555 !important;
-    border-radius: 5px !important;
+
+    border-radius: 6px !important;
 
     background: #303030 !important;
+
     color: #ffffff !important;
 
-    font-size: 14px !important;
+    font-size: 13px !important;
 
-    line-height: 42px !important;
+    font-weight: 600 !important;
+
+    line-height: 1.1 !important;
 
     white-space: nowrap !important;
 
     pointer-events: auto !important;
 
     touch-action: manipulation !important;
+
+    -webkit-tap-highlight-color: transparent !important;
   }
 
   .mobile-command-controls button:active {
     background: #087fb0 !important;
 
-    transform: scale(0.96);
+    transform: scale(0.96) !important;
   }
 
   .mobile-command-controls button:disabled {
@@ -1010,11 +1230,6 @@ button:disabled {
     pointer-events: none !important;
   }
 
-
-  /* -------------------------------------------------------
-     COMMAND INPUT
-  ------------------------------------------------------- */
-
   .mobile-command-controls input {
     flex: 1 1 180px !important;
 
@@ -1023,50 +1238,47 @@ button:disabled {
     min-width: 140px !important;
 
     height: 42px !important;
-    min-height: 42px !important;
 
-    margin: 0 !important;
+    min-height: 42px !important;
 
     padding: 0 10px !important;
 
+    margin: 0 !important;
+
+    box-sizing: border-box !important;
+
     border: 1px solid #555555 !important;
 
-    border-radius: 5px !important;
+    border-radius: 6px !important;
 
-    background: #1f1f1f !important;
+    background: #111111 !important;
 
     color: #ffffff !important;
 
-    font-size: 15px !important;
-
     outline: none !important;
 
-    box-sizing: border-box !important;
+    font-size: 16px !important;
 
     pointer-events: auto !important;
 
     touch-action: manipulation !important;
 
     user-select: text !important;
+
     -webkit-user-select: text !important;
   }
 
   .mobile-command-controls input:focus {
-    border-color: #087fb0 !important;
+    border-color: #00aaff !important;
 
-    box-shadow: 0 0 0 1px #087fb0 !important;
+    box-shadow: 0 0 0 1px #00aaff !important;
   }
 
   .mobile-command-controls input::placeholder {
-    color: #999999 !important;
+    color: #888888 !important;
 
     opacity: 1 !important;
   }
-
-
-  /* -------------------------------------------------------
-     ENTER BUTTON
-  ------------------------------------------------------- */
 
   .mobile-command-controls button:last-child {
     min-width: 62px !important;
@@ -1087,19 +1299,28 @@ button:disabled {
     position: absolute !important;
 
     left: 8px !important;
+
     right: 8px !important;
 
-    bottom: 58px !important;
+    bottom: 54px !important;
+
+    width: auto !important;
 
     max-height: 105px !important;
+
+    min-height: 0 !important;
 
     display: flex !important;
 
     flex-wrap: nowrap !important;
 
-    gap: 5px !important;
+    align-items: center !important;
+
+    gap: 6px !important;
 
     padding: 6px !important;
+
+    box-sizing: border-box !important;
 
     background: #171717 !important;
 
@@ -1107,10 +1328,11 @@ button:disabled {
 
     border-radius: 6px !important;
 
-    box-sizing: border-box !important;
-
     overflow-x: auto !important;
+
     overflow-y: hidden !important;
+
+    scrollbar-width: none !important;
 
     z-index: 1000001 !important;
 
@@ -1119,8 +1341,6 @@ button:disabled {
     touch-action: pan-x !important;
 
     -webkit-overflow-scrolling: touch !important;
-
-    scrollbar-width: none !important;
   }
 
   .command-suggestions::-webkit-scrollbar {
@@ -1130,15 +1350,19 @@ button:disabled {
   .command-suggestions button {
     flex: 0 0 auto !important;
 
-    min-width: 62px !important;
+    min-width: 72px !important;
 
-    height: 30px !important;
+    height: 36px !important;
 
-    padding: 4px 8px !important;
+    min-height: 36px !important;
+
+    padding: 6px 10px !important;
+
+    margin: 0 !important;
 
     border: 1px solid #555555 !important;
 
-    border-radius: 4px !important;
+    border-radius: 6px !important;
 
     background: #303030 !important;
 
@@ -1146,33 +1370,53 @@ button:disabled {
 
     font-size: 12px !important;
 
+    font-weight: 600 !important;
+
+    line-height: 1.1 !important;
+
+    white-space: nowrap !important;
+
+    box-sizing: border-box !important;
+
     cursor: pointer !important;
 
     pointer-events: auto !important;
 
     touch-action: manipulation !important;
+
+    -webkit-tap-highlight-color: transparent !important;
   }
 
   .command-suggestions button:active {
     background: #087fb0 !important;
 
-    transform: scale(0.96);
+    transform: scale(0.96) !important;
+  }
+
+  .command-suggestions button.active {
+    background: #087fb0 !important;
+
+    border-color: #00aaff !important;
   }
 
 
   /* -------------------------------------------------------
-     COMMAND BAR DIRECT CHILDREN
+     COMMAND BAR CHILDREN
   ------------------------------------------------------- */
 
   .mobile-command-bar > div {
+    width: 100% !important;
+
     max-width: 100% !important;
+
+    min-width: 0 !important;
 
     box-sizing: border-box !important;
   }
 
 
   /* -------------------------------------------------------
-     STATUS BAR HIDE
+     DESKTOP STATUS BAR HIDE
   ------------------------------------------------------- */
 
   .statusbar {
@@ -1185,129 +1429,49 @@ button:disabled {
   ------------------------------------------------------- */
 
   .mobile-dimension-crosshair {
-    display: block;
+    display: block !important;
   }
 
 
   /* -------------------------------------------------------
-     MOBILE TOPBAR
+     MOBILE HOME SCREEN
   ------------------------------------------------------- */
 
-  .mobile-topbar {
+  .cad-home {
     position: fixed !important;
 
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
+    inset: 0 !important;
 
-    width: 100% !important;
+    width: 100vw !important;
 
-    height: 56px !important;
-
-    display: flex !important;
-
-    align-items: center !important;
-
-    justify-content: space-between !important;
-
-    padding: 0 6px !important;
-
-    background: #252525 !important;
-
-    border-bottom: 1px solid #444444 !important;
+    height: 100vh !important;
 
     z-index: 999999 !important;
 
     pointer-events: auto !important;
 
-    touch-action: manipulation !important;
+    overflow-y: auto !important;
 
-    user-select: none !important;
-    -webkit-user-select: none !important;
+    overflow-x: hidden !important;
 
-    overflow: hidden !important;
+    background: #1f1f1f !important;
 
-    box-sizing: border-box !important;
+    color: #ffffff !important;
   }
 
-  .mobile-topbar button {
+  .cad-home button,
+  .cad-home .cad-home-profile,
+  .cad-home .cad-recent-card,
+  .cad-home .cad-source-row,
+  .cad-home .cad-new-drawing,
+  .cad-home .cad-home-banner button {
     position: relative !important;
 
-    min-width: 44px !important;
-    min-height: 44px !important;
-
-    height: 44px !important;
-
-    padding: 0 10px !important;
-
-    margin: 0 2px !important;
-
-    display: flex !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    border: 1px solid #555555 !important;
-
-    border-radius: 6px !important;
-
-    background: #303030 !important;
-
-    color: #ffffff !important;
-
-    font-size: 21px !important;
-
-    line-height: 1 !important;
+    z-index: 1000000 !important;
 
     pointer-events: auto !important;
 
-    touch-action: manipulation !important;
-
-    user-select: none !important;
-    -webkit-user-select: none !important;
-
-    box-sizing: border-box !important;
-  }
-
-  .mobile-topbar button:active {
-    background: #087fb0 !important;
-
-    transform: scale(0.96);
-  }
-
-  .mobile-topbar button:disabled {
-    opacity: 0.4 !important;
-
-    pointer-events: none !important;
-  }
-
-  .mobile-topbar > div {
-    display: flex !important;
-
-    align-items: center !important;
-
-    gap: 4px !important;
-
-    height: 100% !important;
-
-    pointer-events: auto !important;
-  }
-
-  .mobile-topbar span {
-    color: #ffffff !important;
-
-    font-size: 13px !important;
-
-    white-space: nowrap !important;
-
-    pointer-events: none !important;
-  }
-
-  .mobile-topbar button svg {
-    width: 22px !important;
-    height: 22px !important;
-
-    pointer-events: none !important;
+    cursor: pointer !important;
   }
 
 
@@ -1320,21 +1484,179 @@ button:disabled {
     .mobile-topbar {
       height: 52px !important;
 
+      min-height: 52px !important;
+
+      max-height: 52px !important;
+
       padding: 0 3px !important;
     }
 
     .mobile-topbar button {
       min-width: 40px !important;
 
-      min-height: 40px !important;
+      width: auto !important;
 
       height: 40px !important;
+
+      min-height: 40px !important;
+
+      max-height: 40px !important;
 
       padding: 0 7px !important;
 
       margin: 0 1px !important;
 
-      font-size: 19px !important;
+      font-size: 18px !important;
+    }
+
+    .mobile-topbar-title {
+      font-size: 12px !important;
+
+      margin: 0 3px !important;
+    }
+
+    .toolbar {
+      height: 60px !important;
+
+      min-height: 60px !important;
+
+      max-height: 60px !important;
+
+      bottom: 170px !important;
+
+      gap: 5px !important;
+
+      padding: 5px !important;
+    }
+
+    .toolbar button {
+      min-width: 48px !important;
+
+      height: 50px !important;
+
+      min-height: 50px !important;
+
+      max-height: 50px !important;
+
+      padding: 4px 7px !important;
+
+      font-size: 14px !important;
+    }
+
+    .mobile-quick-actions {
+      gap: 6px !important;
+
+      padding: 6px !important;
+    }
+
+    .mobile-quick-actions button {
+      min-width: 68px !important;
+
+      min-height: 40px !important;
+
+      height: 40px !important;
+
+      padding: 5px 8px !important;
+
+      font-size: 12px !important;
+    }
+
+    .mobile-command-controls {
+      gap: 5px !important;
+
+      padding: 6px !important;
+    }
+
+    .mobile-command-controls button {
+      min-width: 58px !important;
+
+      height: 40px !important;
+
+      min-height: 40px !important;
+
+      padding: 0 8px !important;
+
+      font-size: 12px !important;
+    }
+
+    .mobile-command-controls input {
+      width: 150px !important;
+
+      min-width: 120px !important;
+
+      height: 40px !important;
+
+      min-height: 40px !important;
+
+      font-size: 15px !important;
+    }
+
+    .command-suggestions {
+      left: 6px !important;
+
+      right: 6px !important;
+
+      bottom: 54px !important;
+
+      gap: 5px !important;
+
+      padding: 5px !important;
+    }
+
+    .command-suggestions button {
+      min-width: 66px !important;
+
+      min-height: 34px !important;
+
+      height: 34px !important;
+
+      padding: 5px 8px !important;
+
+      font-size: 11px !important;
+    }
+
+    .mobile-command-status {
+      height: 22px !important;
+
+      min-height: 22px !important;
+
+      max-height: 22px !important;
+
+      padding: 0 8px !important;
+
+      font-size: 11px !important;
+
+      line-height: 22px !important;
+    }
+
+    .cad-home-header {
+      height: 58px !important;
+
+      padding: 0 10px !important;
+    }
+
+    .cad-home-title {
+      font-size: 16px !important;
+    }
+
+    .cad-home-banner {
+      margin: 12px !important;
+
+      padding: 12px !important;
+    }
+
+    .cad-home-section {
+      margin-left: 12px !important;
+
+      margin-right: 12px !important;
+    }
+
+    .cad-new-drawing {
+      width: calc(100% - 24px) !important;
+
+      margin-left: 12px !important;
+
+      margin-right: 12px !important;
     }
   }
 }
@@ -1342,7 +1664,7 @@ button:disabled {
 
 /* =========================================================
    MOBILE DIMENSION CROSSHAIR
-   Desktop par hidden
+   Desktop hidden
 ========================================================= */
 
 .mobile-dimension-crosshair {
@@ -1351,9 +1673,11 @@ button:disabled {
   position: absolute;
 
   left: 50%;
+
   top: 50%;
 
   width: 52px;
+
   height: 52px;
 
   transform: translate(-50%, -50%);
@@ -1367,9 +1691,11 @@ button:disabled {
   position: absolute;
 
   left: 0;
+
   top: 50%;
 
   width: 52px;
+
   height: 2px;
 
   background: yellow;
@@ -1381,9 +1707,11 @@ button:disabled {
   position: absolute;
 
   left: 50%;
+
   top: 0;
 
   width: 2px;
+
   height: 52px;
 
   background: yellow;
@@ -1393,30 +1721,33 @@ button:disabled {
 
 
 /* =====================================================
-   STEP 1 — HOME / RECENT SCREEN
+   HOME / RECENT SCREEN
 ===================================================== */
 
 .cad-home {
-  position: fixed !important;
+  position: fixed;
 
-  inset: 0 !important;
+  inset: 0;
 
-  width: 100vw !important;
-  height: 100vh !important;
+  width: 100vw;
+
+  height: 100vh;
 
   overflow-y: auto;
+
   overflow-x: hidden;
 
   background: #1f1f1f;
+
   color: #ffffff;
 
   font-family: Arial, sans-serif;
 
   box-sizing: border-box;
 
-  z-index: 999999 !important;
+  z-index: 999999;
 
-  pointer-events: auto !important;
+  pointer-events: auto;
 }
 
 
@@ -1428,12 +1759,15 @@ button:disabled {
   height: 64px;
 
   display: flex;
+
   align-items: center;
+
   justify-content: space-between;
 
   padding: 0 16px;
 
   background: #252525;
+
   border-bottom: 1px solid #3d3d3d;
 
   box-sizing: border-box;
@@ -1441,6 +1775,7 @@ button:disabled {
 
 .cad-home-brand {
   display: flex;
+
   align-items: center;
 
   gap: 12px;
@@ -1448,10 +1783,13 @@ button:disabled {
 
 .cad-home-menu {
   width: 42px;
+
   height: 42px;
 
   display: flex;
+
   align-items: center;
+
   justify-content: center;
 
   font-size: 22px;
@@ -1463,6 +1801,7 @@ button:disabled {
 
 .cad-home-title {
   font-size: 18px;
+
   font-weight: 600;
 }
 
@@ -1476,6 +1815,7 @@ button:disabled {
 
 .cad-home-profile {
   width: 42px;
+
   height: 42px;
 
   border: 1px solid #555;
@@ -1483,6 +1823,7 @@ button:disabled {
   border-radius: 50%;
 
   background: #303030;
+
   color: white;
 
   font-size: 18px;
@@ -1499,7 +1840,9 @@ button:disabled {
   padding: 16px;
 
   display: flex;
+
   align-items: center;
+
   justify-content: space-between;
 
   gap: 12px;
@@ -1507,6 +1850,7 @@ button:disabled {
   background: #292929;
 
   border: 1px solid #444;
+
   border-radius: 8px;
 
   box-sizing: border-box;
@@ -1528,11 +1872,13 @@ button:disabled {
 
 .cad-home-banner button {
   min-width: 90px;
+
   min-height: 40px;
 
   padding: 8px 14px;
 
   border: none;
+
   border-radius: 5px;
 
   background: #087fb0;
@@ -1555,6 +1901,7 @@ button:disabled {
   margin-bottom: 10px;
 
   font-size: 16px;
+
   font-weight: 600;
 
   color: #ffffff;
@@ -1567,11 +1914,13 @@ button:disabled {
 
 .cad-recent-card {
   width: 100%;
+
   min-height: 92px;
 
   padding: 10px;
 
   display: flex;
+
   align-items: center;
 
   gap: 12px;
@@ -1579,6 +1928,7 @@ button:disabled {
   background: #292929;
 
   border: 1px solid #444;
+
   border-radius: 8px;
 
   color: white;
@@ -1590,6 +1940,7 @@ button:disabled {
 
 .cad-recent-preview {
   width: 76px;
+
   height: 66px;
 
   flex: 0 0 76px;
@@ -1601,6 +1952,7 @@ button:disabled {
   background: #181818;
 
   border: 1px solid #444;
+
   border-radius: 4px;
 }
 
@@ -1608,9 +1960,11 @@ button:disabled {
   position: absolute;
 
   width: 65px;
+
   height: 2px;
 
   left: 5px;
+
   top: 31px;
 
   background: #eeeeee;
@@ -1632,6 +1986,7 @@ button:disabled {
   flex: 1;
 
   display: flex;
+
   flex-direction: column;
 
   gap: 6px;
@@ -1666,11 +2021,13 @@ button:disabled {
 
 .cad-source-row {
   width: 100%;
+
   min-height: 58px;
 
   padding: 8px 12px;
 
   display: flex;
+
   align-items: center;
 
   gap: 12px;
@@ -1700,12 +2057,15 @@ button:disabled {
 
 .cad-source-icon {
   width: 34px;
+
   height: 34px;
 
   flex: 0 0 34px;
 
   display: flex;
+
   align-items: center;
+
   justify-content: center;
 
   border-radius: 6px;
@@ -1748,12 +2108,13 @@ button:disabled {
   color: white;
 
   font-size: 15px;
+
   font-weight: 600;
 }
 
 
 /* =====================================================
-   TOUCH / PRESS
+   HOME TOUCH
 ===================================================== */
 
 .cad-home button {
@@ -1762,6 +2123,7 @@ button:disabled {
   -webkit-tap-highlight-color: transparent;
 
   user-select: none;
+
   -webkit-user-select: none;
 
   touch-action: manipulation;
@@ -1774,528 +2136,6 @@ button:disabled {
 }
 
 
-/* =====================================================
-   SMALL PHONE HOME
-===================================================== */
-
-@media (max-width: 380px) {
-
-  .cad-home-header {
-    height: 58px;
-
-    padding: 0 10px;
-  }
-
-  .cad-home-title {
-    font-size: 16px;
-  }
-
-  .cad-home-banner {
-    margin: 12px;
-
-    padding: 12px;
-  }
-
-  .cad-home-section {
-    margin-left: 12px;
-    margin-right: 12px;
-  }
-
-  .cad-new-drawing {
-    width: calc(100% - 24px);
-
-    margin-left: 12px;
-    margin-right: 12px;
-  }
-}
-
-
-/* =====================================================
-   STEP 2 — MOBILE TOPBAR DRAWING TITLE
-===================================================== */
-
-.mobile-topbar-title {
-  flex: 1;
-
-  min-width: 0;
-
-  margin: 0 6px;
-
-  color: #ffffff;
-
-  font-size: 14px;
-  font-weight: 600;
-
-  text-align: center;
-
-  white-space: nowrap;
-
-  overflow: hidden;
-
-  text-overflow: ellipsis;
-
-  pointer-events: none;
-}
-
-@media (max-width: 380px) {
-
-  .mobile-topbar-title {
-    font-size: 12px;
-
-    margin: 0 3px;
-  }
-}
-
-
-/* =====================================================
-   STEP 3 — MOBILE QUICK ACTIONS FINAL
-===================================================== */
-
-@media (max-width: 768px) {
-
-  .mobile-quick-actions {
-    display: flex;
-
-    flex-wrap: wrap;
-
-    gap: 6px;
-
-    padding: 8px;
-
-    width: 100%;
-
-    box-sizing: border-box;
-
-    overflow-y: auto;
-
-    max-height: 105px;
-
-    background: #202020;
-
-    border-top: 1px solid #444;
-
-    border-bottom: 1px solid #444;
-  }
-
-  .mobile-quick-actions button {
-    flex: 1 1 calc(25% - 6px);
-
-    min-width: 72px;
-    min-height: 42px;
-
-    padding: 6px 8px;
-
-    border: 1px solid #555;
-
-    border-radius: 6px;
-
-    background: #303030;
-
-    color: #ffffff;
-
-    font-size: 13px;
-    font-weight: 600;
-
-    line-height: 1.1;
-
-    white-space: nowrap;
-
-    box-sizing: border-box;
-
-    touch-action: manipulation;
-
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .mobile-quick-actions button:active {
-    background: #087fb0;
-
-    transform: scale(0.97);
-  }
-
-  .mobile-quick-actions button.active {
-    background: #087fb0;
-
-    border-color: #00aaff;
-  }
-
-  @media (max-width: 380px) {
-
-    .mobile-quick-actions {
-      gap: 5px;
-
-      padding: 6px;
-    }
-
-    .mobile-quick-actions button {
-      flex: 1 1 calc(33.333% - 5px);
-
-      min-width: 68px;
-      min-height: 40px;
-
-      font-size: 12px;
-
-      padding: 5px 6px;
-    }
-  }
-}
-
-
-/* =====================================================
-   STEP 4 — MOBILE COMMAND CONTROLS
-===================================================== */
-
-@media (max-width: 768px) {
-
-  .mobile-command-controls {
-    display: flex;
-
-    align-items: center;
-
-    gap: 6px;
-
-    width: 100%;
-
-    padding: 7px 8px;
-
-    box-sizing: border-box;
-
-    background: #181818;
-
-    border-top: 1px solid #444;
-
-    overflow-x: auto;
-    overflow-y: hidden;
-
-    scrollbar-width: none;
-  }
-
-  .mobile-command-controls::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mobile-command-controls button {
-    flex: 0 0 auto;
-
-    min-width: 58px;
-    min-height: 42px;
-
-    padding: 7px 10px;
-
-    border: 1px solid #555;
-
-    border-radius: 6px;
-
-    background: #303030;
-
-    color: #ffffff;
-
-    font-size: 13px;
-    font-weight: 600;
-
-    white-space: nowrap;
-
-    touch-action: manipulation;
-
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .mobile-command-controls button:active {
-    background: #087fb0;
-
-    transform: scale(0.97);
-  }
-
-  .mobile-command-controls button:disabled {
-    opacity: 0.4;
-  }
-
-  .mobile-command-controls input {
-    flex: 1 1 auto;
-
-    min-width: 120px;
-
-    height: 42px;
-
-    padding: 0 10px;
-
-    box-sizing: border-box;
-
-    border: 1px solid #555;
-
-    border-radius: 6px;
-
-    outline: none;
-
-    background: #111111;
-
-    color: #ffffff;
-
-    font-size: 16px;
-
-    touch-action: manipulation;
-  }
-
-  .mobile-command-controls input:focus {
-    border-color: #00aaff;
-  }
-
-  .mobile-command-controls input::placeholder {
-    color: #888888;
-  }
-
-  @media (max-width: 380px) {
-
-    .mobile-command-controls {
-      gap: 5px;
-
-      padding: 6px;
-    }
-
-    .mobile-command-controls button {
-      min-width: 52px;
-      min-height: 40px;
-
-      padding: 6px 8px;
-
-      font-size: 12px;
-    }
-
-    .mobile-command-controls input {
-      min-width: 105px;
-
-      height: 40px;
-
-      font-size: 16px;
-    }
-  }
-}
-
-
-/* =====================================================
-   STEP 5 — MOBILE COMMAND SUGGESTIONS
-===================================================== */
-
-@media (max-width: 768px) {
-
-  .command-suggestions {
-    display: flex;
-
-    flex-wrap: nowrap;
-
-    gap: 6px;
-
-    width: 100%;
-
-    padding: 6px 8px;
-
-    box-sizing: border-box;
-
-    background: #202020;
-
-    border-top: 1px solid #444;
-
-    overflow-x: auto;
-    overflow-y: hidden;
-
-    scrollbar-width: none;
-
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .command-suggestions::-webkit-scrollbar {
-    display: none;
-  }
-
-  .command-suggestions button {
-    flex: 0 0 auto;
-
-    min-width: 82px;
-    min-height: 38px;
-
-    padding: 7px 10px;
-
-    border: 1px solid #555;
-
-    border-radius: 6px;
-
-    background: #303030;
-
-    color: #ffffff;
-
-    font-size: 12px;
-    font-weight: 600;
-
-    white-space: nowrap;
-
-    touch-action: manipulation;
-
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .command-suggestions button:active {
-    background: #087fb0;
-
-    transform: scale(0.97);
-  }
-
-  @media (max-width: 380px) {
-
-    .command-suggestions {
-      gap: 5px;
-
-      padding: 5px 6px;
-    }
-
-    .command-suggestions button {
-      min-width: 72px;
-      min-height: 36px;
-
-      padding: 6px 8px;
-
-      font-size: 11px;
-    }
-  }
-}
-
-
-/* =====================================================
-   STEP 6 — MOBILE COMMAND BAR FINAL LAYOUT
-===================================================== */
-
-@media (max-width: 768px) {
-
-  .mobile-command-bar {
-    position: fixed !important;
-
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-
-    width: 100% !important;
-
-    height: 170px !important;
-    min-height: 170px !important;
-    max-height: 170px !important;
-
-    display: flex !important;
-
-    flex-direction: column !important;
-
-    padding: 0 !important;
-    margin: 0 !important;
-
-    box-sizing: border-box !important;
-
-    background: #202020 !important;
-
-    color: #ffffff !important;
-
-    border-top: 1px solid #444 !important;
-
-    z-index: 9999 !important;
-
-    overflow: hidden !important;
-
-    touch-action: manipulation !important;
-  }
-
-  .mobile-command-bar > .mobile-quick-actions {
-    flex: 1 1 auto !important;
-
-    min-height: 0 !important;
-
-    max-height: 105px !important;
-
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-
-  .mobile-command-bar > .mobile-command-controls {
-    flex: 0 0 58px !important;
-
-    min-height: 58px !important;
-
-    max-height: 58px !important;
-  }
-
-  .mobile-command-bar .command-suggestions {
-    flex: 0 0 auto !important;
-
-    max-height: 42px !important;
-
-    min-height: 0 !important;
-
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-  }
-
-  .mobile-command-bar button {
-    box-sizing: border-box;
-  }
-
-  @media (max-width: 380px) {
-
-    .mobile-command-bar {
-      height: 170px !important;
-
-      min-height: 170px !important;
-
-      max-height: 170px !important;
-    }
-
-    .mobile-command-bar > .mobile-quick-actions {
-      max-height: 100px !important;
-    }
-
-    .mobile-command-bar > .mobile-command-controls {
-      flex-basis: 58px !important;
-
-      min-height: 58px !important;
-
-      max-height: 58px !important;
-    }
-
-    .mobile-command-bar .command-suggestions {
-      max-height: 40px !important;
-    }
-  }
-}
-
-
-/* =========================================================
-   HOME SCREEN BUTTON FIX
-========================================================= */
-
-.cad-home {
-  position: fixed !important;
-
-  inset: 0 !important;
-
-  width: 100vw !important;
-  height: 100vh !important;
-
-  z-index: 999999 !important;
-
-  pointer-events: auto !important;
-}
-
-.cad-home button,
-.cad-home .cad-home-profile,
-.cad-home .cad-recent-card,
-.cad-home .cad-source-row,
-.cad-home .cad-new-drawing,
-.cad-home .cad-home-banner button {
-  position: relative !important;
-
-  z-index: 1000000 !important;
-
-  pointer-events: auto !important;
-
-  cursor: pointer !important;
-}
-
-
 /* =========================================================
    FINAL DESKTOP CLICK SAFETY
 ========================================================= */
@@ -2303,9 +2143,9 @@ button:disabled {
 @media (min-width: 769px) {
 
   .topbar {
-    position: relative !important;
+    position: fixed !important;
 
-    z-index: 100000 !important;
+    z-index: 999999 !important;
 
     pointer-events: auto !important;
   }
@@ -2313,7 +2153,7 @@ button:disabled {
   .topbar button {
     position: relative !important;
 
-    z-index: 100001 !important;
+    z-index: 1000000 !important;
 
     pointer-events: auto !important;
 
@@ -2362,21 +2202,651 @@ button:disabled {
   }
 }
 
-/* =========================
+
+/* =========================================================
    MOBILE JOIN BUTTON
-========================= */
+========================================================= */
 
 .mobile-tool-button {
   min-height: 44px;
+
   min-width: 72px;
+
   padding: 10px 14px;
+
   font-size: 14px;
+
   border-radius: 8px;
+
   touch-action: manipulation;
+
   -webkit-tap-highlight-color: transparent;
 }
 
 .mobile-tool-button.active {
   min-height: 44px;
+
   min-width: 72px;
+}
+
+/* =====================================================
+   FINAL MOBILE COMMAND CONTROLS
+===================================================== */
+
+@media (max-width: 768px) {
+
+  .mobile-command-controls {
+    width: 100% !important;
+
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+
+    display: flex !important;
+    flex: 0 0 58px !important;
+
+    flex-direction: row !important;
+    align-items: center !important;
+
+    gap: 6px !important;
+
+    padding: 6px 8px !important;
+    margin: 0 !important;
+
+    box-sizing: border-box !important;
+
+    background: #181818 !important;
+    border-top: 1px solid #444 !important;
+
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+
+    scrollbar-width: none !important;
+
+    touch-action: pan-x !important;
+    -webkit-overflow-scrolling: touch !important;
+
+    pointer-events: auto !important;
+  }
+
+  .mobile-command-controls::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .mobile-command-controls button {
+    flex: 0 0 auto !important;
+
+    min-width: 58px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+
+    padding: 6px 10px !important;
+
+    box-sizing: border-box !important;
+
+    border: 1px solid #555 !important;
+    border-radius: 6px !important;
+
+    background: #303030 !important;
+    color: #ffffff !important;
+
+    font-size: 13px !important;
+    font-weight: 600 !important;
+
+    white-space: nowrap !important;
+
+    cursor: pointer !important;
+
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .mobile-command-controls button:active {
+    background: #087fb0 !important;
+    transform: scale(0.97);
+  }
+
+  .mobile-command-controls button:disabled {
+    opacity: 0.4 !important;
+    cursor: default !important;
+  }
+
+  .mobile-command-controls input {
+    flex: 1 1 auto !important;
+
+    width: auto !important;
+    min-width: 120px !important;
+
+    height: 42px !important;
+    min-height: 42px !important;
+
+    padding: 0 10px !important;
+
+    box-sizing: border-box !important;
+
+    border: 1px solid #555 !important;
+    border-radius: 6px !important;
+
+    background: #111 !important;
+    color: #ffffff !important;
+
+    font-size: 14px !important;
+
+    outline: none !important;
+
+    touch-action: manipulation !important;
+
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+
+  .mobile-command-controls input:focus {
+    border-color: #087fb0 !important;
+    box-shadow: 0 0 0 1px #087fb0 !important;
+  }
+
+  .mobile-command-controls input::placeholder {
+    color: #999999 !important;
+    opacity: 1 !important;
+  }
+
+  /* ENTER / CHECK BUTTON */
+  .mobile-command-controls button:last-child {
+    min-width: 62px !important;
+    background: #087fb0 !important;
+    border-color: #0a9bd0 !important;
+  }
+
+  /* COMMAND BAR LAYOUT */
+  .mobile-command-bar {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .mobile-command-bar > .mobile-quick-actions {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+
+  .mobile-command-bar > .mobile-command-controls {
+    flex: 0 0 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+  }
+
+  /* SMALL PHONE */
+  @media (max-width: 380px) {
+
+    .mobile-command-controls {
+      height: 56px !important;
+      min-height: 56px !important;
+      max-height: 56px !important;
+
+      flex-basis: 56px !important;
+
+      gap: 5px !important;
+      padding: 5px 6px !important;
+    }
+
+    .mobile-command-controls button {
+      min-width: 54px !important;
+      height: 40px !important;
+      min-height: 40px !important;
+
+      padding: 5px 8px !important;
+      font-size: 12px !important;
+    }
+
+    .mobile-command-controls input {
+      min-width: 105px !important;
+      height: 40px !important;
+      min-height: 40px !important;
+
+      font-size: 13px !important;
+    }
+
+    .mobile-command-bar > .mobile-command-controls {
+      flex-basis: 56px !important;
+      min-height: 56px !important;
+      max-height: 56px !important;
+    }
+  }
+}
+
+/* =====================================================
+   MOBILE COMMAND CONTROLS — FINAL
+===================================================== */
+
+@media (max-width: 768px) {
+
+  .mobile-command-controls {
+    width: 100% !important;
+
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+
+    display: flex !important;
+    flex: 0 0 58px !important;
+
+    align-items: center !important;
+    gap: 6px !important;
+
+    padding: 6px 8px !important;
+    margin: 0 !important;
+
+    box-sizing: border-box !important;
+
+    background: #181818 !important;
+    border-top: 1px solid #444 !important;
+
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+
+    scrollbar-width: none !important;
+
+    touch-action: pan-x !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .mobile-command-controls::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .mobile-command-controls button {
+    flex: 0 0 auto !important;
+
+    min-width: 58px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+
+    padding: 6px 10px !important;
+
+    box-sizing: border-box !important;
+
+    border: 1px solid #555 !important;
+    border-radius: 6px !important;
+
+    background: #303030 !important;
+    color: #fff !important;
+
+    font-size: 13px !important;
+    font-weight: 600 !important;
+
+    white-space: nowrap !important;
+
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .mobile-command-controls button:active {
+    background: #087fb0 !important;
+    transform: scale(0.97);
+  }
+
+  .mobile-command-controls button:disabled {
+    opacity: 0.4 !important;
+  }
+
+  .mobile-command-controls input {
+    flex: 1 1 auto !important;
+
+    min-width: 120px !important;
+    height: 42px !important;
+
+    padding: 0 10px !important;
+
+    box-sizing: border-box !important;
+
+    border: 1px solid #555 !important;
+    border-radius: 6px !important;
+
+    background: #111 !important;
+    color: #fff !important;
+
+    font-size: 14px !important;
+    outline: none !important;
+
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+
+  .mobile-command-controls input:focus {
+    border-color: #087fb0 !important;
+    box-shadow: 0 0 0 1px #087fb0 !important;
+  }
+
+  .mobile-command-controls input::placeholder {
+    color: #999 !important;
+    opacity: 1 !important;
+  }
+
+  .mobile-command-controls button:last-child {
+    min-width: 62px !important;
+    background: #087fb0 !important;
+    border-color: #0a9bd0 !important;
+  }
+
+}
+
+
+/* =====================================================
+   SMALL PHONE
+===================================================== */
+
+@media (max-width: 380px) {
+
+  .mobile-command-controls {
+    height: 56px !important;
+    min-height: 56px !important;
+    max-height: 56px !important;
+
+    flex-basis: 56px !important;
+
+    gap: 5px !important;
+    padding: 5px 6px !important;
+  }
+
+  .mobile-command-controls button {
+    min-width: 54px !important;
+
+    height: 40px !important;
+    min-height: 40px !important;
+
+    padding: 5px 8px !important;
+
+    font-size: 12px !important;
+  }
+
+  .mobile-command-controls input {
+    min-width: 105px !important;
+
+    height: 40px !important;
+    min-height: 40px !important;
+
+    font-size: 13px !important;
+  }
+
+}
+
+/* =====================================================
+   FINAL MOBILE COMMAND SUGGESTIONS
+===================================================== */
+
+@media (max-width: 768px) {
+
+  .command-suggestions {
+    position: fixed !important;
+
+    left: 8px !important;
+    right: 8px !important;
+
+    bottom: 58px !important;
+
+    width: auto !important;
+    max-height: 105px !important;
+
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+
+    gap: 5px !important;
+
+    padding: 6px !important;
+
+    background: #171717 !important;
+    border: 1px solid #444 !important;
+    border-radius: 6px !important;
+
+    box-sizing: border-box !important;
+
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+
+    z-index: 1000001 !important;
+
+    pointer-events: auto !important;
+
+    touch-action: pan-x !important;
+    -webkit-overflow-scrolling: touch !important;
+
+    scrollbar-width: none !important;
+  }
+
+  .command-suggestions::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .command-suggestions button {
+    flex: 0 0 auto !important;
+
+    min-width: 62px !important;
+    min-height: 36px !important;
+
+    padding: 6px 9px !important;
+
+    border: 1px solid #555 !important;
+    border-radius: 5px !important;
+
+    background: #303030 !important;
+    color: #fff !important;
+
+    font-size: 12px !important;
+    font-weight: 600 !important;
+
+    white-space: nowrap !important;
+
+    cursor: pointer !important;
+
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .command-suggestions button:active {
+    background: #087fb0 !important;
+    transform: scale(0.96);
+  }
+
+}
+/* =====================================================
+   SMALL PHONE
+===================================================== */
+
+@media (max-width: 380px) {
+
+  .command-suggestions {
+    left: 6px !important;
+    right: 6px !important;
+
+    bottom: 56px !important;
+
+    max-height: 90px !important;
+
+    gap: 4px !important;
+    padding: 5px !important;
+  }
+
+  .command-suggestions button {
+    min-width: 58px !important;
+    min-height: 34px !important;
+
+    padding: 5px 7px !important;
+
+    font-size: 11px !important;
+  }
+
+}
+
+/* =====================================================
+   FINAL MOBILE COMMAND STATUS
+===================================================== */
+
+@media (max-width: 768px) {
+
+  .mobile-command-status {
+    width: 100% !important;
+
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+
+    flex: 0 0 24px !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    margin: 0 !important;
+    padding: 0 8px !important;
+
+    box-sizing: border-box !important;
+
+    background: #202020 !important;
+    color: #b8b8b8 !important;
+
+    border-top: 1px solid #333 !important;
+    border-bottom: 1px solid #333 !important;
+
+    font-size: 12px !important;
+    line-height: 24px !important;
+
+    text-align: center !important;
+
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+
+    pointer-events: none !important;
+  }
+
+
+  .mobile-command-status strong {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+  }
+
+
+  /* COMMAND BAR INTERNAL LAYOUT */
+
+  .mobile-command-bar {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+
+  .mobile-command-bar > .mobile-command-status {
+    flex: 0 0 24px !important;
+
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+  }
+
+
+  .mobile-command-bar > .mobile-quick-actions {
+    flex: 1 1 auto !important;
+
+    min-height: 0 !important;
+
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+  }
+
+
+  .mobile-command-bar > .mobile-command-controls {
+    flex: 0 0 58px !important;
+
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+  }
+
+}
+
+
+/* =====================================================
+   SMALL PHONE
+===================================================== */
+
+@media (max-width: 380px) {
+
+  .mobile-command-status {
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+
+    flex-basis: 22px !important;
+
+    line-height: 22px !important;
+    font-size: 11px !important;
+  }
+
+
+  .mobile-command-bar > .mobile-command-status {
+    flex-basis: 22px !important;
+
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+  }
+
+
+  .mobile-command-bar > .mobile-command-controls {
+    flex-basis: 56px !important;
+
+    height: 56px !important;
+    min-height: 56px !important;
+    max-height: 56px !important;
+  }
+
+}
+
+/* =========================
+   MYCAD MOBILE CANVAS TOUCH
+========================= */
+
+.workspace .konvajs-content {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.workspace canvas {
+  touch-action: none;
+}
+
+/* =========================
+   MYCAD MOBILE SAFE AREA
+========================= */
+
+@media (max-width: 768px) {
+  .mobile-topbar {
+    top: env(safe-area-inset-top, 0px) !important;
+  }
+
+  .workspace {
+    top: calc(
+      56px + env(safe-area-inset-top, 0px)
+    ) !important;
+
+    bottom: calc(
+      234px + env(safe-area-inset-bottom, 0px)
+    ) !important;
+  }
+
+  .toolbar {
+    bottom: calc(
+      170px + env(safe-area-inset-bottom, 0px)
+    ) !important;
+  }
+
+  .mobile-command-bar {
+    bottom: env(safe-area-inset-bottom, 0px) !important;
+
+    height: 170px !important;
+    min-height: 170px !important;
+    max-height: 170px !important;
+  }
 }

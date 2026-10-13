@@ -13,6 +13,7 @@ import {
   Rect,
   Text,
   Arc,
+  Ellipse,
 } from "react-konva";
 import "./App.css";
 
@@ -23,6 +24,35 @@ function App() {
 
   const [commandText, setCommandText] =
   useState("");
+
+  const [mobileCommandHistory, setMobileCommandHistory] =
+  useState(() => {
+    try {
+      const saved =
+        localStorage.getItem(
+          "mycadMobileCommandHistory"
+        );
+
+      const parsed = saved
+        ? JSON.parse(saved)
+        : [];
+
+      return Array.isArray(parsed)
+        ? parsed.slice(-30)
+        : [];
+    } catch (error) {
+      console.error(
+        "Command history load failed:",
+        error
+      );
+
+      return [];
+    }
+  });
+
+const [mobileCommandHistoryIndex, setMobileCommandHistoryIndex] =
+  useState(-1);
+
   const [tool, setTool] = useState("select");
 
   const [objects, setObjects] = useState([]);
@@ -67,11 +97,14 @@ const [layers, setLayers] = useState([
 const [activeLayerId, setActiveLayerId] =
   useState("layer-0");
 
-  const [measureStart, setMeasureStart] =
-    useState(null);
+const [measureStart, setMeasureStart] =
+  useState(null);
 
-  const [measurements, setMeasurements] =
-    useState([]);
+const [showMeasureMenu, setShowMeasureMenu] =
+  useState(false);
+
+const [measurements, setMeasurements] =
+  useState([]);
 
     /* =========================
    CIRCLE GRIP DRAG
@@ -183,6 +216,111 @@ const handleCircleGripDragEnd = (
     previousObjects,
     [...measurements]
   );
+};
+
+/* =========================
+   ELLIPSE GRIP DRAG
+========================= */
+
+const handleEllipseGripDragEnd = (
+  index,
+  gripType,
+  e
+) => {
+  const node = e.target;
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object, objectIndex) => {
+        if (
+          objectIndex !== index ||
+          object.type !== "ellipse"
+        ) {
+          return object;
+        }
+
+        /* CENTER GRIP */
+
+        if (
+          gripType === "center"
+        ) {
+          return {
+            ...object,
+            x: node.x(),
+            y: node.y(),
+          };
+        }
+
+/* HORIZONTAL GRIP — ROTATION AWARE */
+
+if (gripType === "radiusX") {
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const dx = node.x() - object.x;
+  const dy = node.y() - object.y;
+
+  const localX =
+    dx * Math.cos(rotation) +
+    dy * Math.sin(rotation);
+
+  return {
+    ...object,
+    radiusX: Math.max(
+      1,
+      Math.abs(localX)
+    ),
+  };
+}
+      
+/* VERTICAL GRIP — ROTATION AWARE */
+
+if (gripType === "radiusY") {
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const dx = node.x() - object.x;
+  const dy = node.y() - object.y;
+
+  const localY =
+    -dx * Math.sin(rotation) +
+    dy * Math.cos(rotation);
+
+  return {
+    ...object,
+    radiusY: Math.max(
+      1,
+      Math.abs(localY)
+    ),
+  };
+}
+
+        return object;
+      }
+    );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(index);
+
+  setSelectedIndexes([
+    index,
+  ]);
+
+  setFuture([]);
 };
 
 
@@ -1826,6 +1964,1272 @@ const [objectSnapEnabled, setObjectSnapEnabled] =
 
   const [showMobileProperties, setShowMobileProperties] = useState(false);
 
+  /* =========================
+   MOBILE COMMAND PANEL
+========================= */
+
+const [mobileCommandPanel, setMobileCommandPanel] =
+  useState("home");
+
+const openMobilePanel = (panel) => {
+  // Purane mobile overlays close
+  setShowMobileLayers(false);
+  setShowMobileProperties(false);
+
+  // Purana command/input clear
+  setCommandText("");
+
+  // Naya panel open
+  setMobileCommandPanel(panel);
+};
+
+const closeMobilePanel = () => {
+  setCommandText("");
+  setMobileCommandPanel("home");
+};
+
+const selectMobileTool = (nextTool) => {
+  setShowMobileProperties(false);
+  setShowMobileLayers(false);
+  setCommandText("");
+
+  /*
+    Measure / Dimension tools ke
+    options panel ko open rakho.
+  */
+   if (
+    nextTool === "measure" ||
+    nextTool === "dimension" ||
+    nextTool === "radiusDimension" ||
+    nextTool === "diameterDimension" ||
+    nextTool === "angularDimension" ||
+    nextTool === "area" ||
+    nextTool === "volume" ||
+    nextTool === "quickMeasure"
+  ) {
+    setMobileCommandPanel("measure");
+  } else {
+    setMobileCommandPanel("home");
+  }
+  changeTool(nextTool);
+};
+
+/* =========================
+   MOBILE FIND
+========================= */
+
+const runMobileFind = () => {
+  const searchText =
+    commandText.trim();
+
+  if (!searchText) {
+    return;
+  }
+
+  const query =
+    searchText.toLowerCase();
+
+  const visibleObjects =
+    getVisibleObjectsForFind();
+
+  const foundObject =
+    visibleObjects.find(
+      (object) =>
+        String(object?.type || "")
+          .toLowerCase()
+          .includes(query) ||
+        String(object?.text || "")
+          .toLowerCase()
+          .includes(query)
+    );
+
+  const foundIndex =
+    foundObject
+      ? objects.indexOf(foundObject)
+      : -1;
+
+  if (foundIndex !== -1) {
+    setSelectedIndexes([
+      foundIndex,
+    ]);
+
+    setSelectedIndex(
+      foundIndex
+    );
+
+    setMobileCommandPanel("home");
+    setCommandText("");
+    changeTool("select");
+    return;
+  }
+
+  window.alert(
+    `No "${searchText}" object found.`
+  );
+};
+
+/* =========================
+   MOBILE COMMAND RUNNER
+========================= */
+
+const runMobileCommand = (rawCommand) => {
+  const command = String(
+    rawCommand || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!command) {
+    return;
+  }
+
+  /* =========================
+   KEYBOARD COMMAND ALIASES
+   FOR MOBILE SUGGESTIONS
+========================= */
+
+if (command === "f1") {
+  setShowHome(true);
+  setCommandText("");
+  return;
+}
+
+if (command === "f2") {
+  if (
+    mobileCommandHistory.length > 0
+  ) {
+    const lastCommand =
+      mobileCommandHistory[
+        mobileCommandHistory.length - 1
+      ];
+
+    setCommandText(
+      lastCommand || ""
+    );
+  }
+
+  return;
+}
+
+if (command === "f3") {
+  setObjectSnapEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (command === "f7") {
+  setGridEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (command === "f8") {
+  toggleOrtho();
+  setCommandText("");
+  return;
+}
+
+if (command === "f9") {
+  setGridSnapEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (command === "f10") {
+  togglePolar();
+  setCommandText("");
+  return;
+}
+
+if (command === "f11") {
+  setObjectSnapTrackingEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (command === "f12") {
+  setDynamicInputEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "ctrl+shift+k"
+) {
+  runMobileCommand("layers");
+  return;
+}
+
+if (
+  command === "ctrl+shift+u"
+) {
+  runMobileCommand("properties");
+  return;
+}
+
+/* =========================
+   MOBILE SHORTCUT COMMANDS
+========================= */
+
+/* =========================
+   CTRL + ALT + B = RADIUS
+========================= */
+
+if (
+  command === "ctrl+alt+b"
+) {
+  runMobileCommand(
+    "radiusdimension"
+  );
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT MODIFY
+   MOBILE COMMANDS
+========================= */
+
+if (command === "ctrl+shift+v") {
+  runMobileCommand("move");
+  return;
+}
+
+if (command === "ctrl+shift+w") {
+  runMobileCommand("offset");
+  return;
+}
+
+if (command === "ctrl+shift+b") {
+  runMobileCommand("scale");
+  return;
+}
+
+if (command === "ctrl+shift+q") {
+  runMobileCommand("erase");
+  return;
+}
+
+if (command === "ctrl+shift+n") {
+  runMobileCommand("trim");
+  return;
+}
+
+if (command === "ctrl+shift+y") {
+  runMobileCommand("extend");
+  return;
+}
+
+if (command === "ctrl+shift+i") {
+  runMobileCommand("mirror");
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT DRAWING
+========================= */
+
+if (command === "ctrl+shift+l") {
+  runMobileCommand("line");
+  return;
+}
+
+if (command === "ctrl+shift+c") {
+  runMobileCommand("circle");
+  return;
+}
+
+if (command === "ctrl+shift+r") {
+  runMobileCommand("rectangle");
+  return;
+}
+
+if (command === "ctrl+shift+t") {
+  runMobileCommand("text");
+  return;
+}
+
+if (command === "ctrl+shift+h") {
+  runMobileCommand("hatch");
+  return;
+}
+
+/* =========================
+   CTRL + ALT MEASURE
+========================= */
+
+if (command === "ctrl+alt+m") {
+  runMobileCommand("measure");
+  return;
+}
+
+if (command === "ctrl+alt+a") {
+  runMobileCommand("area");
+  return;
+}
+
+if (command === "ctrl+alt+d") {
+  runMobileCommand("dimension");
+  return;
+}
+
+if (command === "ctrl+alt+g") {
+  runMobileCommand("angulardimension");
+  return;
+}
+
+if (command === "ctrl+alt+i") {
+  runMobileCommand("diameterdimension");
+  return;
+}
+
+  /* =========================
+   VIEW / DRAFTING COMMANDS
+========================= */
+
+if (
+  command === "ortho" ||
+  command === "f8"
+) {
+  toggleOrtho();
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "polar" ||
+  command === "f10"
+) {
+  setPolarEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "grid" ||
+  command === "f7"
+) {
+  setGridEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "snap" ||
+  command === "f9"
+) {
+  setGridSnapEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "osnap" ||
+  command === "f3"
+) {
+  setObjectSnapEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "dyn" ||
+  command === "f12"
+) {
+  setDynamicInputEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "track" ||
+  command === "f11"
+) {
+  setObjectSnapTrackingEnabled(
+    (prev) => !prev
+  );
+
+  setCommandText("");
+  return;
+}
+
+  setMobileCommandHistory((prev) => {
+  const next = [
+    ...prev,
+    command,
+  ].slice(-30);
+
+  try {
+    localStorage.setItem(
+      "mycadMobileCommandHistory",
+      JSON.stringify(next)
+    );
+  } catch (error) {
+    console.error(
+      "Command history save failed:",
+      error
+    );
+  }
+
+  return next;
+});
+
+setMobileCommandHistoryIndex(-1);
+
+/* =========================
+   MOBILE PANEL COMMANDS
+========================= */
+
+if (
+  command === "properties" ||
+  command === "prop" ||
+  command === "pr"
+) {
+  if (
+    selectedIndex === null ||
+    !selectedObject
+  ) {
+    window.alert(
+      "Pehle object select karo."
+    );
+    return;
+  }
+
+  setShowMobileLayers(false);
+  setShowMobileProperties(true);
+  setMobileCommandPanel("home");
+  setCommandText("");
+
+  return;
+}
+
+if (
+  command === "layers" ||
+  command === "layer" ||
+  command === "la"
+) {
+  setShowMobileProperties(false);
+  setShowMobileLayers(true);
+  setCommandText("");
+
+  return;
+}
+
+/* =========================
+   FILE COMMANDS
+========================= */
+
+if (
+  command === "save" ||
+  command === "qsave" ||
+  command === "q"
+) {
+  try {
+    saveDrawing();
+  } catch (error) {
+    console.error(
+      "Save failed:",
+      error
+    );
+
+    window.alert(
+      "Save nahi ho paya."
+    );
+  }
+
+  setCommandText("");
+  return;
+}
+
+/* =========================
+   NEW DRAWING
+========================= */
+
+if (
+  command === "new" ||
+  command === "n"
+) {
+  try {
+    clearDrawing();
+  } catch (error) {
+    console.error(
+      "New drawing failed:",
+      error
+    );
+
+    window.alert(
+      "New drawing nahi ban payi."
+    );
+  }
+
+  setCommandText("");
+  return;
+}
+
+if (command === "open") {
+  try {
+    openDrawing();
+  } catch (error) {
+    console.error(
+      "Open failed:",
+      error
+    );
+
+    window.alert(
+      "Drawing open nahi ho payi."
+    );
+  }
+
+  setCommandText("");
+  return;
+}
+
+/* =========================
+   NEW / RESTORE / EXPORT
+========================= */
+
+if (
+  command === "new"
+) {
+  try {
+    clearDrawing();
+  } catch (error) {
+    console.error(
+      "New drawing failed:",
+      error
+    );
+  }
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "restore" ||
+  command === "restoreautosave" ||
+  command === "r"
+) {
+  restoreAutoSave();
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "clearautosave" ||
+  command === "ca"
+) {
+  clearAutoSave();
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "exportpng" ||
+  command === "png" ||
+  command === "ep"
+) {
+  exportPNG();
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "exportsvg" ||
+  command === "svg" ||
+  command === "es"
+) {
+  exportSVG();
+  setCommandText("");
+  return;
+}
+
+/* =========================
+   EXPORT DXF
+========================= */
+
+if (
+  command === "exportdxf" ||
+  command === "dxf" ||
+  command === "ed"
+) {
+  exportDXF();
+  setCommandText("");
+  return;
+}
+
+    /* =========================
+     SPECIAL MOBILE COMMANDS
+  ========================= */
+
+  if (
+    command === "u" ||
+    command === "undo"
+  ) {
+    if (!undoActiveLineSegment()) {
+      try {
+        undo();
+      } catch (error) {
+        console.error(
+          "Undo failed:",
+          error
+        );
+      }
+    }
+
+    setCommandText("");
+    return;
+  }
+
+  if (
+  command === "redo" ||
+  command === "y"
+) {
+  try {
+    redo();
+  } catch (error) {
+    console.error(
+      "Redo failed:",
+      error
+    );
+  }
+
+  setCommandText("");
+  return;
+}
+
+  /* =========================
+   CLOSE ACTIVE COMMAND
+========================= */
+
+if (command === "close") {
+  setLineStart(null);
+  setLinePreview(null);
+  setPendingLinePoint(null);
+  setLineLengthInput("");
+  setShowLineInput(false);
+
+  setIsDrawing(false);
+
+  actionStartRef.current = null;
+
+  setSnapPoint(null);
+  setSnapType("");
+
+  setCommandText("");
+  setMobileCommandPanel("home");
+
+  changeTool("select");
+
+  return;
+}
+
+/* =========================
+   HOME PANEL
+========================= */
+
+if (command === "home") {
+  setCommandText("");
+  setShowMobileProperties(false);
+  setShowMobileLayers(false);
+  setMobileCommandPanel("home");
+  return;
+}
+
+  if (
+    command === "esc" ||
+    command === "cancel"
+  ) {
+    setLineStart(null);
+    setLinePreview(null);
+    setPendingLinePoint(null);
+    setLineLengthInput("");
+    setShowLineInput(false);
+
+    setIsDrawing(false);
+
+    setMeasureStart(null);
+    setAnglePoints([]);
+
+    setSnapType("");
+    setSnapPoint(null);
+
+    setSelectedIndex(null);
+    setSelectedIndexes([]);
+
+    setSelectedMeasurementIndex(null);
+    setCommandFirstIndex(null);
+
+    actionStartRef.current = null;
+    moveStartRef.current = null;
+    stretchStartRef.current = null;
+
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+
+    setCommandText("");
+    setMobileCommandPanel("home");
+
+    changeTool("select");
+    return;
+  }
+
+if (
+  command === "zf" ||
+  command === "zoomfit" ||
+  command === "ze"
+) {
+  zoomFit();
+  setCommandText("");
+  return;
+}
+
+  if (command === "find") {
+    setCommandText("");
+    openMobilePanel("find");
+    return;
+  }
+
+  /* =========================
+   ZOOM IN / ZOOM OUT
+========================= */
+
+if (
+  command === "zi" ||
+  command === "zoomin"
+) {
+  setScale((prevScale) =>
+    Math.min(prevScale * 1.2, 100)
+  );
+
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "zo" ||
+  command === "zoomout"
+) {
+  setScale((prevScale) =>
+    Math.max(prevScale / 1.2, 0.01)
+  );
+
+  setCommandText("");
+  return;
+}
+
+ const toolMap = {
+
+  /* BASIC */
+  select: "select",
+  s: "select",
+
+  line: "line",
+l: "line",
+ln: "line",
+
+polyline: "polyline",
+pl: "polyline",
+pline: "polyline",
+
+
+spline: "spline",
+spl: "spline",
+
+arc: "arc",
+
+ellipse: "ellipse",
+ell: "ellipse",
+
+circle: "circle",
+c: "circle",
+ci: "circle",
+
+rectangle: "rectangle",
+rec: "rectangle",
+rectang: "rectangle",
+
+text: "text",
+t: "text",
+dt: "text",
+
+hatch: "hatch",
+h: "hatch",
+bh: "hatch",
+
+point: "point",
+po: "point",
+
+array: "array",
+arr: "array",
+arrayclassic: "array",
+
+  /* MEASURE / DIMENSION */
+ measure: "measure",
+me: "measure",
+distance: "measure",
+dist: "measure",
+di: "measure",
+
+quickmeasure: "quickMeasure",
+quick: "quickMeasure",
+qm: "quickMeasure",
+
+  dimension: "dimension",
+dim: "dimension",
+d: "dimension",
+
+  area: "area",
+ar: "area",
+aa: "area",
+
+  /* VOLUME */
+  volume: "volume",
+  vol: "volume",
+
+  angulardimension: "angularDimension",
+ang: "angularDimension",
+ad: "angularDimension",
+
+radiusdimension: "radiusDimension",
+rad: "radiusDimension",
+rd: "radiusDimension",
+
+  diameterdimension: "diameterDimension",
+dia: "diameterDimension",
+dd: "diameterDimension",
+
+
+  /* MODIFY */
+ move: "move",
+m: "move",
+mv: "move",
+
+copy: "copy",
+co: "copy",
+cp: "copy",
+
+rotate: "rotate",
+ro: "rotate",
+rt: "rotate",
+rr: "rotate",
+
+trim: "trim",
+tr: "trim",
+trm: "trim",
+trimcommand: "trim",
+
+extend: "extend",
+ex: "extend",
+ext: "extend",
+exd: "extend",
+
+lengthen: "lengthen",
+len: "lengthen",
+
+stretch: "stretch",
+sst: "stretch",
+st: "stretch",
+
+offset: "offset",
+o: "offset",
+of: "offset",
+ofs: "offset",
+
+mirror: "mirror",
+mi: "mirror",
+mr: "mirror",
+
+scale: "scale",
+sc: "scale",
+sl: "scale",
+
+fillet: "fillet",
+f: "fillet",
+fil: "fillet",
+
+chamfer: "chamfer",
+cha: "chamfer",
+ch: "chamfer",
+
+array: "array",
+arr: "array",
+arrayclassic: "array",
+
+explode: "explode",
+x: "explode",
+exp: "explode",
+
+align: "align",
+al: "align",
+
+break: "break",
+br: "break",
+
+group: "group",
+g: "group",
+grp: "group",
+
+ungroup: "ungroup",
+ug: "ungroup",
+ung: "ungroup",
+
+block: "block",
+b: "block",
+blk: "block",
+
+renameblock: "renameblock",
+rb: "renameblock",
+
+deleteblock: "deleteblock",
+db: "deleteblock",
+
+explodeblock: "explodeblock",
+eb: "explodeblock",
+
+purge: "purge",
+pu: "purge",
+
+layerisolate: "layerisolate",
+layiso: "layerisolate",
+li: "layerisolate",
+
+layerunisolate: "layerunisolate",
+layuniso: "layerunisolate",
+
+layout: "layout",
+lay: "layout",
+
+layeroff: "layeroff",
+layoff: "layeroff",
+
+layeron: "layeron",
+layon: "layeron",
+
+layerfreeze: "layerfreeze",
+layfreeze: "layerfreeze",
+
+layerthaw: "layerthaw",
+laythaw: "layerthaw",
+
+layermatch: "layermatch",
+lm: "layermatch",
+
+layermerge: "layermerge",
+laymerge: "layermerge",
+lmrg: "layermerge",
+
+matchprop: "matchprop",
+ma: "matchprop",
+mp: "matchprop",
+
+overkill: "overkill",
+ov: "overkill",
+
+audit: "audit",
+au: "audit",
+
+regen: "regen",
+re: "regen",
+
+wipeout: "wipeout",
+wo: "wipeout",
+
+flatten: "flatten",
+flat: "flatten",
+
+list: "list",
+li: "list",
+
+xclip: "xclip",
+xc: "xclip",
+
+boundary: "boundary",
+bo: "boundary",
+
+divide: "divide",
+div: "divide",
+
+join: "join",
+j: "join",
+jn: "join",
+
+union: "union",
+uni: "union",
+
+  erase: "erase",
+e: "erase",
+delete: "erase",
+del: "erase",
+};
+
+if (
+  command === "erase" ||
+  command === "e" ||
+  command === "er" ||
+  command === "delete" ||
+  command === "del"
+) {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
+    window.alert(
+      "Pehle object select karo."
+    );
+    setCommandText("");
+    return;
+  }
+
+  saveHistory(
+    [...objects],
+    [...measurements]
+  );
+
+  setObjects((prev) =>
+    prev.filter(
+      (_, index) =>
+        !indexes.includes(index)
+    )
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setCommandText("");
+  setMobileCommandPanel("home");
+  changeTool("select");
+
+  return;
+}
+
+/* =========================
+   SELECT ALL
+========================= */
+
+if (
+  command === "all" ||
+  command === "selectall"
+) {
+  const allIndexes = objects.map(
+    (_, index) => index
+  );
+
+  if (allIndexes.length === 0) {
+    setSelectedIndex(null);
+    setSelectedIndexes([]);
+    setCommandText("");
+    return;
+  }
+
+  changeTool("select");
+
+  setSelectedIndexes(
+    allIndexes
+  );
+
+  setSelectedIndex(
+    allIndexes[
+      allIndexes.length - 1
+    ]
+  );
+
+  setCommandText("");
+  setMobileCommandPanel("home");
+
+  return;
+}
+
+/* =========================
+   SELECT LAST OBJECT
+========================= */
+
+if (
+  command === "last" ||
+  command === "selectlast"
+) {
+  if (objects.length === 0) {
+    setSelectedIndex(null);
+    setSelectedIndexes([]);
+    setCommandText("");
+    return;
+  }
+
+  const lastIndex =
+    objects.length - 1;
+
+  changeTool("select");
+
+  setSelectedIndexes([
+    lastIndex,
+  ]);
+
+  setSelectedIndex(
+    lastIndex
+  );
+
+  setCommandText("");
+  setMobileCommandPanel("home");
+
+  return;
+}
+
+/* =========================
+   DESELECT ALL
+========================= */
+
+if (
+  command === "none" ||
+  command === "deselect" ||
+  command === "unselect"
+) {
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+
+  setCommandText("");
+  setMobileCommandPanel("home");
+
+  return;
+}
+
+  const selectedTool =
+    toolMap[command];
+
+  if (!selectedTool) {
+    window.alert(
+      `Unknown command: ${rawCommand}`
+    );
+    return;
+  }
+
+  setCommandText("");
+
+  selectMobileTool(
+    selectedTool
+  );
+};
+
+/* =========================
+   MOBILE LINE UNDO
+========================= */
+
+const undoActiveLineSegment = () => {
+  if (
+    tool !== "line" ||
+    !lineStart ||
+    showLineInput
+  ) {
+    return false;
+  }
+
+  const lastObject =
+    objects[objects.length - 1];
+
+  if (
+    !lastObject ||
+    lastObject.type !== "line" ||
+    !Array.isArray(lastObject.points) ||
+    lastObject.points.length < 4
+  ) {
+    return false;
+  }
+
+  /*
+     Current objects me se last LINE
+     hatne ke baad next start point
+     previous line ka END hoga.
+  */
+
+  const previousObjects =
+    objects.slice(0, -1);
+
+  const previousLine =
+    [...previousObjects]
+      .reverse()
+      .find(
+        (object) =>
+          object?.type === "line" &&
+          Array.isArray(object.points) &&
+          object.points.length >= 4
+      );
+
+  const nextStart = previousLine
+    ? {
+        x:
+          previousLine.points[
+            previousLine.points.length - 2
+          ],
+        y:
+          previousLine.points[
+            previousLine.points.length - 1
+          ],
+      }
+    : {
+        x: lastObject.points[0],
+        y: lastObject.points[1],
+      };
+
+  /*
+     Normal undo use karo taaki
+     REDO history bhi properly bane.
+  */
+  undo();
+
+  /*
+     LINE command ko continue rakho.
+  */
+  setLineStart(nextStart);
+
+  setLinePreview({
+    x1: nextStart.x,
+    y1: nextStart.y,
+    x2: nextStart.x,
+    y2: nextStart.y,
+  });
+
+  setPendingLinePoint(null);
+  setLineLengthInput("");
+  setShowLineInput(false);
+  setSnapPoint(null);
+  setSnapType("");
+  setIsDrawing(true);
+
+  return true;
+};
+ 
   const [unit, setUnit] =
   useState("mm");
 
@@ -1835,6 +3239,12 @@ const [objectSnapEnabled, setObjectSnapEnabled] =
   const [past, setPast] = useState([]);
 
   const [future, setFuture] = useState([]);
+
+  const [splinePoints, setSplinePoints] =
+  useState([]);
+
+  const [splinePreviewPoint, setSplinePreviewPoint] =
+  useState(null);
 
   const actionStartRef = useRef(null);
 
@@ -2027,6 +3437,67 @@ const getSnapType = (point) => {
         return "QUADRANT";
       }
     }
+    
+    /* =========================
+   ELLIPSE SNAP TYPE
+========================= */
+
+if (
+  object.type === "ellipse" &&
+  Number.isFinite(object.x) &&
+  Number.isFinite(object.y)
+) {
+  const rx = Math.abs(
+    Number(object.radiusX) || 0
+  );
+
+  const ry = Math.abs(
+    Number(object.radiusY) || 0
+  );
+
+  const angle =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+
+  const center = {
+    x: object.x,
+    y: object.y,
+  };
+
+  if (isNear(point, center)) {
+    return "CENTER";
+  }
+
+  const axisPoints = [
+    {
+      x: object.x + rx * cos,
+      y: object.y + rx * sin,
+    },
+    {
+      x: object.x - rx * cos,
+      y: object.y - rx * sin,
+    },
+    {
+      x: object.x - ry * sin,
+      y: object.y + ry * cos,
+    },
+    {
+      x: object.x + ry * sin,
+      y: object.y - ry * cos,
+    },
+  ];
+
+  if (
+    axisPoints.some(
+      (axisPoint) => isNear(point, axisPoint)
+    )
+  ) {
+    return "QUADRANT";
+  }
+}
 
     /* =========================
        RECTANGLE
@@ -2425,6 +3896,105 @@ const snapToObject = (
       });
     }
 
+/* =========================
+   ELLIPSE OBJECT SNAP
+========================= */
+
+if (
+  object.type === "ellipse" &&
+  Number.isFinite(object.x) &&
+  Number.isFinite(object.y) &&
+  Number.isFinite(object.radiusX) &&
+  Number.isFinite(object.radiusY)
+) {
+  const cx = object.x;
+  const cy = object.y;
+
+  const rx = Math.abs(object.radiusX);
+  const ry = Math.abs(object.radiusY);
+
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  // CENTER SNAP
+  snapPoints.push({
+    x: cx,
+    y: cy,
+    snapType: "CENTER",
+  });
+
+  // FOUR ELLIPSE AXIS POINTS
+  const axisPoints = [
+    [rx, 0],
+    [-rx, 0],
+    [0, -ry],
+    [0, ry],
+  ];
+
+  axisPoints.forEach(([localX, localY]) => {
+    snapPoints.push({
+      x:
+        cx +
+        localX * cos -
+        localY * sin,
+
+      y:
+        cy +
+        localX * sin +
+        localY * cos,
+
+      snapType: "QUADRANT",
+    });
+  });
+
+  /* =========================
+   ELLIPSE NEAREST SNAP
+========================= */
+
+const pointerDx = x - cx;
+const pointerDy = y - cy;
+
+// Pointer ko ellipse ke local coordinates mein badlo
+const localX =
+  pointerDx * cos +
+  pointerDy * sin;
+
+const localY =
+  -pointerDx * sin +
+  pointerDy * cos;
+
+if (rx > 0 && ry > 0) {
+  const angle = Math.atan2(
+    localY / ry,
+    localX / rx
+  );
+
+  const nearestLocalX =
+    rx * Math.cos(angle);
+
+  const nearestLocalY =
+    ry * Math.sin(angle);
+
+  snapPoints.push({
+    x:
+      cx +
+      nearestLocalX * cos -
+      nearestLocalY * sin,
+
+    y:
+      cy +
+      nearestLocalX * sin +
+      nearestLocalY * cos,
+
+    snapType: "NEAREST",
+  });
+}
+}
+
     /* =========================
        RECTANGLE
     ========================= */
@@ -2730,132 +4300,71 @@ const getLineSegments = (
 ) => {
   const segments = [];
 
-  if (
-    object?.type === "line" &&
-    object.points?.length >= 4
-  ) {
+objects.forEach((object, objectIndex) => {
+  const objectSegments =
+    getLineSegments(object);
+
+  objectSegments.forEach((segment) => {
     segments.push({
-      x1: object.points[0],
-      y1: object.points[1],
-      x2: object.points[2],
-      y2: object.points[3],
+      ...segment,
+      objectIndex,
     });
-  }
+  });
+
+  /* ELLIPSE INTERSECTION SEGMENTS */
 
   if (
-    object?.type === "polyline" &&
-    object.points?.length >= 4
+    object?.type === "ellipse" &&
+    Number.isFinite(object.x) &&
+    Number.isFinite(object.y)
   ) {
-    for (
-      let i = 0;
-      i < object.points.length - 2;
-      i += 2
-    ) {
-      segments.push({
-        x1: object.points[i],
-        y1: object.points[i + 1],
-        x2: object.points[i + 2],
-        y2: object.points[i + 3],
-      });
-    }
-  }
+    const rx = Math.abs(
+      Number(object.radiusX) || 0
+    );
 
-  return segments;
-};
+    const ry = Math.abs(
+      Number(object.radiusY) || 0
+    );
 
-const segments = [];
+    if (rx > 0 && ry > 0) {
+      const rotation =
+        (Number(object.rotation) || 0) *
+        (Math.PI / 180);
 
-objects.forEach(
-  (object, objectIndex) => {
-    const objectSegments =
-      getLineSegments(
-        object
-      );
+      const cos = Math.cos(rotation);
+      const sin = Math.sin(rotation);
+      const steps = 72;
 
-    objectSegments.forEach(
-      (segment) => {
+      const pointAt = (angle) => {
+        const lx = rx * Math.cos(angle);
+        const ly = ry * Math.sin(angle);
+
+        return {
+          x: object.x + lx * cos - ly * sin,
+          y: object.y + lx * sin + ly * cos,
+        };
+      };
+
+      for (let i = 0; i < steps; i++) {
+        const p1 = pointAt(
+          (i / steps) * Math.PI * 2
+        );
+
+        const p2 = pointAt(
+          ((i + 1) / steps) * Math.PI * 2
+        );
+
         segments.push({
-          ...segment,
+          x1: p1.x,
+          y1: p1.y,
+          x2: p2.x,
+          y2: p2.y,
           objectIndex,
         });
       }
-    );
+    }
   }
-);
-
-for (
-  let i = 0;
-  i < segments.length;
-  i++
-) {
-  for (
-    let j = i + 1;
-    j < segments.length;
-    j++
-  ) {
-    const first =
-      segments[i];
-
-    const second =
-      segments[j];
-
-    const denominator =
-      (first.x1 - first.x2) *
-        (second.y1 - second.y2) -
-      (first.y1 - first.y2) *
-        (second.x1 - second.x2);
-
-    if (
-      Math.abs(denominator) <
-      0.000001
-    ) {
-      continue;
-    }
-
-    const t =
-      (
-        (first.x1 - second.x1) *
-          (second.y1 - second.y2) -
-        (first.y1 - second.y1) *
-          (second.x1 - second.x2)
-      ) /
-      denominator;
-
-    const u =
-      -(
-        (first.x1 - first.x2) *
-          (first.y1 - second.y1) -
-        (first.y1 - first.y2) *
-          (first.x1 - second.x1)
-      ) /
-      denominator;
-
-    if (
-      t < 0 ||
-      t > 1 ||
-      u < 0 ||
-      u > 1
-    ) {
-      continue;
-    }
-
-    const intersectionX =
-      first.x1 +
-      t *
-        (first.x2 - first.x1);
-
-    const intersectionY =
-      first.y1 +
-      t *
-        (first.y2 - first.y1);
-
-   snapPoints.push({
-  x: intersectionX,
-  y: intersectionY,
-  snapType: "INTERSECTION",
 });
-
-  }
 }
 
 /* =========================
@@ -3204,33 +4713,79 @@ const redo = () => {
 };
 
 const parseCadDistance = (valueText) => {
-const value = valueText
-  .trim()
-  .toLowerCase()
-  .replace(/,/g, "")
-  .replace(/^@/, "");
+  const value = String(valueText ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/,/g, "")
+    .replace(/^@/, "");
 
-  let number = parseFloat(value);
+  if (!value) return null;
 
-  if (!Number.isFinite(number)) {
+  /* CAD DISTANCE<ANGLE INPUT */
+
+if (value.includes("<")) {
+  const distancePart = value
+    .split("<")[0]
+    .trim();
+
+  if (!distancePart) {
     return null;
   }
 
+  return parseCadDistance(distancePart);
+}
+
+  /* FEET + INCHES: 5' 6" or 5ft 6in */
+  const feetInchesMatch = value.match(
+    /^(-)?\s*(\d+(?:\.\d+)?)\s*(?:ft|feet|')\s*(?:(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")?)?$/
+  );
+
+  if (feetInchesMatch) {
+    const sign = feetInchesMatch[1] ? -1 : 1;
+    const feet = Number(feetInchesMatch[2]);
+    const inches = Number(feetInchesMatch[3] || 0);
+
+    return sign * (
+      feet * 304.8 +
+      inches * 25.4
+    );
+  }
+
+  /* NUMBER WITH OPTIONAL UNIT */
+  const match = value.match(
+    /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(ft|feet|in|inch|inches|'|")?$/
+  );
+
+  if (!match) return null;
+
+  let number = Number(match[1]);
+  const suffix = match[2] || "";
+
+  if (!Number.isFinite(number)) return null;
+
+  /* EXPLICIT UNIT */
   if (
-    value.endsWith("ft") ||
-    value.endsWith("feet") ||
-    value.endsWith("'")
+    suffix === "ft" ||
+    suffix === "feet" ||
+    suffix === "'"
   ) {
-    number *= 304.8;
+    return number * 304.8;
   }
 
   if (
-    value.endsWith("in") ||
-    value.endsWith("inch") ||
-    value.endsWith("inches") ||
-    value.endsWith('"')
+    suffix === "in" ||
+    suffix === "inch" ||
+    suffix === "inches" ||
+    suffix === '"'
   ) {
+    return number * 25.4;
+  }
+
+  /* SELECTED UNIT */
+  if (unit === "inch") {
     number *= 25.4;
+  } else if (unit === "ft-in") {
+    number *= 304.8;
   }
 
   return number;
@@ -3516,7 +5071,7 @@ if (tool === "polyline") {
     newLine,
   ]);
  
-/* =========================
+ /* =========================
    CONTINUE LINE FROM END
 ========================= */
 
@@ -3528,7 +5083,14 @@ setLineStart({
 setPendingLinePoint(null);
 setLineLengthInput("");
 setShowLineInput(false);
-setLinePreview(null);
+
+/* NEXT LINE PREVIEW STARTS IMMEDIATELY */
+setLinePreview({
+  x1: finalX,
+  y1: finalY,
+  x2: finalX,
+  y2: finalY,
+});
 
 setSnapPoint(null);
 setSnapType("");
@@ -3538,18 +5100,42 @@ setIsDrawing(true);
 actionStartRef.current = null;
 
 if (
-  document.activeElement instanceof
-  HTMLElement
+  document.activeElement instanceof HTMLElement
 ) {
   document.activeElement.blur();
 }
 
 return;}
+
+/* =========================
+   CHECK LAYER LOCK
+========================= */
+
+const isLayerLocked = (layerId) => {
+  if (!layerId) {
+    return false;
+  }
+
+  const layer = layers.find(
+    (item) => item.id === layerId
+  );
+
+  if (!layer) {
+    return false;
+  }
+
+  return Boolean(layer.locked);
+};
   /* =========================
      MOUSE DOWN
   ========================= */
 
   const handleMouseDown = (e) => {
+    console.log(
+  "MOUSEDOWN:",
+  tool,
+  e.evt?.type
+);
 
     // =========================
 // DOUBLE CLICK = FINISH POLYLINE
@@ -3566,6 +5152,33 @@ if (
   e.evt?.type === "mousedown" &&
   Date.now() - lastTouchTimeRef.current < 500
 ) {
+  return;
+}
+
+/* =========================
+   QUICK MEASURE CLICK GUARD
+========================= */
+
+if (tool === "quickMeasure") {
+  const stage = e.target.getStage();
+
+  if (!stage) {
+    return;
+  }
+
+  stage.setPointersPositions(e.evt);
+
+  const pointer = stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
+    setMousePosition({
+    x: (pointer.x - position.x) / scale,
+    y: (pointer.y - position.y) / scale,
+  });
+
   return;
 }
 
@@ -3944,6 +5557,22 @@ return;
   x: Math.round(rawX),
   y: Math.round(rawY),
 });
+
+/* =========================
+   SPLINE PREVIEW
+========================= */
+
+if (
+  tool === "spline" &&
+  splinePoints.length >= 2
+) {
+  setSplinePreviewPoint({
+    x: mousePosition.x,
+    y: mousePosition.y,
+  });
+}
+
+
 const snappedPoint =
   snapToObject(
     rawX,
@@ -3970,10 +5599,814 @@ const y =
       tool === "mirror" ||
       tool === "scale" ||
       tool === "explode" ||
+      tool === "break" ||
       tool === "join"
     ) {
       return;
     }
+
+    /* =========================
+   VOLUME MEASUREMENT
+   2D AREA × DEPTH
+========================= */
+
+if (tool === "volume") {
+  const isInsideShape = (obj) => {
+    if (!obj) return false;
+
+       /* RECTANGLE / HATCH HIT TEST */
+
+    if (
+      obj.type === "rectangle" ||
+      obj.type === "hatch"
+    ) {
+      const width = Number(obj.width);
+      const height = Number(obj.height);
+
+      if (
+        !Number.isFinite(width) ||
+        !Number.isFinite(height)
+      ) {
+        return false;
+      }
+
+      const rotation =
+        (Number(obj.rotation) || 0) *
+        Math.PI / 180;
+
+      const dx =
+        x - (Number(obj.x) || 0);
+
+      const dy =
+        y - (Number(obj.y) || 0);
+
+      const localX =
+        dx * Math.cos(rotation) +
+        dy * Math.sin(rotation);
+
+      const localY =
+        -dx * Math.sin(rotation) +
+        dy * Math.cos(rotation);
+
+      const hitTolerance = Math.max(
+        0.5,
+        4 / Math.max(scale, 0.01)
+      );
+
+      return (
+        localX >= Math.min(0, width) - hitTolerance &&
+        localX <= Math.max(0, width) + hitTolerance &&
+        localY >= Math.min(0, height) - hitTolerance &&
+        localY <= Math.max(0, height) + hitTolerance
+      );
+    }
+
+       /* CIRCLE HIT TEST */
+
+    if (obj.type === "circle") {
+      const radius = Number(obj.radius);
+
+      if (
+        !Number.isFinite(radius) ||
+        radius <= 0
+      ) {
+        return false;
+      }
+
+      const centerX = Number(obj.x) || 0;
+      const centerY = Number(obj.y) || 0;
+
+      const hitTolerance = Math.max(
+        0.5,
+        4 / Math.max(scale, 0.01)
+      );
+
+      return (
+        Math.hypot(
+          x - centerX,
+          y - centerY
+        ) <= radius + hitTolerance
+      );
+    }
+
+       /* ELLIPSE HIT TEST */
+
+    if (obj.type === "ellipse") {
+      const radiusX = Number(obj.radiusX);
+      const radiusY = Number(obj.radiusY);
+
+      if (
+        !Number.isFinite(radiusX) ||
+        !Number.isFinite(radiusY) ||
+        radiusX <= 0 ||
+        radiusY <= 0
+      ) {
+        return false;
+      }
+
+      const rotation =
+        (Number(obj.rotation) || 0) *
+        Math.PI / 180;
+
+      const dx =
+        x - (Number(obj.x) || 0);
+
+      const dy =
+        y - (Number(obj.y) || 0);
+
+      const localX =
+        dx * Math.cos(rotation) +
+        dy * Math.sin(rotation);
+
+      const localY =
+        -dx * Math.sin(rotation) +
+        dy * Math.cos(rotation);
+
+      const hitTolerance = Math.max(
+        0.5,
+        4 / Math.max(scale, 0.01)
+      );
+
+      const expandedRadiusX =
+        radiusX + hitTolerance;
+
+      const expandedRadiusY =
+        radiusY + hitTolerance;
+
+      return (
+        (localX * localX) /
+          (expandedRadiusX * expandedRadiusX) +
+        (localY * localY) /
+          (expandedRadiusY * expandedRadiusY)
+      ) <= 1;
+    }
+
+         /* CLOSED POLYLINE HIT TEST */
+
+    if (
+      obj.type === "polyline" &&
+      Array.isArray(obj.points) &&
+      obj.points.length >= 6 &&
+      obj.points.length % 2 === 0
+    ) {
+      const points = [];
+
+      for (
+        let i = 0;
+        i < obj.points.length;
+        i += 2
+      ) {
+        const px = Number(obj.points[i]);
+        const py = Number(obj.points[i + 1]);
+
+        if (
+          !Number.isFinite(px) ||
+          !Number.isFinite(py)
+        ) {
+          return false;
+        }
+
+        points.push({
+          x: px,
+          y: py,
+        });
+      }
+
+      if (points.length < 3) {
+        return false;
+      }
+
+      const first = points[0];
+      const last = points[points.length - 1];
+
+      const closingDistance = Math.hypot(
+        first.x - last.x,
+        first.y - last.y
+      );
+
+    /* REMOVE DUPLICATE CLOSING VERTEX */
+
+if (closingDistance <= 0.5) {
+  points.pop();
+}
+
+      if (points.length < 3) {
+        return false;
+      }
+
+  /* HANDLE POLYLINE ROTATION */
+
+const testX = x;
+const testY = y;
+
+const hitTolerance = Math.max(
+  0.5,
+  4 / Math.max(scale, 0.01)
+);
+
+      let inside = false;
+
+      for (
+        let i = 0, j = points.length - 1;
+        i < points.length;
+        j = i++
+      ) {
+        const a = points[i];
+        const b = points[j];
+
+        /* EDGE CLICK DETECTION */
+
+        const edgeDX = b.x - a.x;
+        const edgeDY = b.y - a.y;
+
+        const edgeLengthSq =
+          edgeDX * edgeDX +
+          edgeDY * edgeDY;
+
+        if (edgeLengthSq > 0) {
+          const t = Math.max(
+            0,
+            Math.min(
+              1,
+              (
+                (testX - a.x) * edgeDX +
+                (testY - a.y) * edgeDY
+              ) / edgeLengthSq
+            )
+          );
+
+          const nearestX =
+            a.x + t * edgeDX;
+
+          const nearestY =
+            a.y + t * edgeDY;
+
+          if (
+            Math.hypot(
+              testX - nearestX,
+              testY - nearestY
+            ) <= hitTolerance
+          ) {
+            return true;
+          }
+        }
+
+        /* POINT INSIDE POLYGON */
+
+        if (
+          (a.y > testY) !== (b.y > testY) &&
+          testX <
+            ((b.x - a.x) * (testY - a.y)) /
+              (b.y - a.y) +
+              a.x
+        ) {
+          inside = !inside;
+        }
+      }
+
+      return inside;
+    }
+
+    return false;
+  };
+
+  const shapeEntry = objects
+  .map((obj, index) => ({
+    obj,
+    index,
+  }))
+  .reverse()
+  .find(({ obj, index }) => {
+    if (
+      !obj ||
+      obj.hidden ||
+      isObjectLocked(index)
+    ) {
+      return false;
+    }
+
+    const objectLayer = layers.find(
+      (layer) =>
+        layer.id ===
+        (obj.layerId || "layer-0")
+    );
+
+    if (
+      objectLayer &&
+      !objectLayer.visible
+    ) {
+      return false;
+    }
+
+    return isInsideShape(obj);
+  });
+
+const shape = shapeEntry?.obj;
+
+  if (!shape) {
+    window.alert(
+      "Click inside a rectangle, circle, ellipse, hatch, or closed polyline."
+    );
+    return;
+  }
+
+  let area = 0;
+
+  if (
+    shape.type === "rectangle" ||
+    shape.type === "hatch"
+  ) {
+    area =
+      Math.abs(shape.width) *
+      Math.abs(shape.height);
+  } else if (shape.type === "circle") {
+    area =
+      Math.PI *
+      shape.radius *
+      shape.radius;
+  } else if (shape.type === "ellipse") {
+    area =
+      Math.PI *
+      shape.radiusX *
+      shape.radiusY;
+  } else if (shape.type === "polyline") {
+    const rawPoints = shape.points;
+
+    if (
+      !Array.isArray(rawPoints) ||
+      rawPoints.length < 6 ||
+      rawPoints.length % 2 !== 0
+    ) {
+      window.alert("Invalid closed polyline.");
+      return;
+    }
+
+    const points = [];
+
+    for (
+      let i = 0;
+      i < rawPoints.length;
+      i += 2
+    ) {
+      const px = Number(rawPoints[i]);
+      const py = Number(rawPoints[i + 1]);
+
+      if (
+        !Number.isFinite(px) ||
+        !Number.isFinite(py)
+      ) {
+        window.alert(
+          "Invalid polyline coordinates."
+        );
+        return;
+      }
+
+      points.push({ x: px, y: py });
+    }
+
+    if (points.length < 3) {
+      window.alert(
+        "Polyline needs at least 3 vertices."
+      );
+      return;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+
+    const closingDistance = Math.hypot(
+      first.x - last.x,
+      first.y - last.y
+    );
+
+    const isClosed =
+      shape.closed === true ||
+      shape.isClosed === true ||
+      closingDistance <= 0.5;
+
+    if (!isClosed) {
+      window.alert(
+        "Polyline must be closed to calculate volume."
+      );
+      return;
+    }
+
+    if (closingDistance <= 0.5) {
+      points.pop();
+    }
+
+    if (points.length < 3) {
+      window.alert(
+        "Polyline needs at least 3 vertices."
+      );
+      return;
+    }
+
+    let sum = 0;
+
+    for (let i = 0; i < points.length; i++) {
+      const next =
+        points[(i + 1) % points.length];
+
+      sum +=
+        points[i].x * next.y -
+        next.x * points[i].y;
+    }
+
+    area = Math.abs(sum) / 2;
+  }
+
+    /* =========================
+     VALIDATE CALCULATED AREA
+  ========================= */
+
+  if (
+    !Number.isFinite(area) ||
+    area <= 0
+  ) {
+    window.alert(
+      "Could not calculate a valid area. Select a valid closed shape."
+    );
+    return;
+  }
+
+  /* =========================
+     DEPTH INPUT + VOLUME RESULT
+  ========================= */
+
+  const unitFactor =
+    unit === "inch"
+      ? 25.4
+      : unit === "ft-in"
+        ? 304.8
+        : 1;
+
+  const lengthUnit =
+    unit === "inch"
+      ? "in"
+      : unit === "ft-in"
+        ? "ft (decimal)"
+        : "mm";
+
+  const areaUnit =
+    unit === "inch"
+      ? "in²"
+      : unit === "ft-in"
+        ? "ft²"
+        : "mm²";
+
+  const volumeUnit =
+    unit === "inch"
+      ? "in³"
+      : unit === "ft-in"
+        ? "ft³"
+        : "mm³";
+
+  const depthText = window.prompt(
+    `Enter extrusion depth (${lengthUnit}):`,
+    "10"
+  );
+
+  if (depthText === null) {
+    return;
+  }
+
+    const depth = parseCadDistance(depthText);
+
+  if (
+    !Number.isFinite(depth) ||
+    depth <= 0
+  ) {
+    window.alert(
+      "Enter a valid positive depth, e.g. 10, 10 in, or 5' 6\"."
+    );
+    return;
+  }
+
+  const volume = area * depth;
+
+    /* VALIDATE FINAL VOLUME */
+
+  if (
+    !Number.isFinite(volume) ||
+    volume <= 0
+  ) {
+    window.alert(
+      "Volume calculation failed. Check the shape and depth."
+    );
+    return;
+  }
+
+  const displayArea =
+    area / (unitFactor * unitFactor);
+
+    const displayDepthText =
+    unit === "ft-in"
+      ? (() => {
+          const sign =
+            depth < 0 ? "-" : "";
+
+          const totalInches =
+            Math.abs(depth) / 25.4;
+
+          let feet =
+            Math.floor(totalInches / 12);
+
+          let inches = Number(
+            (totalInches - feet * 12).toFixed(2)
+          );
+
+          if (inches >= 12) {
+            feet += 1;
+            inches = 0;
+          }
+
+          return (
+            `${sign}${feet}'-${inches.toFixed(2)}"`
+          );
+        })()
+      : `${(depth / unitFactor).toFixed(2)} ${lengthUnit}`;
+
+  const displayVolume =
+    volume /
+    (unitFactor * unitFactor * unitFactor);
+
+  window.alert(
+    `Area: ${displayArea.toFixed(2)} ${areaUnit}\n` +
+   `Depth: ${displayDepthText}\n` +
+    `Volume: ${displayVolume.toFixed(2)} ${volumeUnit}`
+  );
+
+  return;
+}
+    /* =========================
+   AREA MEASUREMENT
+========================= */
+
+if (tool === "area") {
+  const getPolygonVertices = (obj) => {
+    if (
+      obj?.type !== "polyline" ||
+      !Array.isArray(obj.points) ||
+      obj.points.length < 6
+    ) {
+      return null;
+    }
+
+    const vertices = [];
+
+    for (
+      let i = 0;
+      i < obj.points.length - 1;
+      i += 2
+    ) {
+      vertices.push({
+        x: obj.points[i],
+        y: obj.points[i + 1],
+      });
+    }
+
+    if (vertices.length < 3) {
+      return null;
+    }
+
+    const first = vertices[0];
+    const last = vertices[vertices.length - 1];
+
+    const isClosed =
+      obj.closed === true ||
+      Math.hypot(
+        first.x - last.x,
+        first.y - last.y
+      ) < 0.000001;
+
+    if (!isClosed) {
+      return null;
+    }
+
+    if (
+      Math.hypot(
+        first.x - last.x,
+        first.y - last.y
+      ) < 0.000001
+    ) {
+      vertices.pop();
+    }
+
+    return vertices.length >= 3
+      ? vertices
+      : null;
+  };
+
+  const pointInPolygon = (px, py, vertices) => {
+    let inside = false;
+
+    for (
+      let i = 0, j = vertices.length - 1;
+      i < vertices.length;
+      j = i++
+    ) {
+      const a = vertices[i];
+      const b = vertices[j];
+
+      const crosses =
+        (a.y > py) !== (b.y > py) &&
+        px <
+          ((b.x - a.x) * (py - a.y)) /
+            (b.y - a.y) +
+            a.x;
+
+      if (crosses) {
+        inside = !inside;
+      }
+    }
+
+    return inside;
+  };
+
+  /* FIND CLOSED OBJECT UNDER CLICK */
+
+  const areaEntry = objects
+  .map((obj, index) => ({
+    obj,
+    index,
+  }))
+  .reverse()
+  .find(({ obj, index }) => {
+    if (
+      !obj ||
+      obj.hidden ||
+      isObjectLocked(index)
+    ) {
+      return false;
+    }
+
+    const objectLayer = layers.find(
+      (layer) =>
+        layer.id ===
+        (obj.layerId || "layer-0")
+    );
+
+    if (
+      objectLayer &&
+      !objectLayer.visible
+    ) {
+      return false;
+    }
+
+      /* RECTANGLE / HATCH */
+
+      if (
+        obj.type === "rectangle" ||
+        obj.type === "hatch"
+      ) {
+        const rotation =
+          (Number(obj.rotation) || 0) *
+          (Math.PI / 180);
+
+        const dx = x - (Number(obj.x) || 0);
+        const dy = y - (Number(obj.y) || 0);
+
+        const localX =
+          dx * Math.cos(rotation) +
+          dy * Math.sin(rotation);
+
+        const localY =
+          -dx * Math.sin(rotation) +
+          dy * Math.cos(rotation);
+
+        const width = Number(obj.width) || 0;
+        const height = Number(obj.height) || 0;
+
+        return (
+          localX >= Math.min(0, width) &&
+          localX <= Math.max(0, width) &&
+          localY >= Math.min(0, height) &&
+          localY <= Math.max(0, height)
+        );
+      }
+
+      /* CIRCLE */
+
+      if (
+        obj.type === "circle" &&
+        Number(obj.radius) > 0
+      ) {
+        return (
+          Math.hypot(
+            x - obj.x,
+            y - obj.y
+          ) <= obj.radius
+        );
+      }
+
+      /* ELLIPSE */
+
+      if (
+        obj.type === "ellipse" &&
+        Number(obj.radiusX) > 0 &&
+        Number(obj.radiusY) > 0
+      ) {
+        const rotation =
+          (Number(obj.rotation) || 0) *
+          (Math.PI / 180);
+
+        const dx = x - obj.x;
+        const dy = y - obj.y;
+
+        const localX =
+          dx * Math.cos(rotation) +
+          dy * Math.sin(rotation);
+
+        const localY =
+          -dx * Math.sin(rotation) +
+          dy * Math.cos(rotation);
+
+        return (
+          (localX * localX) /
+            (obj.radiusX * obj.radiusX) +
+          (localY * localY) /
+            (obj.radiusY * obj.radiusY) <= 1
+        );
+      }
+
+      /* CLOSED POLYLINE */
+
+      if (obj.type === "polyline") {
+        const vertices = getPolygonVertices(obj);
+
+        return (
+          vertices !== null &&
+          pointInPolygon(x, y, vertices)
+        );
+      }
+
+      return false;
+    });
+
+      const areaObject = areaEntry?.obj;
+
+  if (!areaObject) {
+    window.alert(
+      "Click inside a rectangle, circle, ellipse, hatch, or closed polyline."
+    );
+
+    return;
+  }
+
+  let area = 0;
+
+  if (
+    areaObject.type === "rectangle" ||
+    areaObject.type === "hatch"
+  ) {
+    area =
+      Math.abs(areaObject.width) *
+      Math.abs(areaObject.height);
+  } else if (areaObject.type === "circle") {
+    area =
+      Math.PI *
+      areaObject.radius *
+      areaObject.radius;
+  } else if (areaObject.type === "ellipse") {
+    area =
+      Math.PI *
+      areaObject.radiusX *
+      areaObject.radiusY;
+  } else if (areaObject.type === "polyline") {
+    const vertices =
+      getPolygonVertices(areaObject);
+
+    let sum = 0;
+
+    for (
+      let i = 0;
+      i < vertices.length;
+      i++
+    ) {
+      const next =
+        vertices[(i + 1) % vertices.length];
+
+      sum +=
+        vertices[i].x * next.y -
+        next.x * vertices[i].y;
+    }
+
+    area = Math.abs(sum) / 2;
+  }
+
+  const areaDisplay =
+  unit === "inch"
+    ? `${(area / (25.4 * 25.4)).toFixed(2)} inch²`
+    : unit === "ft-in"
+      ? `${(area / (304.8 * 304.8)).toFixed(2)} ft²`
+      : `${area.toFixed(2)} mm²`;
+
+window.alert(`Area = ${areaDisplay}`);
+
+  return;
+}
+
    if (tool === "text") {
 
   // Existing text par click ho to
@@ -4766,6 +7199,367 @@ setMousePosition({
 
 return;
     }
+    
+    /* =========================
+   AREA MEASUREMENT
+========================= */
+
+if (tool === "area") {
+  let nearestObject = null;
+  let nearestIndex = -1;
+  let nearestDistance = Infinity;
+
+  objects.forEach((object, index) => {
+    if (
+      object?.hidden ||
+      isObjectLocked(index)
+    ) {
+      return;
+    }
+
+    const objectLayer = layers.find(
+  (layer) =>
+    layer.id ===
+    (object.layerId || "layer-0")
+);
+
+if (
+  objectLayer &&
+  !objectLayer.visible
+) {
+  return;
+}
+
+    let distance = Infinity;
+
+    if (
+      object.type === "rectangle"
+    ) {
+      const left = object.x;
+      const right =
+        object.x + object.width;
+
+      const top = object.y;
+      const bottom =
+        object.y + object.height;
+
+      const closestX =
+        Math.max(
+          left,
+          Math.min(x, right)
+        );
+
+      const closestY =
+        Math.max(
+          top,
+          Math.min(y, bottom)
+        );
+
+      distance = Math.hypot(
+        x - closestX,
+        y - closestY
+      );
+    }
+
+    if (
+      object.type === "circle"
+    ) {
+      distance =
+        Math.abs(
+          Math.hypot(
+            x - object.x,
+            y - object.y
+          ) - object.radius
+        );
+    }
+
+/* =========================
+   ELLIPSE AREA PICKING
+========================= */
+
+if (
+  object.type === "ellipse" &&
+  Number.isFinite(object.x) &&
+  Number.isFinite(object.y)
+) {
+  const rx = Math.abs(
+    Number(object.radiusX) || 0
+  );
+
+  const ry = Math.abs(
+    Number(object.radiusY) || 0
+  );
+
+  if (rx > 0 && ry > 0) {
+    const rotation =
+      (Number(object.rotation) || 0) *
+      (Math.PI / 180);
+
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+
+    const steps = 72;
+
+    for (let i = 0; i < steps; i++) {
+      const a1 =
+        (i / steps) * Math.PI * 2;
+
+      const a2 =
+        ((i + 1) / steps) * Math.PI * 2;
+
+      const x1 =
+        object.x +
+        rx * Math.cos(a1) * cos -
+        ry * Math.sin(a1) * sin;
+
+      const y1 =
+        object.y +
+        rx * Math.cos(a1) * sin +
+        ry * Math.sin(a1) * cos;
+
+      const x2 =
+        object.x +
+        rx * Math.cos(a2) * cos -
+        ry * Math.sin(a2) * sin;
+
+      const y2 =
+        object.y +
+        rx * Math.cos(a2) * sin +
+        ry * Math.sin(a2) * cos;
+
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+
+      const lengthSquared =
+        dx * dx + dy * dy;
+
+      const t = lengthSquared > 0
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              (
+                (x - x1) * dx +
+                (y - y1) * dy
+              ) / lengthSquared
+            )
+          )
+        : 0;
+
+      const px = x1 + t * dx;
+      const py = y1 + t * dy;
+
+      distance = Math.min(
+        distance,
+        Math.hypot(x - px, y - py)
+      );
+    }
+  }
+}
+
+    if (
+      object.type === "polyline" &&
+      Array.isArray(object.points) &&
+      object.points.length >= 6
+    ) {
+      const firstX =
+        object.points[0];
+
+      const firstY =
+        object.points[1];
+
+      const lastX =
+        object.points[
+          object.points.length - 2
+        ];
+
+      const lastY =
+        object.points[
+          object.points.length - 1
+        ];
+
+      const closed =
+        Math.hypot(
+          lastX - firstX,
+          lastY - firstY
+        ) < 0.001;
+
+      if (!closed) {
+        return;
+      }
+
+      for (
+        let i = 0;
+        i < object.points.length - 2;
+        i += 2
+      ) {
+        const x1 =
+          object.points[i];
+
+        const y1 =
+          object.points[i + 1];
+
+        const x2 =
+          object.points[i + 2];
+
+        const y2 =
+          object.points[i + 3];
+
+        const dx =
+          x2 - x1;
+
+        const dy =
+          y2 - y1;
+
+        const lengthSquared =
+          dx * dx + dy * dy;
+
+        if (!lengthSquared) {
+          continue;
+        }
+
+        const t =
+          Math.max(
+            0,
+            Math.min(
+              1,
+              (
+                (x - x1) * dx +
+                (y - y1) * dy
+              ) /
+                lengthSquared
+            )
+          );
+
+        const px =
+          x1 + t * dx;
+
+        const py =
+          y1 + t * dy;
+
+        distance =
+          Math.min(
+            distance,
+            Math.hypot(
+              x - px,
+              y - py
+            )
+          );
+      }
+    }
+
+    if (
+      distance < nearestDistance &&
+      distance <= 30
+    ) {
+      nearestDistance =
+        distance;
+
+      nearestObject =
+        object;
+
+      nearestIndex =
+        index;
+    }
+  });
+
+  if (!nearestObject) {
+    window.alert(
+      "Closed rectangle, circle, ya polyline par tap karo."
+    );
+
+    return;
+  }
+
+  let area = 0;
+
+  if (
+    nearestObject.type ===
+    "rectangle"
+  ) {
+    area =
+      Math.abs(
+        nearestObject.width *
+        nearestObject.height
+      );
+  }
+
+  if (
+    nearestObject.type ===
+    "circle"
+  ) {
+    area =
+      Math.PI *
+      nearestObject.radius *
+      nearestObject.radius;
+  }
+
+  /* =========================
+   ELLIPSE AREA
+========================= */
+
+if (
+  nearestObject.type === "ellipse"
+) {
+  area =
+    Math.PI *
+    Math.abs(Number(nearestObject.radiusX) || 0) *
+    Math.abs(Number(nearestObject.radiusY) || 0);
+}
+
+  if (
+    nearestObject.type ===
+    "polyline"
+  ) {
+    const points =
+      nearestObject.points;
+
+    let sum = 0;
+
+    for (
+      let i = 0;
+      i < points.length - 2;
+      i += 2
+    ) {
+      const x1 = points[i];
+      const y1 =
+        points[i + 1];
+
+      const x2 =
+        points[i + 2];
+
+      const y2 =
+        points[i + 3];
+
+      sum +=
+        x1 * y2 -
+        x2 * y1;
+    }
+
+    area =
+      Math.abs(sum) / 2;
+  }
+
+  setSelectedIndex(
+    nearestIndex
+  );
+
+  setSelectedIndexes([
+    nearestIndex,
+  ]);
+
+  setCommandText(
+  `Area: ${
+    unit === "inch"
+      ? `${(area / (25.4 * 25.4)).toFixed(2)} inch²`
+      : unit === "ft-in"
+        ? `${(area / (304.8 * 304.8)).toFixed(2)} ft²`
+        : `${area.toFixed(2)} mm²`
+  }`
+);
+
+  return;
+}
 
     if (
   tool === "measure" ||
@@ -4834,9 +7628,9 @@ return;
           x2,
           y2,
           distance:
-            Math.round(
-              Math.hypot(dx, dy)
-            ),
+  Math.round(
+    Math.hypot(dx, dy) * 100
+  ) / 100,
         };
       }
     });
@@ -4862,6 +7656,125 @@ return;
       return;
     }
   }
+
+  /* =========================
+   ELLIPSE PERIMETER MEASURE
+========================= */
+
+let nearestEllipse = null;
+let nearestEllipseDistance = Infinity;
+
+objects.forEach((object, index) => {
+  if (
+    object.type !== "ellipse" ||
+    object.hidden ||
+    isObjectLocked(index)
+  ) {
+    return;
+  }
+
+  const rx = Math.abs(Number(object.radiusX) || 0);
+  const ry = Math.abs(Number(object.radiusY) || 0);
+
+  if (rx <= 0 || ry <= 0) {
+    return;
+  }
+
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  const pointAt = (angle) => {
+    const lx = rx * Math.cos(angle);
+    const ly = ry * Math.sin(angle);
+
+    return {
+      x: object.x + lx * cos - ly * sin,
+      y: object.y + lx * sin + ly * cos,
+    };
+  };
+
+  let distance = Infinity;
+  const steps = 72;
+
+  for (let i = 0; i < steps; i++) {
+    const p1 = pointAt((i / steps) * Math.PI * 2);
+    const p2 = pointAt(((i + 1) / steps) * Math.PI * 2);
+
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+
+    const lengthSquared = dx * dx + dy * dy;
+
+    const t = lengthSquared > 0
+      ? Math.max(
+          0,
+          Math.min(
+            1,
+            ((x - p1.x) * dx + (y - p1.y) * dy) /
+              lengthSquared
+          )
+        )
+      : 0;
+
+    distance = Math.min(
+      distance,
+      Math.hypot(
+        x - (p1.x + t * dx),
+        y - (p1.y + t * dy)
+      )
+    );
+  }
+
+  if (
+    distance <= 25 &&
+    distance < nearestEllipseDistance
+  ) {
+    nearestEllipseDistance = distance;
+    nearestEllipse = { object, index };
+  }
+});
+
+if (nearestEllipse) {
+  const rx = Math.abs(
+    Number(nearestEllipse.object.radiusX) || 0
+  );
+
+  const ry = Math.abs(
+    Number(nearestEllipse.object.radiusY) || 0
+  );
+
+  // Ramanujan approximation of ellipse perimeter
+  const a = Math.max(rx, ry);
+  const b = Math.min(rx, ry);
+
+  const h =
+    ((a - b) / (a + b)) ** 2;
+
+  const perimeter =
+    Math.PI *
+    (a + b) *
+    (
+      1 +
+      (3 * h) /
+        (10 + Math.sqrt(4 - 3 * h))
+    );
+
+  setSelectedIndex(nearestEllipse.index);
+
+  setSelectedIndexes([
+    nearestEllipse.index,
+  ]);
+
+  setCommandText(
+    `Ellipse perimeter: ${perimeter.toFixed(2)} ${unit}`
+  );
+
+  return;
+}
 
   /* TWO CLICK: free measurement */
   if (!measureStart) {
@@ -4922,8 +7835,50 @@ return;
 }
 
 if (tool === "line") {
+  const stage = e.target.getStage();
+
+  if (!stage) {
+    return;
+  }
+
   /* =========================
-     FIRST CLICK = START POINT
+     GET POINTER
+  ========================= */
+
+  stage.setPointersPositions(e.evt);
+ 
+
+  const pointer =
+    stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
+  const rawX =
+    (pointer.x - position.x) / scale;
+
+  const rawY =
+    (pointer.y - position.y) / scale;
+
+  /* =========================
+     SNAP POINT
+  ========================= */
+
+  const snappedPoint =
+    snapToObject(
+      rawX,
+      rawY
+    );
+
+  const x =
+    snappedPoint.x;
+
+  const y =
+    snappedPoint.y;
+
+  /* =========================
+     FIRST CLICK
   ========================= */
 
   if (!lineStart) {
@@ -4938,84 +7893,39 @@ if (tool === "line") {
     });
 
     setIsDrawing(true);
+
     setLinePreview(null);
+
+    setPendingLinePoint(null);
 
     return;
   }
 
   /* =========================
-     FINAL POINT
+     SECOND CLICK
   ========================= */
 
   let finalX = x;
   let finalY = y;
-
-  const dx =
-    finalX - lineStart.x;
-
-  const dy =
-    finalY - lineStart.y;
-
-  const distance =
-    Math.hypot(dx, dy);
-
-  /* =========================
-     AUTO STRAIGHT LOCK
-  ========================= */
-
-  if (
-    distance > 0 &&
-    !orthoEnabled &&
-    !polarEnabled
-  ) {
-    const angle =
-      Math.atan2(dy, dx) *
-      (180 / Math.PI);
-
-    const normalizedAngle =
-      (angle + 360) % 360;
-
-    const horizontal =
-      normalizedAngle <= 6 ||
-      normalizedAngle >= 354 ||
-      (
-        normalizedAngle >= 174 &&
-        normalizedAngle <= 186
-      );
-
-    const vertical =
-      (
-        normalizedAngle >= 84 &&
-        normalizedAngle <= 96
-      ) ||
-      (
-        normalizedAngle >= 264 &&
-        normalizedAngle <= 276
-      );
-
-    if (horizontal) {
-      finalY = lineStart.y;
-    }
-
-    if (vertical) {
-      finalX = lineStart.x;
-    }
-  }
 
   /* =========================
      ORTHO
   ========================= */
 
   if (orthoEnabled) {
-    const orthoPoint = applyOrtho(
-      lineStart.x,
-      lineStart.y,
-      finalX,
-      finalY
-    );
+    const orthoPoint =
+      applyOrtho(
+        lineStart.x,
+        lineStart.y,
+        finalX,
+        finalY
+      );
 
-    finalX = orthoPoint.x;
-    finalY = orthoPoint.y;
+    finalX =
+      orthoPoint.x;
+
+    finalY =
+      orthoPoint.y;
   }
 
   /* =========================
@@ -5023,15 +7933,19 @@ if (tool === "line") {
   ========================= */
 
   if (polarEnabled) {
-    const polarPoint = applyPolar(
-      lineStart.x,
-      lineStart.y,
-      finalX,
-      finalY
-    );
+    const polarPoint =
+      applyPolar(
+        lineStart.x,
+        lineStart.y,
+        finalX,
+        finalY
+      );
 
-    finalX = polarPoint.x;
-    finalY = polarPoint.y;
+    finalX =
+      polarPoint.x;
+
+    finalY =
+      polarPoint.y;
   }
 
   /* =========================
@@ -5040,17 +7954,25 @@ if (tool === "line") {
 
   const newLine = {
     type: "line",
+
     points: [
       lineStart.x,
       lineStart.y,
       finalX,
       finalY,
     ],
+
     rotation: 0,
+
     color: "#ffffff",
+
     strokeWidth: 2,
+
     layerId: activeLayerId,
   };
+
+  const previousObjects =
+    [...objects];
 
   setObjects((prev) => [
     ...prev,
@@ -5058,19 +7980,35 @@ if (tool === "line") {
   ]);
 
   /* =========================
-     CONTINUE FROM END POINT
+     HISTORY
   ========================= */
 
-  setLineStart({
-    x: finalX,
-    y: finalY,
-  });
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  /* =========================
+     RESET LINE
+  ========================= */
+
+  setLineStart(null);
 
   setLinePreview(null);
+
   setPendingLinePoint(null);
+
   setLineLengthInput("");
+
   setShowLineInput(false);
-  setIsDrawing(true);
+
+  setIsDrawing(false);
+
+  setSnapPoint(null);
+
+  setSnapType("");
+
+  actionStartRef.current = null;
 
   return;
 }
@@ -5101,6 +8039,27 @@ if (tool === "line") {
         },
       ]);
     }
+
+    /* =========================
+   ELLIPSE START
+========================= */
+
+if (tool === "ellipse") {
+  setObjects((prev) => [
+    ...prev,
+    {
+      type: "ellipse",
+      x,
+      y,
+      radiusX: 0,
+      radiusY: 0,
+      rotation: 0,
+      color: "#ffffff",
+      strokeWidth: 2,
+      layerId: activeLayerId,
+    },
+  ]);
+}
 
     if (tool === "rectangle") {
       setObjects((prev) => [
@@ -5184,211 +8143,6 @@ if (tool === "hatch" && isDrawing) {
   return;
 }
 
-/* =========================
-   HATCH
-========================= */
-if (object.type === "hatch") {
-  const x = object.x || 0;
-  const y = object.y || 0;
-
-  const width = object.width || 0;
-  const height = object.height || 0;
-
-  const left = Math.min(x, x + width);
-  const right = Math.max(x, x + width);
-  const top = Math.min(y, y + height);
-  const bottom = Math.max(y, y + height);
-
-  const spacing = Math.max(
-    4,
-    Number(object.hatchSpacing) || 12
-  );
-
-  const angle =
-  (
-    (Number(object.hatchAngle) || 45) +
-    (Number(object.rotation) || 0)
-  ) *
-  (Math.PI / 180);
-
-  const dirX = Math.cos(angle);
-  const dirY = Math.sin(angle);
-
-  const normalX = -dirY;
-  const normalY = dirX;
-
-  const centerX =
-    (left + right) / 2;
-
-  const centerY =
-    (top + bottom) / 2;
-
-  const diagonal =
-    Math.hypot(
-      right - left,
-      bottom - top
-    ) * 2 + spacing * 4;
-
-  const hatchLines = [];
-
-  for (
-    let offset = -diagonal;
-    offset <= diagonal;
-    offset += spacing
-  ) {
-    const cx =
-      centerX +
-      normalX * offset;
-
-    const cy =
-      centerY +
-      normalY * offset;
-
-    hatchLines.push(
-      <Line
-        key={`hatch-${index}-${Math.round(offset)}`}
-        points={[
-          cx - dirX * diagonal,
-          cy - dirY * diagonal,
-          cx + dirX * diagonal,
-          cy + dirY * diagonal,
-        ]}
-        stroke={
-          object.hatchColor ||
-          "#00aaff"
-        }
-       strokeWidth={Math.max(2, (object.strokeWidth || 1) / scale)}
-listening={false}
-      />
-    );
-  }
-
-  return (
-    <React.Fragment key={index}>
-      <Rect
-        {...commonProps}
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        rotation={object.rotation || 0}
-        fill="transparent"
-        stroke={
-          selectedIndex === index
-            ? "yellow"
-            : object.color || "#ffffff"
-        }
-        strokeWidth={
-  selectedIndex === index
-    ? 4 / scale
-    : (object.strokeWidth || 2) / scale
-}
-
-
-        hitStrokeWidth={15}
-      />
-
-      <Group
-        listening={false}
-        clipX={left}
-        clipY={top}
-        clipWidth={right - left}
-        clipHeight={bottom - top}
-      >
-        {hatchLines}
-      </Group>
-
-      {selectedIndex === index && (
-        <>
-          <Circle
-            x={x}
-            y={y}
-            radius={6 / scale}
-            fill="#00aaff"
-            stroke="white"
-            strokeWidth={2 / scale}
-            draggable
-            onMouseDown={(e) => {
-              e.cancelBubble = true;
-            }}
-            onDragEnd={(e) => {
-              const node = e.target;
-
-              const newX = node.x();
-              const newY = node.y();
-
-              const previousObjects = [
-                ...objects,
-              ];
-
-              setObjects(
-                objects.map(
-                  (item, itemIndex) =>
-                    itemIndex === index
-                      ? {
-                          ...item,
-                          x: newX,
-                          y: newY,
-                        }
-                      : item
-                )
-              );
-
-              saveHistory(
-                previousObjects,
-                [...measurements]
-              );
-            }}
-          />
-
-          <Circle
-            x={x + width}
-            y={y + height}
-            radius={6 / scale}
-            fill="#00aaff"
-            stroke="white"
-            strokeWidth={2 / scale}
-            draggable
-            onMouseDown={(e) => {
-              e.cancelBubble = true;
-            }}
-            onDragEnd={(e) => {
-              const node = e.target;
-
-              const newWidth =
-                node.x() - x;
-
-              const newHeight =
-                node.y() - y;
-
-              const previousObjects = [
-                ...objects,
-              ];
-
-              setObjects(
-                objects.map(
-                  (item, itemIndex) =>
-                    itemIndex === index
-                      ? {
-                          ...item,
-                          width: newWidth,
-                          height: newHeight,
-                        }
-                      : item
-                )
-              );
-
-              saveHistory(
-                previousObjects,
-                [...measurements]
-              );
-            }}
-          />
-        </>
-      )}
-    </React.Fragment>
-  );
-}
 
 /* =========================
    HATCH FINISH
@@ -5682,8 +8436,15 @@ const rawY =
   scale;
 
 setMousePosition({
-  x: Math.round(rawX),
-  y: Math.round(rawY),
+  x:
+    tool === "quickMeasure"
+      ? rawX
+      : Math.round(rawX),
+
+  y:
+    tool === "quickMeasure"
+      ? rawY
+      : Math.round(rawY),
 });
 
 /* =========================
@@ -5985,6 +8746,49 @@ setObjects((prev) => {
         dy * dy
       );
   }
+  
+  /* =========================
+   ELLIPSE RESIZE
+========================= */
+
+if (tool === "ellipse" && isDrawing) {
+  setObjects((prev) => {
+    if (prev.length === 0) {
+      return prev;
+    }
+
+    const lastIndex = prev.length - 1;
+    const ellipse = prev[lastIndex];
+
+    if (
+      !ellipse ||
+      ellipse.type !== "ellipse"
+    ) {
+      return prev;
+    }
+
+    const radiusX = Math.abs(
+      x - ellipse.x
+    );
+
+    const radiusY = Math.abs(
+      y - ellipse.y
+    );
+
+    return prev.map(
+      (object, index) =>
+        index === lastIndex
+          ? {
+              ...object,
+              radiusX,
+              radiusY,
+            }
+          : object
+    );
+  });
+
+  return;
+}
 
   /* RECTANGLE */
 
@@ -6344,6 +9148,98 @@ const handlePolylineGripDragEnd = (
 };
 
 /* =========================
+   SPLINE GRIP DRAG
+========================= */
+
+const handleSplineGripDragEnd = (
+  objectIndex,
+  pointIndex,
+  e
+) => {
+  const object =
+    objects[objectIndex];
+
+  if (!object) {
+    return;
+  }
+
+  if (
+    object.type !== "spline" ||
+    !Array.isArray(object.points)
+  ) {
+    return;
+  }
+
+  if (
+    object.locked ||
+    isLayerLocked(
+      object.layerId || "layer-0"
+    )
+  ) {
+    return;
+  }
+
+  const newX =
+    e.target.x();
+
+  const newY =
+    e.target.y();
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (
+        item,
+        index
+      ) => {
+        if (
+          index !== objectIndex
+        ) {
+          return item;
+        }
+
+        const newPoints = [
+          ...item.points,
+        ];
+
+        newPoints[pointIndex] =
+          newX;
+
+        newPoints[
+          pointIndex + 1
+        ] = newY;
+
+        return {
+          ...item,
+          points: newPoints,
+        };
+      }
+    );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(
+    objectIndex
+  );
+
+  setSelectedIndexes([
+    objectIndex,
+  ]);
+
+  setFuture([]);
+};
+
+/* =========================
    TEXT GRIP DRAG
 ========================= */
 
@@ -6479,6 +9375,45 @@ const getObjectBounds = (object) => {
       bottom: object.y + radius,
     };
   }
+
+  /* =========================
+   ELLIPSE BOUNDS
+   ROTATION AWARE
+========================= */
+
+if (object.type === "ellipse") {
+  const radiusX = Math.abs(
+    Number(object.radiusX) || 0
+  );
+
+  const radiusY = Math.abs(
+    Number(object.radiusY) || 0
+  );
+
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  const halfWidth = Math.sqrt(
+    radiusX * radiusX * cos * cos +
+    radiusY * radiusY * sin * sin
+  );
+
+  const halfHeight = Math.sqrt(
+    radiusX * radiusX * sin * sin +
+    radiusY * radiusY * cos * cos
+  );
+
+  return {
+    left: object.x - halfWidth,
+    right: object.x + halfWidth,
+    top: object.y - halfHeight,
+    bottom: object.y + halfHeight,
+  };
+}
 
   /* RECTANGLE */
   if (object.type === "rectangle") {
@@ -7024,6 +9959,32 @@ y2 + ny * signedDistance,
     };
   }
 
+  /* ELLIPSE */
+
+else if (
+  original.type === "ellipse"
+) {
+  newObject = {
+    ...original,
+    locked: false,
+    hidden: false,
+
+    radiusX:
+      Math.max(
+        1,
+        Number(original.radiusX || 0) +
+          distance
+      ),
+
+    radiusY:
+      Math.max(
+        1,
+        Number(original.radiusY || 0) +
+          distance
+      ),
+  };
+}
+
   /* ARC */
   else if (
     original.type === "arc"
@@ -7111,15 +10072,15 @@ y2 + ny * signedDistance,
     panStartRef.current = null;
     return;
   }
-if (
+  if (
+  tool === "line" ||
   tool === "polyline" ||
   tool === "arc"
 ) {
   return;
 }
 
-  if (!isDrawing) return;
-
+if (!isDrawing) return;
 
 setIsDrawing(false);
 setSnapPoint(null);
@@ -7314,6 +10275,107 @@ if (
   return;
 }
 
+// =========================
+// U = UNDO LAST LINE SEGMENT
+// =========================
+if (
+  key === "u" &&
+  !e.ctrlKey &&
+  tool === "line" &&
+  lineStart &&
+  !showLineInput
+) {
+  e.preventDefault();
+
+  const lastIndex =
+    objects.length - 1;
+
+  const lastObject =
+    objects[lastIndex];
+
+  if (
+    !lastObject ||
+    lastObject.type !== "line" ||
+    !Array.isArray(lastObject.points) ||
+    lastObject.points.length < 4
+  ) {
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const deletedStartX =
+    lastObject.points[0];
+
+  const deletedStartY =
+    lastObject.points[1];
+
+  setObjects((prev) => {
+    if (prev.length === 0) {
+      return prev;
+    }
+
+    return prev.slice(0, -1);
+  });
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  const objectsBeforeLast =
+    objects.slice(0, -1);
+
+  const previousLine =
+    [...objectsBeforeLast]
+      .reverse()
+      .find(
+        (obj) =>
+          obj.type === "line" &&
+          Array.isArray(obj.points) &&
+          obj.points.length >= 4
+      );
+
+  if (previousLine) {
+    setLineStart({
+      x: previousLine.points[2],
+      y: previousLine.points[3],
+    });
+  } else {
+    setLineStart({
+      x: deletedStartX,
+      y: deletedStartY,
+    });
+  }
+
+  setPendingLinePoint(null);
+
+  setLinePreview({
+    x1:
+      previousLine
+        ? previousLine.points[2]
+        : deletedStartX,
+    y1:
+      previousLine
+        ? previousLine.points[3]
+        : deletedStartY,
+    x2:
+      previousLine
+        ? previousLine.points[2]
+        : deletedStartX,
+    y2:
+      previousLine
+        ? previousLine.points[3]
+        : deletedStartY,
+  });
+
+  setIsDrawing(true);
+
+  return;
+}
+
     // =========================
 // C = CLOSE POLYLINE
 // =========================
@@ -7427,6 +10489,1166 @@ if (
   return;
 }
 
+
+/* =========================
+   CTRL + S = SAVE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "s"
+) {
+  e.preventDefault();
+
+  try {
+    saveDrawing();
+  } catch (error) {
+    console.error(
+      "Save failed:",
+      error
+    );
+
+    window.alert(
+      "Save nahi ho paya."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + O = OPEN
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "o"
+) {
+  e.preventDefault();
+
+  try {
+    openDrawing();
+  } catch (error) {
+    console.error(
+      "Open failed:",
+      error
+    );
+
+    window.alert(
+      "Drawing open nahi ho payi."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + N = NEW DRAWING
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "n"
+) {
+  e.preventDefault();
+
+  try {
+    clearDrawing();
+  } catch (error) {
+    console.error(
+      "New drawing failed:",
+      error
+    );
+
+    window.alert(
+      "New drawing nahi ban payi."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   DELETE = ERASE SELECTED
+========================= */
+
+if (e.key === "Delete") {
+  const activeElement =
+    document.activeElement;
+
+  if (
+    activeElement &&
+    (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    )
+  ) {
+    return;
+  }
+
+  e.preventDefault();
+
+  runMobileCommand("erase");
+
+  return;
+}
+
+/* =========================
+   ESC = CANCEL ACTIVE COMMAND
+========================= */
+
+if (e.key === "Escape") {
+  e.preventDefault();
+
+  runMobileCommand("esc");
+
+  return;
+}
+
+
+/* =========================
+   CTRL + Z / CTRL + Y
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "z"
+) {
+  e.preventDefault();
+
+  if (undoActiveLineSegment()) {
+    return;
+  }
+
+  try {
+    undo();
+  } catch (error) {
+    console.error(
+      "Undo failed:",
+      error
+    );
+  }
+
+  return;
+}
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  (
+    e.key.toLowerCase() === "y" ||
+    (
+      e.shiftKey &&
+      e.key.toLowerCase() === "z"
+    )
+  )
+) {
+  e.preventDefault();
+
+  try {
+    redo();
+  } catch (error) {
+    console.error(
+      "Redo failed:",
+      error
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + A = SELECT ALL
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "a"
+) {
+  e.preventDefault();
+
+  runMobileCommand("all");
+
+  return;
+}
+
+/* =========================
+   CTRL + D = DESELECT ALL
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "d"
+) {
+  e.preventDefault();
+
+  runMobileCommand("none");
+
+  return;
+}
+
+/* =========================
+   + / - = ZOOM
+========================= */
+
+if (
+  e.key === "+" ||
+  e.key === "="
+) {
+  const activeElement =
+    document.activeElement;
+
+  if (
+    activeElement &&
+    (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    )
+  ) {
+    return;
+  }
+
+  e.preventDefault();
+
+  setScale((prevScale) =>
+    Math.min(
+      prevScale * 1.2,
+      100
+    )
+  );
+
+  return;
+}
+
+if (e.key === "-") {
+  const activeElement =
+    document.activeElement;
+
+  if (
+    activeElement &&
+    (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    )
+  ) {
+    return;
+  }
+
+  e.preventDefault();
+
+  setScale((prevScale) =>
+    Math.max(
+      prevScale / 1.2,
+      0.01
+    )
+  );
+
+  return;
+}
+
+/* =========================
+   HOME = ZOOM FIT
+========================= */
+
+if (e.key === "Home") {
+  const activeElement =
+    document.activeElement;
+
+  if (
+    activeElement &&
+    (
+      activeElement.tagName === "INPUT" ||
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.isContentEditable
+    )
+  ) {
+    return;
+  }
+
+  e.preventDefault();
+
+  zoomFit();
+
+  return;
+}
+
+/* =========================
+   CTRL + 1 = PROPERTIES
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "1"
+) {
+  e.preventDefault();
+
+  runMobileCommand("properties");
+
+  return;
+}
+
+/* =========================
+   CTRL + 2 = LAYERS
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "2"
+) {
+  e.preventDefault();
+
+  runMobileCommand("layers");
+
+  return;
+}
+
+/* =========================
+   CTRL + 3 = MEASURE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "3"
+) {
+  e.preventDefault();
+
+  runMobileCommand("measure");
+
+  return;
+}
+
+/* =========================
+   CTRL + 4 = AREA
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "4"
+) {
+  e.preventDefault();
+
+  runMobileCommand("area");
+
+  return;
+}
+
+/* =========================
+   CTRL + 5 = DIMENSION
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "5"
+) {
+  e.preventDefault();
+
+  runMobileCommand("dimension");
+
+  return;
+}
+
+/* =========================
+   CTRL + 6 = ANGULAR DIMENSION
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "6"
+) {
+  e.preventDefault();
+
+  runMobileCommand(
+    "angulardimension"
+  );
+
+  return;
+}
+
+/* =========================
+   CTRL + 7 = RADIUS DIMENSION
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "7"
+) {
+  e.preventDefault();
+
+  runMobileCommand(
+    "radiusdimension"
+  );
+
+  return;
+}
+
+/* =========================
+   CTRL + 8 = DIAMETER DIMENSION
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "8"
+) {
+  e.preventDefault();
+
+  runMobileCommand(
+    "diameterdimension"
+  );
+
+  return;
+}
+
+/* =========================
+   CTRL + 9 = MOVE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "9"
+) {
+  e.preventDefault();
+
+  runMobileCommand("move");
+
+  return;
+}
+
+/* =========================
+   CTRL + 0 = COPY
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key === "0"
+) {
+  e.preventDefault();
+
+  runMobileCommand("copy");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 1 = ROTATE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "1"
+) {
+  e.preventDefault();
+
+  runMobileCommand("rotate");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 2 = TRIM
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "2"
+) {
+  e.preventDefault();
+
+  runMobileCommand("trim");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 3 = EXTEND
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "3"
+) {
+  e.preventDefault();
+
+  runMobileCommand("extend");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 4 = STRETCH
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "4"
+) {
+  e.preventDefault();
+
+  runMobileCommand("stretch");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 5 = OFFSET
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "5"
+) {
+  e.preventDefault();
+
+  runMobileCommand("offset");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 6 = MIRROR
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "6"
+) {
+  e.preventDefault();
+
+  runMobileCommand("mirror");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 7 = SCALE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "7"
+) {
+  e.preventDefault();
+
+  runMobileCommand("scale");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 8 = FILLET
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "8"
+) {
+  e.preventDefault();
+
+  runMobileCommand("fillet");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 9 = CHAMFER
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "9"
+) {
+  e.preventDefault();
+
+  runMobileCommand("chamfer");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + 0 = EXPLODE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key === "0"
+) {
+  e.preventDefault();
+
+  runMobileCommand("explode");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + P = EXPORT PNG
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "p"
+) {
+  e.preventDefault();
+
+  try {
+    exportPNG();
+  } catch (error) {
+    console.error(
+      "Export PNG failed:",
+      error
+    );
+
+    window.alert(
+      "PNG export nahi ho paya."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + G = EXPORT SVG
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "g"
+) {
+  e.preventDefault();
+
+  try {
+    exportSVG();
+  } catch (error) {
+    console.error(
+      "Export SVG failed:",
+      error
+    );
+
+    window.alert(
+      "SVG export nahi ho paya."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + D = EXPORT DXF
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "d"
+) {
+  e.preventDefault();
+
+  try {
+    exportDXF();
+  } catch (error) {
+    console.error(
+      "Export DXF failed:",
+      error
+    );
+
+    window.alert(
+      "DXF export nahi ho paya."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + ALT + O = OPEN
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.altKey &&
+  e.key.toLowerCase() === "o"
+) {
+  e.preventDefault();
+
+  try {
+    openDrawing();
+  } catch (error) {
+    console.error(
+      "Open failed:",
+      error
+    );
+
+    window.alert(
+      "Drawing open nahi ho payi."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + ALT + N = NEW
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.altKey &&
+  e.key.toLowerCase() === "n"
+) {
+  e.preventDefault();
+
+  try {
+    clearDrawing();
+  } catch (error) {
+    console.error(
+      "New drawing failed:",
+      error
+    );
+
+    window.alert(
+      "New drawing nahi ban payi."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + ALT + R = RESTORE AUTOSAVE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.altKey &&
+  e.key.toLowerCase() === "r"
+) {
+  e.preventDefault();
+
+  try {
+    restoreAutoSave();
+  } catch (error) {
+    console.error(
+      "Restore failed:",
+      error
+    );
+
+    window.alert(
+      "AutoSave restore nahi ho paya."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + ALT + C = CLEAR AUTOSAVE
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.altKey &&
+  e.key.toLowerCase() === "c"
+) {
+  e.preventDefault();
+
+  try {
+    clearAutoSave();
+  } catch (error) {
+    console.error(
+      "Clear AutoSave failed:",
+      error
+    );
+
+    window.alert(
+      "AutoSave clear nahi ho paya."
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + Z = REDO
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "z"
+) {
+  e.preventDefault();
+
+  try {
+    redo();
+  } catch (error) {
+    console.error(
+      "Redo failed:",
+      error
+    );
+  }
+
+  return;
+}
+
+/* =========================
+   F2 = COMMAND HISTORY
+========================= */
+
+if (e.key === "F2") {
+  e.preventDefault();
+
+  if (
+    mobileCommandHistory.length > 0
+  ) {
+    const lastCommand =
+      mobileCommandHistory[
+        mobileCommandHistory.length - 1
+      ];
+
+    setCommandText(
+      lastCommand || ""
+    );
+
+    setMobileCommandPanel("home");
+  }
+
+  return;
+}
+
+/* =========================
+   F1 = HOME
+========================= */
+
+if (e.key === "F1") {
+  e.preventDefault();
+
+  setShowHome(true);
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + J = JOIN
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "j"
+) {
+  e.preventDefault();
+
+  runMobileCommand("join");
+
+  return;
+}
+
+
+/* =========================
+   CTRL + SHIFT + K = LAYERS
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "k"
+) {
+  e.preventDefault();
+
+  runMobileCommand("layers");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + U = PROPERTIES
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "u"
+) {
+  e.preventDefault();
+
+  runMobileCommand("properties");
+
+  return;
+}
+
+/* =========================
+   VIEW NAVIGATION SHORTCUTS
+========================= */
+
+if (!isTypingField) {
+  if (e.key === "PageUp") {
+    e.preventDefault();
+
+    setScale((prevScale) =>
+      Math.min(
+        prevScale * 1.2,
+        100
+      )
+    );
+
+    return;
+  }
+
+  if (e.key === "PageDown") {
+    e.preventDefault();
+
+    setScale((prevScale) =>
+      Math.max(
+        prevScale / 1.2,
+        0.01
+      )
+    );
+
+    return;
+  }
+
+  if (e.key === "End") {
+    e.preventDefault();
+
+    const centerX =
+      viewportSize.width / 2;
+
+    const centerY =
+      (viewportSize.height - 87 - 64) / 2;
+
+    setScale(1);
+
+    setPosition({
+      x: centerX,
+      y: centerY,
+    });
+
+    return;
+  }
+}
+
+/* =========================
+   CTRL + SHIFT + F = FIND
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "f"
+) {
+  e.preventDefault();
+
+  runMobileCommand("find");
+
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT DRAWING TOOLS
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey
+) {
+  const drawingShortcut =
+    e.key.toLowerCase();
+
+  if (drawingShortcut === "l") {
+    e.preventDefault();
+
+    runMobileCommand("line");
+
+    return;
+  }
+
+  if (drawingShortcut === "c") {
+    e.preventDefault();
+
+    runMobileCommand("circle");
+
+    return;
+  }
+
+  if (drawingShortcut === "r") {
+    e.preventDefault();
+
+    runMobileCommand("rectangle");
+
+    return;
+  }
+
+  if (drawingShortcut === "t") {
+    e.preventDefault();
+
+    runMobileCommand("text");
+
+    return;
+  }
+
+  if (drawingShortcut === "h") {
+    e.preventDefault();
+
+    runMobileCommand("hatch");
+
+    return;
+  }
+}
+
+/* =========================
+   MEASUREMENT SHORTCUTS
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.altKey
+) {
+  const measurementShortcut =
+    e.key.toLowerCase();
+
+  if (
+    measurementShortcut === "m"
+  ) {
+    e.preventDefault();
+
+    runMobileCommand("measure");
+
+    return;
+  }
+
+  if (
+    measurementShortcut === "a"
+  ) {
+    e.preventDefault();
+
+    runMobileCommand("area");
+
+    return;
+  }
+
+  if (
+    measurementShortcut === "d"
+  ) {
+    e.preventDefault();
+
+    runMobileCommand("dimension");
+
+    return;
+  }
+
+  if (
+    measurementShortcut === "g"
+  ) {
+    e.preventDefault();
+
+    runMobileCommand(
+      "angulardimension"
+    );
+
+    return;
+  }
+
+  if (
+    measurementShortcut === "b"
+  ) {
+    e.preventDefault();
+
+    runMobileCommand(
+      "radiusdimension"
+    );
+
+    return;
+  }
+
+  if (
+    measurementShortcut === "i"
+  ) {
+    e.preventDefault();
+
+    runMobileCommand(
+      "diameterdimension"
+    );
+
+    return;
+  }
+}
+
+/* =========================
+   CAD FUNCTION KEYS
+========================= */
+
+if (e.key === "F3") {
+  e.preventDefault();
+
+  setObjectSnapEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+if (e.key === "F7") {
+  e.preventDefault();
+
+  setGridEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+if (e.key === "F9") {
+  e.preventDefault();
+
+  setGridSnapEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+if (e.key === "F10") {
+  e.preventDefault();
+
+  setPolarEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+if (e.key === "F11") {
+  e.preventDefault();
+
+  setObjectSnapTrackingEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+if (e.key === "F12") {
+  e.preventDefault();
+
+  setDynamicInputEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
   /* =========================
      F8 = ORTHO
   ========================= */
@@ -7439,116 +11661,6 @@ if (
   return;
 }
 
-  /* =========================
-     F3 = OSNAP
-  ========================= */
-
-  if (e.key === "F3") {
-    e.preventDefault();
-
-    setObjectSnapEnabled(
-      (prev) => !prev
-    );
-
-    return;
-  }
-
-  /* =========================
-     F7 = GRID
-  ========================= */
-
-  if (e.key === "F7") {
-    e.preventDefault();
-
-    setGridEnabled(
-      (prev) => !prev
-    );
-
-    return;
-  }
-
-  /* =========================
-   F9 = GRID SNAP
-========================= */
-
-if (e.key === "F9") {
-  e.preventDefault();
-
-  setGridSnapEnabled(
-    (prev) => !prev
-  );
-
-  return;
-}
-
-/* =========================
-   F10 = POLAR
-========================= */
-
-if (e.key === "F10") {
-  e.preventDefault();
-
-  togglePolar();
-
-  return;
-}
-
-/* =========================
-   F11 = OBJECT SNAP TRACKING
-========================= */
-
-if (e.key === "F11") {
-  e.preventDefault();
-
-  setObjectSnapTrackingEnabled(
-    (prev) => !prev
-  );
-
-  return;
-}
-
-/* =========================
-   F12 = DYNAMIC INPUT
-========================= */
-if (e.key === "F12") {
-  e.preventDefault();
-
-  setDynamicInputEnabled(
-    (prev) => !prev
-  );
-
-  return;
-}
-
- /* =========================
-     CTRL + A
-  ========================= */
-
-  if (
-    e.ctrlKey &&
-    key === "a"
-  ) {
-    e.preventDefault();
-
-    const allIndexes =
-      objects.map(
-        (_, index) => index
-      );
-
-    setSelectedIndexes(
-      allIndexes
-    );
-
-    setSelectedIndex(
-      allIndexes.length > 0
-        ? allIndexes[
-            allIndexes.length - 1
-          ]
-        : null
-    );
-
-    return;
-  }
 
   /* =========================
      CTRL + C
@@ -7683,381 +11795,776 @@ if (e.key === "F12") {
     return;
   }
 
-  /* =========================
-     CTRL + Z = UNDO
-  ========================= */
+ /* =========================
+   FINAL KEYBOARD SHORTCUTS
+========================= */
 
-  if (
-    e.ctrlKey &&
-    key === "z" &&
-    !e.shiftKey
-  ) {
-    e.preventDefault();
+/* =========================
+   CTRL + S = SAVE
+========================= */
 
-    undo();
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "s"
+) {
+  e.preventDefault();
 
-    return;
-  }
-
-  /* =========================
-     CTRL + Y
-     CTRL + SHIFT + Z
-     = REDO
-  ========================= */
-
-  if (
-    e.ctrlKey &&
-    (
-      key === "y" ||
-      (
-        key === "z" &&
-        e.shiftKey
-      )
-    )
-  ) {
-    e.preventDefault();
-
-    redo();
-
-    return;
-  }
-
-  /* =========================
-     + = ZOOM IN
-  ========================= */
-
-  if (
-    e.key === "+" ||
-    e.key === "=" ||
-    e.code === "NumpadAdd"
-  ) {
-    e.preventDefault();
-
-    setScale(
-      (prev) =>
-        Math.min(
-          prev * 1.2,
-          5
-        )
+  try {
+    saveDrawing();
+  } catch (error) {
+    console.error(
+      "Save failed:",
+      error
     );
 
-    return;
-  }
-
-  /* =========================
-     - = ZOOM OUT
-  ========================= */
-
-  if (
-    e.key === "-" ||
-    e.key === "_" ||
-    e.code === "NumpadSubtract"
-  ) {
-    e.preventDefault();
-
-    setScale(
-      (prev) =>
-        Math.max(
-          prev / 1.2,
-          0.2
-        )
+    window.alert(
+      "Save nahi ho paya."
     );
-
-    return;
   }
 
-  /* =========================
-     DELETE
-  ========================= */
-
-  if (
-    e.key === "Delete" ||
-    e.key === "Backspace"
-  ) {
-    e.preventDefault();
-
-    deleteSelected();
-
-    return;
-  }
-
-  /* =========================
-     ESCAPE
-  ========================= */
-
-  if (e.key === "Escape") {
-
-    /* CANCEL SELECTION BOX */
-    if (isSelecting) {
-      setIsSelecting(false);
-      setSelectionBox(null);
-      return;
-    }
-    if (showLineInput) {
-  setShowLineInput(false);
-  setPendingLinePoint(null);
-  setLineLengthInput("");
-  setLinePreview(null);
   return;
 }
 
-    /* CANCEL LINE COMMAND */
-if (
-  tool === "line" ||
-  tool === "polyline"
-) {
-  setLineStart(null);
-  setLinePreview(null);
-  setIsDrawing(false);
+/* =========================
+   CTRL + O = OPEN
+========================= */
 
-  setPendingLinePoint(null);
-  setLineLengthInput("");
-  setShowLineInput(false);
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "o"
+) {
+  e.preventDefault();
+
+  try {
+    openDrawing();
+  } catch (error) {
+    console.error(
+      "Open failed:",
+      error
+    );
+
+    window.alert(
+      "Drawing open nahi ho payi."
+    );
+  }
+
+  return;
 }
 
-    if (isDrawing) {
+/* =========================
+   CTRL + N = NEW
+========================= */
 
-      setIsDrawing(
-        false
-      );
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "n"
+) {
+  e.preventDefault();
 
-      setObjects(
-        (prev) => {
+  try {
+    clearDrawing();
+  } catch (error) {
+    console.error(
+      "New drawing failed:",
+      error
+    );
+  }
 
-          if (
-            prev.length === 0
-          ) {
-            return prev;
-          }
+  return;
+}
 
-          const lastObject =
-            prev[
-              prev.length - 1
-            ];
+/* =========================
+   CTRL + Z = UNDO
+========================= */
 
-          if (
-            lastObject &&
-            (
-              lastObject.type === "line" ||
-              lastObject.type === "circle" ||
-              lastObject.type === "rectangle" ||
-              lastObject.type === "polyline" ||
-              lastObject.type === "arc"
-            )
-          ) {
-            return prev.slice(
-              0,
-              -1
-            );
-          }
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "z"
+) {
+  e.preventDefault();
 
-          return prev;
-        }
-      );
+  if (
+    typeof undoActiveLineSegment ===
+      "function" &&
+    undoActiveLineSegment()
+  ) {
+    return;
+  }
 
-      actionStartRef.current =
-        null;
+  try {
+    undo();
+  } catch (error) {
+    console.error(
+      "Undo failed:",
+      error
+    );
+  }
 
-        setArcPoints([]);
+  return;
+}
 
-      stretchStartRef.current =
-        null;
+/* =========================
+   CTRL + Y = REDO
+========================= */
 
-      setSnapType("");
-setSnapPoint(null);
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "y"
+) {
+  e.preventDefault();
 
-      return;
-    }
+  redo();
 
-    setSelectedIndex(
-      null
+  return;
+}
+
+/* =========================
+   CTRL + SHIFT + Z = REDO
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  e.key.toLowerCase() === "z"
+) {
+  e.preventDefault();
+
+  redo();
+
+  return;
+}
+
+/* =========================
+   CTRL + A = SELECT ALL
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "a"
+) {
+  e.preventDefault();
+
+  runMobileCommand("all");
+
+  return;
+}
+
+/* =========================
+   CTRL + D = DESELECT
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "d"
+) {
+  e.preventDefault();
+
+  runMobileCommand("none");
+
+  return;
+}
+
+/* =========================
+   DELETE / BACKSPACE
+========================= */
+
+if (
+  e.key === "Delete" ||
+  e.key === "Backspace"
+) {
+  e.preventDefault();
+
+  deleteSelected();
+
+  return;
+}
+
+/* =========================
+   ESCAPE
+========================= */
+
+if (e.key === "Escape") {
+
+  if (isSelecting) {
+    setIsSelecting(false);
+    setSelectionBox(null);
+    return;
+  }
+
+  if (showLineInput) {
+    setShowLineInput(false);
+    setPendingLinePoint(null);
+    setLineLengthInput("");
+    setLinePreview(null);
+    return;
+  }
+
+  if (
+    tool === "line" ||
+    tool === "polyline"
+  ) {
+    setLineStart(null);
+    setLinePreview(null);
+    setIsDrawing(false);
+
+    setPendingLinePoint(null);
+    setLineLengthInput("");
+    setShowLineInput(false);
+  }
+
+  if (isDrawing) {
+    setIsDrawing(false);
+
+    setObjects((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+
+      const lastObject =
+        prev[prev.length - 1];
+
+      if (
+        lastObject &&
+        (
+          lastObject.type === "line" ||
+          lastObject.type === "circle" ||
+          lastObject.type === "rectangle" ||
+          lastObject.type === "polyline" ||
+          lastObject.type === "arc"
+        )
+      ) {
+        return prev.slice(0, -1);
+      }
+
+      return prev;
+    });
+
+    actionStartRef.current = null;
+    setArcPoints([]);
+    stretchStartRef.current = null;
+    setSnapType("");
+    setSnapPoint(null);
+
+    return;
+  }
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setSelectedMeasurementIndex(null);
+  setCommandFirstIndex(null);
+  setMeasureStart(null);
+  setAnglePoints([]);
+  setIsDrawing(false);
+  setSnapPoint(null);
+
+  return;
+}
+
+/* =========================
+   HOME = ZOOM FIT
+========================= */
+
+if (e.key === "Home") {
+  e.preventDefault();
+
+  zoomFit();
+
+  return;
+}
+
+/* =========================
+   END = RESET VIEW
+========================= */
+
+if (e.key === "End") {
+  e.preventDefault();
+
+  setScale(1);
+
+  setPosition({
+    x:
+      (
+        viewportSize.width <= 768
+          ? viewportSize.width
+          : viewportSize.width - 298
+      ) / 2,
+
+    y:
+      (
+        viewportSize.width <= 768
+          ? viewportSize.height - 87 - 64
+          : viewportSize.height - 87
+      ) / 2,
+  });
+
+  return;
+}
+
+/* =========================
+   + / = ZOOM IN
+========================= */
+
+if (
+  e.key === "+" ||
+  e.key === "=" ||
+  e.code === "NumpadAdd"
+) {
+  e.preventDefault();
+
+  setScale((prev) =>
+    Math.min(
+      prev * 1.2,
+      1000000
+    )
+  );
+
+  return;
+}
+
+/* =========================
+   - ZOOM OUT
+========================= */
+
+if (
+  e.key === "-" ||
+  e.key === "_" ||
+  e.code === "NumpadSubtract"
+) {
+  e.preventDefault();
+
+  setScale((prev) =>
+    Math.max(
+      prev / 1.2,
+      0.000001
+    )
+  );
+
+  return;
+}
+
+/* =========================
+   PAGE UP / DOWN ZOOM
+========================= */
+
+if (e.key === "PageUp") {
+  e.preventDefault();
+
+  setScale((prev) =>
+    Math.min(
+      prev * 1.2,
+      1000000
+    )
+  );
+
+  return;
+}
+
+if (e.key === "PageDown") {
+  e.preventDefault();
+
+  setScale((prev) =>
+    Math.max(
+      prev / 1.2,
+      0.000001
+    )
+  );
+
+  return;
+}
+
+/* =========================
+   F1 = HOME
+========================= */
+
+if (e.key === "F1") {
+  e.preventDefault();
+
+  setShowHome(true);
+
+  return;
+}
+
+/* =========================
+   F2 = LAST COMMAND
+========================= */
+
+if (e.key === "F2") {
+  e.preventDefault();
+
+  if (
+    mobileCommandHistory.length > 0
+  ) {
+    const lastCommand =
+      mobileCommandHistory[
+        mobileCommandHistory.length - 1
+      ];
+
+    setCommandText(
+      lastCommand || ""
     );
 
-    setSelectedIndexes(
-      []
+    setMobileCommandPanel("home");
+  }
+
+  return;
+}
+
+/* =========================
+   F3 = OSNAP
+========================= */
+
+if (e.key === "F3") {
+  e.preventDefault();
+
+  setObjectSnapEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+/* =========================
+   F7 = GRID
+========================= */
+
+if (e.key === "F7") {
+  e.preventDefault();
+
+  setGridEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+/* =========================
+   F8 = ORTHO
+========================= */
+
+if (e.key === "F8") {
+  e.preventDefault();
+
+  toggleOrtho();
+
+  return;
+}
+
+/* =========================
+   F9 = GRID SNAP
+========================= */
+
+if (e.key === "F9") {
+  e.preventDefault();
+
+  setGridSnapEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+/* =========================
+   F10 = POLAR
+========================= */
+
+if (e.key === "F10") {
+  e.preventDefault();
+
+  togglePolar();
+
+  return;
+}
+
+/* =========================
+   F11 = TRACKING
+========================= */
+
+if (e.key === "F11") {
+  e.preventDefault();
+
+  setObjectSnapTrackingEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+/* =========================
+   F12 = DYNAMIC INPUT
+========================= */
+
+if (e.key === "F12") {
+  e.preventDefault();
+
+  setDynamicInputEnabled(
+    (prev) => !prev
+  );
+
+  return;
+}
+
+/* =========================
+   CTRL + 1 ... 0
+========================= */
+
+if (
+  (e.ctrlKey || e.metaKey) &&
+  !e.shiftKey &&
+  !e.altKey
+) {
+  const commands = {
+    "1": "properties",
+    "2": "layers",
+    "3": "measure",
+    "4": "area",
+    "5": "dimension",
+    "6": "angulardimension",
+    "7": "radiusdimension",
+    "8": "diameterdimension",
+    "9": "move",
+    "0": "copy",
+  };
+
+  if (commands[e.key]) {
+    e.preventDefault();
+
+    runMobileCommand(
+      commands[e.key]
     );
 
-    setSelectedMeasurementIndex(
-  null
-);
-
-   setCommandFirstIndex(
-  null
-);
-
-setMeasureStart(
-  null
-);
-
-setAnglePoints([]);
-
-setIsDrawing(
-  false
-);
-
-setSnapPoint(
-  null
-);
-
     return;
   }
+}
 
-  /* =========================
-     CTRL + S = SAVE
-  ========================= */
+/* =========================
+   CTRL + SHIFT + 1 ... 0
+========================= */
 
-  if (
-    e.ctrlKey &&
-    key === "s"
-  ) {
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.shiftKey &&
+  !e.altKey
+) {
+  const commands = {
+    "1": "rotate",
+    "2": "trim",
+    "3": "extend",
+    "4": "stretch",
+    "5": "offset",
+    "6": "mirror",
+    "7": "scale",
+    "8": "fillet",
+    "9": "chamfer",
+    "0": "explode",
+  };
+
+  if (commands[e.key]) {
     e.preventDefault();
 
-    saveDrawing();
+    runMobileCommand(
+      commands[e.key]
+    );
 
     return;
   }
 
-  /* =========================
-     CTRL + O = OPEN
-  ========================= */
+  const key =
+    e.key.toLowerCase();
 
-  if (
-    e.ctrlKey &&
-    key === "o"
-  ) {
+  if (key === "j") {
     e.preventDefault();
-
-    openDrawing();
-
-    return;
-  }
-
-  /* =========================
-     HOME = ZOOM FIT
-  ========================= */
-
-  if (
-    e.key === "Home"
-  ) {
-    e.preventDefault();
-
-    zoomFit();
-
-    return;
-  }
-
-  /* =========================
-     TOOL SHORTCUTS
-  ========================= */
-
-  if (key === "l") {
-    changeTool("line");
-    return;
-  }
-
-  if (key === "p") {
-    changeTool("polyline");
-    return;
-  }
-
-  if (key === "t") {
-    changeTool("text");
-    return;
-  }
-
-  if (key === "r") {
-    changeTool("rectangle");
-    return;
-  }
-
-  if (key === "c") {
-    changeTool("circle");
+    runMobileCommand("join");
     return;
   }
 
   if (key === "k") {
-  changeTool("arc");
-  return;
-}
-
-  if (key === "m") {
-    changeTool("move");
+    e.preventDefault();
+    runMobileCommand("layers");
     return;
   }
 
-  if (key === "o") {
-    changeTool("offset");
+  if (key === "u") {
+    e.preventDefault();
+    runMobileCommand("properties");
     return;
   }
 
   if (key === "f") {
-    changeTool("fillet");
+    e.preventDefault();
+    runMobileCommand("find");
+    return;
+  }
+
+    if (key === "l") {
+    e.preventDefault();
+    runMobileCommand("line");
+    return;
+  }
+
+  if (key === "c") {
+    e.preventDefault();
+    runMobileCommand("circle");
+    return;
+  }
+
+  if (key === "r") {
+    e.preventDefault();
+    runMobileCommand("rectangle");
+    return;
+  }
+
+  if (key === "t") {
+    e.preventDefault();
+    runMobileCommand("text");
     return;
   }
 
   if (key === "h") {
-    changeTool("chamfer");
-    return;
-  }
-
-  if (key === "s") {
-    changeTool("stretch");
-    return;
-  }
-
-  if (key === "a") {
-    changeTool("array");
+    e.preventDefault();
+    runMobileCommand("hatch");
     return;
   }
 
   if (key === "v") {
-    changeTool("mirror");
+    e.preventDefault();
+    runMobileCommand("move");
     return;
   }
 
-  if (key === "e") {
-    changeTool("explode");
+  if (key === "w") {
+    e.preventDefault();
+    runMobileCommand("offset");
     return;
   }
 
-  if (key === "j") {
-    changeTool("join");
+  if (key === "b") {
+    e.preventDefault();
+    runMobileCommand("scale");
     return;
   }
 
   if (key === "q") {
-    changeTool("select");
+    e.preventDefault();
+    runMobileCommand("erase");
     return;
   }
 
-  /* =========================
-   EXTRA TOOL SHORTCUTS
+  if (key === "n") {
+    e.preventDefault();
+    runMobileCommand("trim");
+    return;
+  }
+
+  if (key === "y") {
+    e.preventDefault();
+    runMobileCommand("extend");
+    return;
+  }
+
+  if (key === "i") {
+    e.preventDefault();
+    runMobileCommand("mirror");
+    return;
+  }
+
+  if (key === "p") {
+    e.preventDefault();
+    exportPNG();
+    return;
+  }
+
+  if (key === "g") {
+    e.preventDefault();
+    exportSVG();
+    return;
+  }
+
+  if (key === "d") {
+    e.preventDefault();
+    exportDXF();
+    return;
+  }
+}
+
+/* =========================
+   CTRL + ALT
 ========================= */
 
-if (key === "c" && tool !== "polyline") {
-  changeTool("circle");
+if (
+  (e.ctrlKey || e.metaKey) &&
+  e.altKey
+) {
+  const key =
+    e.key.toLowerCase();
+
+  if (key === "o") {
+    e.preventDefault();
+    openDrawing();
+    return;
+  }
+
+  if (key === "n") {
+    e.preventDefault();
+    clearDrawing();
+    return;
+  }
+
+  if (key === "r") {
+    e.preventDefault();
+    restoreAutoSave();
+    return;
+  }
+
+  if (key === "c") {
+    e.preventDefault();
+    clearAutoSave();
+    return;
+  }
+
+  const commands = {
+    m: "measure",
+    a: "area",
+    d: "dimension",
+    g: "angulardimension",
+    b: "radiusdimension",
+    i: "diameterdimension",
+  };
+
+  if (commands[key]) {
+    e.preventDefault();
+
+    runMobileCommand(
+      commands[key]
+    );
+
+    return;
+  }
+}
+
+/* =========================
+   SPLINE ENTER
+========================= */
+
+if (
+  e.key === "Enter" &&
+  tool === "spline"
+) {
+  finishSpline();
   return;
 }
 
-if (key === "r" && tool !== "polyline") {
-  changeTool("rectangle");
+/* =========================
+   RIGHT CLICK = FINISH SPLINE
+========================= */
+
+if (
+  tool === "spline" &&
+  splinePoints.length >= 6
+) {
+  finishSpline();
   return;
 }
 
-if (key === "t" && tool !== "polyline") {
-  changeTool("text");
-  return;
-}
-
-if (key === "d" && tool !== "polyline") {
-  changeTool("dimension");
-  return;
-}
-
-if (key === "b") {
-  changeTool("hatch");
-  return;
-}
 
   /* =========================
      ENTER = FINISH POLYLINE
@@ -8229,6 +12736,165 @@ if (tool === "extend") {
   return;
 }
 
+/* =========================
+   LENGTHEN
+========================= */
+
+const lengthenObject = (index) => {
+  const object = objects[index];
+
+  if (!object) {
+    return;
+  }
+
+  if (
+    object.type !== "line"
+  ) {
+    window.alert(
+      "LENGTHEN currently supports Line."
+    );
+    return;
+  }
+
+  if (
+    object.locked ||
+    isLayerLocked(
+      object.layerId || "layer-0"
+    )
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
+  const points =
+    Array.isArray(object.points)
+      ? [...object.points]
+      : [];
+
+  if (points.length < 4) {
+    return;
+  }
+
+  const x1 = points[0];
+  const y1 = points[1];
+
+  const x2 = points[2];
+  const y2 = points[3];
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  const length =
+    Math.hypot(dx, dy);
+
+  if (length < 0.000001) {
+    return;
+  }
+
+  const extension = 50;
+
+  const ux = dx / length;
+  const uy = dy / length;
+
+  const updatedObject = {
+    ...object,
+    points: [
+      x1 - ux * extension,
+      y1 - uy * extension,
+      x2 + ux * extension,
+      y2 + uy * extension,
+    ],
+  };
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (item, objectIndex) =>
+        objectIndex === index
+          ? updatedObject
+          : item
+    );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(index);
+  setSelectedIndexes([index]);
+  setFuture([]);
+};
+
+/* =========================
+   SPLINE
+========================= */
+
+const createSpline = (points) => {
+  if (
+    !Array.isArray(points) ||
+    points.length < 4
+  ) {
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const splineObject = {
+    type: "spline",
+    points: [...points],
+    rotation: 0,
+    color: "#ffffff",
+    strokeWidth: 2,
+    layerId: activeLayerId,
+  };
+
+  const newIndex =
+    objects.length;
+
+  setObjects([
+    ...objects,
+    splineObject,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(newIndex);
+  setSelectedIndexes([newIndex]);
+  setFuture([]);
+};
+
+/* =========================
+   FINISH SPLINE
+========================= */
+
+const finishSpline = () => {
+  if (
+    !Array.isArray(splinePoints) ||
+    splinePoints.length < 6
+  ) {
+    setSplinePoints([]);
+    return;
+  }
+
+  createSpline(splinePoints);
+
+  setSplinePoints([]);
+};
+
 /* STRETCH */
 
 if (tool === "stretch") {
@@ -8283,6 +12949,2584 @@ if (tool === "offset") {
     return;
   }
 
+  /* =========================
+   BREAK
+========================= */
+
+if (tool === "break") {
+  breakObject(index);
+  return;
+}
+
+  /* =========================
+   BREAK
+========================= */
+
+const breakObject = (index) => {
+  const object = objects[index];
+
+  if (!object) {
+    return;
+  }
+
+  if (object.locked) {
+    window.alert("This object is locked.");
+    return;
+  }
+
+  if (
+    object.type !== "line" &&
+    object.type !== "polyline"
+  ) {
+    window.alert(
+      "BREAK currently supports Line and Polyline."
+    );
+    return;
+  }
+
+  const points = Array.isArray(object.points)
+    ? [...object.points]
+    : [];
+
+  if (points.length < 4) {
+    return;
+  }
+
+  const middle =
+    Math.floor(points.length / 4) * 2;
+
+  if (
+    middle <= 0 ||
+    middle >= points.length - 2
+  ) {
+    return;
+  }
+
+  const firstPoints =
+    points.slice(0, middle + 2);
+
+  const secondPoints =
+    points.slice(middle);
+
+  const firstObject = {
+    ...object,
+    points: firstPoints,
+  };
+
+  const secondObject = {
+    ...object,
+    points: secondPoints,
+  };
+
+  const updatedObjects = [
+    ...objects.slice(0, index),
+    firstObject,
+    secondObject,
+    ...objects.slice(index + 1),
+  ];
+
+  saveHistory(
+    objects,
+    measurements
+  );
+
+  setObjects(updatedObjects);
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+};
+
+/* =========================
+   ALIGN
+========================= */
+
+const alignObject = (
+  firstIndex,
+  secondIndex
+) => {
+  const first = objects[firstIndex];
+  const second = objects[secondIndex];
+
+  if (
+    firstIndex === null ||
+    secondIndex === null ||
+    firstIndex === secondIndex
+  ) {
+    window.alert(
+      "Select two different objects for Align."
+    );
+    return;
+  }
+
+  if (!first || !second) {
+    window.alert(
+      "Selected objects were not found."
+    );
+    return;
+  }
+
+  if (
+    first.locked ||
+    second.locked
+  ) {
+    window.alert(
+      "One or both selected objects are locked."
+    );
+    return;
+  }
+
+  const firstLayerId =
+    first.layerId || "layer-0";
+
+  const secondLayerId =
+    second.layerId || "layer-0";
+
+  if (
+    isLayerLocked(firstLayerId) ||
+    isLayerLocked(secondLayerId)
+  ) {
+    window.alert(
+      "One or both objects are on locked layers."
+    );
+    return;
+  }
+
+  const firstBounds =
+    getObjectBounds(first);
+
+  const secondBounds =
+    getObjectBounds(second);
+
+  if (
+    !firstBounds ||
+    !secondBounds
+  ) {
+    window.alert(
+      "Unable to calculate object bounds."
+    );
+    return;
+  }
+
+  /*
+    ALIGN CENTER
+    Second object is aligned
+    to the center of first object.
+  */
+
+  const firstCenterX =
+    (firstBounds.left +
+      firstBounds.right) / 2;
+
+  const firstCenterY =
+    (firstBounds.top +
+      firstBounds.bottom) / 2;
+
+  const secondCenterX =
+    (secondBounds.left +
+      secondBounds.right) / 2;
+
+  const secondCenterY =
+    (secondBounds.top +
+      secondBounds.bottom) / 2;
+
+  const dx =
+    firstCenterX -
+    secondCenterX;
+
+  const dy =
+    firstCenterY -
+    secondCenterY;
+
+  if (
+    !Number.isFinite(dx) ||
+    !Number.isFinite(dy)
+  ) {
+    window.alert(
+      "Invalid alignment coordinates."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const alignedObject = {
+    ...second,
+  };
+
+  /*
+    LINE
+  */
+
+  if (
+    second.type === "line" &&
+    Array.isArray(second.points) &&
+    second.points.length >= 4
+  ) {
+    alignedObject.points = [
+      second.points[0] + dx,
+      second.points[1] + dy,
+      second.points[2] + dx,
+      second.points[3] + dy,
+    ];
+  }
+
+  /*
+    POLYLINE
+  */
+
+  else if (
+    second.type === "polyline" &&
+    Array.isArray(second.points)
+  ) {
+    alignedObject.points =
+      second.points.map(
+        (value, pointIndex) =>
+          value +
+          (pointIndex % 2 === 0
+            ? dx
+            : dy)
+      );
+  }
+
+  /*
+    CIRCLE / ARC / RECTANGLE / TEXT / HATCH
+  */
+
+  else {
+    alignedObject.x =
+      (Number(second.x) || 0) +
+      dx;
+
+    alignedObject.y =
+      (Number(second.y) || 0) +
+      dy;
+  }
+
+  const updatedObjects =
+    objects.map(
+      (object, objectIndex) =>
+        objectIndex === secondIndex
+          ? alignedObject
+          : object
+    );
+
+  saveHistory(
+    previousObjects,
+    measurements
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(
+    secondIndex
+  );
+
+  setSelectedIndexes([
+    secondIndex,
+  ]);
+};
+
+/* =========================
+   ALIGN TOOL
+========================= */
+
+/* ALIGN */
+
+if (tool === "align") {
+  const currentSelection = [
+    ...selectedIndexes,
+  ];
+
+  if (
+    currentSelection.length === 0
+  ) {
+    setSelectedIndexes([
+      index,
+    ]);
+
+    setSelectedIndex(index);
+
+    return;
+  }
+
+  if (
+    currentSelection[0] === index
+  ) {
+    return;
+  }
+
+  if (
+    currentSelection.length === 1
+  ) {
+    const firstIndex =
+      currentSelection[0];
+
+    const secondIndex =
+      index;
+
+    alignObject(
+      firstIndex,
+      secondIndex
+    );
+
+    setSelectedIndexes([]);
+    setSelectedIndex(null);
+
+    changeTool("select");
+
+    return;
+  }
+}
+
+/* =========================
+   GROUP
+========================= */
+
+const groupObjects = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select at least two objects to group."
+    );
+    return;
+  }
+
+  const validIndexes = indexes.filter(
+    (index) =>
+      index >= 0 &&
+      index < objects.length
+  );
+
+  if (validIndexes.length < 2) {
+    window.alert(
+      "Select at least two valid objects."
+    );
+    return;
+  }
+
+  const lockedObject = validIndexes.find(
+    (index) =>
+      isObjectLocked(index)
+  );
+
+  if (
+    lockedObject !== undefined
+  ) {
+    window.alert(
+      "One or more selected objects are locked."
+    );
+    return;
+  }
+
+  const groupId =
+    `group-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        validIndexes.includes(index)
+          ? {
+              ...object,
+              groupId,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndexes(
+    validIndexes
+  );
+
+  setSelectedIndex(
+    validIndexes[
+      validIndexes.length - 1
+    ]
+  );
+
+  setFuture([]);
+};
+
+/* GROUP */
+
+if (tool === "group") {
+  groupObjects();
+  return;
+}
+
+/* =========================
+   UNGROUP
+========================= */
+
+const ungroupObjects = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length === 0) {
+    window.alert(
+      "Select a grouped object."
+    );
+    return;
+  }
+
+  const groupedIndexes =
+    indexes.filter(
+      (index) =>
+        objects[index]?.groupId
+    );
+
+  if (groupedIndexes.length === 0) {
+    window.alert(
+      "Selected objects are not grouped."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const groupIds = new Set(
+    groupedIndexes.map(
+      (index) =>
+        objects[index].groupId
+    )
+  );
+
+  const updatedObjects =
+    objects.map(
+      (object) => {
+        if (
+          object.groupId &&
+          groupIds.has(
+            object.groupId
+          )
+        ) {
+          const updated = {
+            ...object,
+          };
+
+          delete updated.groupId;
+
+          return updated;
+        }
+
+        return object;
+      }
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setFuture([]);
+};
+
+/* UNGROUP */
+
+if (tool === "ungroup") {
+  ungroupObjects();
+  return;
+}
+
+/* =========================
+   BLOCK
+========================= */
+
+const createBlock = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length < 1) {
+    window.alert(
+      "Select at least one object to create a Block."
+    );
+    return;
+  }
+
+  const validIndexes = indexes.filter(
+    (index) =>
+      index >= 0 &&
+      index < objects.length &&
+      objects[index]
+  );
+
+  if (validIndexes.length === 0) {
+    return;
+  }
+
+  const lockedObject = validIndexes.find(
+    (index) =>
+      isObjectLocked(index)
+  );
+
+  if (
+    lockedObject !== undefined
+  ) {
+    window.alert(
+      "One or more selected objects are locked."
+    );
+    return;
+  }
+
+  const blockId =
+    `block-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        validIndexes.includes(index)
+          ? {
+              ...object,
+              blockId,
+              groupId:
+                object.groupId ||
+                blockId,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndexes(
+    validIndexes
+  );
+
+  setSelectedIndex(
+    validIndexes[
+      validIndexes.length - 1
+    ]
+  );
+
+  setFuture([]);
+};
+
+/* BLOCK */
+
+if (tool === "block") {
+  createBlock();
+  return;
+}
+
+/* =========================
+   RENAME BLOCK
+========================= */
+
+const renameBlock = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length === 0) {
+    window.alert(
+      "Select a block first."
+    );
+    return;
+  }
+
+  const blockIndex =
+    indexes.find(
+      (index) =>
+        objects[index]?.blockId
+    );
+
+  if (
+    blockIndex === undefined
+  ) {
+    window.alert(
+      "Selected object is not a Block."
+    );
+    return;
+  }
+
+  const blockId =
+    objects[blockIndex].blockId;
+
+  const newName =
+    window.prompt(
+      "Enter new Block name:",
+      blockId
+    );
+
+  if (
+    !newName ||
+    !newName.trim()
+  ) {
+    return;
+  }
+
+  const trimmedName =
+    newName.trim();
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) =>
+        object.blockId === blockId
+          ? {
+              ...object,
+              blockName:
+                trimmedName,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setFuture([]);
+};
+
+/* RENAME BLOCK */
+
+if (tool === "renameblock") {
+  renameBlock();
+  return;
+}
+
+/* =========================
+   DELETE BLOCK
+========================= */
+
+const deleteBlock = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length === 0) {
+    window.alert(
+      "Select a block first."
+    );
+    return;
+  }
+
+  const blockIds = new Set(
+    indexes
+      .map(
+        (index) =>
+          objects[index]?.blockId
+      )
+      .filter(Boolean)
+  );
+
+  if (blockIds.size === 0) {
+    window.alert(
+      "Selected object is not a Block."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.filter(
+      (object) =>
+        !(
+          object.blockId &&
+          blockIds.has(
+            object.blockId
+          )
+        )
+    );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setFuture([]);
+};
+
+/* DELETE BLOCK */
+
+if (tool === "deleteblock") {
+  deleteBlock();
+  return;
+}
+
+/* =========================
+   EXPLODE BLOCK
+========================= */
+
+const explodeBlock = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length === 0) {
+    window.alert(
+      "Select a block first."
+    );
+    return;
+  }
+
+  const blockIds = new Set(
+    indexes
+      .map(
+        (index) =>
+          objects[index]?.blockId
+      )
+      .filter(Boolean)
+  );
+
+  if (blockIds.size === 0) {
+    window.alert(
+      "Selected object is not a Block."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) => {
+        if (
+          object.blockId &&
+          blockIds.has(
+            object.blockId
+          )
+        ) {
+          const updated = {
+            ...object,
+          };
+
+          delete updated.blockId;
+          delete updated.blockName;
+          delete updated.groupId;
+
+          return updated;
+        }
+
+        return object;
+      }
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setFuture([]);
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+};
+
+/* EXPLODE BLOCK */
+
+if (tool === "explodeblock") {
+  explodeBlock();
+  return;
+}
+
+/* =========================
+   PURGE
+========================= */
+
+const purgeObjects = () => {
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const usedBlockIds = new Set(
+    objects
+      .map(
+        (object) =>
+          object?.blockId
+      )
+      .filter(Boolean)
+  );
+
+  const updatedObjects =
+    objects.map(
+      (object) => {
+        if (
+          object.blockId &&
+          !usedBlockIds.has(
+            object.blockId
+          )
+        ) {
+          const updated = {
+            ...object,
+          };
+
+          delete updated.blockId;
+          delete updated.blockName;
+
+          return updated;
+        }
+
+        return object;
+      }
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setFuture([]);
+
+  window.alert(
+    "Unused block data purged."
+  );
+};
+
+/* PURGE */
+
+if (tool === "purge") {
+  purgeObjects();
+  return;
+}
+
+/* =========================
+   LAYER ISOLATE
+========================= */
+
+const isolateCurrentLayer = () => {
+  const targetLayerId =
+    activeLayerId || "layer-0";
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) => ({
+        ...object,
+        hidden:
+          (object.layerId || "layer-0") !==
+          targetLayerId,
+      })
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+
+  setFuture([]);
+};
+
+/* LAYER ISOLATE */
+
+if (tool === "layerisolate") {
+  isolateCurrentLayer();
+  return;
+}
+
+/* =========================
+   LAYER OFF
+========================= */
+
+const turnLayerOff = () => {
+  const targetLayerId =
+    activeLayerId || "layer-0";
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) =>
+        (object.layerId || "layer-0") ===
+        targetLayerId
+          ? {
+              ...object,
+              hidden: true,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+
+  setFuture([]);
+};
+
+/* LAYER OFF */
+
+if (tool === "layeroff") {
+  turnLayerOff();
+  return;
+}
+
+/* =========================
+   LAYER ON
+========================= */
+
+const turnLayerOn = () => {
+  const targetLayerId =
+    activeLayerId || "layer-0";
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) =>
+        (object.layerId || "layer-0") ===
+        targetLayerId
+          ? {
+              ...object,
+              hidden: false,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+
+  setFuture([]);
+};
+
+/* LAYER ON */
+
+if (tool === "layeron") {
+  turnLayerOn();
+  return;
+}
+
+/* =========================
+   LAYER FREEZE
+========================= */
+
+const freezeCurrentLayer = () => {
+  const targetLayerId =
+    activeLayerId || "layer-0";
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) =>
+        (object.layerId || "layer-0") ===
+        targetLayerId
+          ? {
+              ...object,
+              frozen: true,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setFuture([]);
+};
+
+/* LAYER FREEZE */
+
+if (tool === "layerfreeze") {
+  freezeCurrentLayer();
+  return;
+}
+
+/* =========================
+   LAYER THAW
+========================= */
+
+const thawCurrentLayer = () => {
+  const targetLayerId =
+    activeLayerId || "layer-0";
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) =>
+        (object.layerId || "layer-0") ===
+        targetLayerId
+          ? {
+              ...object,
+              frozen: false,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setFuture([]);
+};
+
+/* LAYER THAW */
+
+if (tool === "layerthaw") {
+  thawCurrentLayer();
+  return;
+}
+
+/* =========================
+   LAYER MATCH
+========================= */
+
+const layerMatch = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select source object and target object."
+    );
+    return;
+  }
+
+  const sourceIndex =
+    indexes[0];
+
+  const targetIndexes =
+    indexes.slice(1);
+
+  const sourceObject =
+    objects[sourceIndex];
+
+  if (!sourceObject) {
+    window.alert(
+      "Source object not found."
+    );
+    return;
+  }
+
+  const sourceLayerId =
+    sourceObject.layerId ||
+    "layer-0";
+
+  const sourceLayer =
+    layers.find(
+      (layer) =>
+        layer.id === sourceLayerId
+    );
+
+  if (!sourceLayer) {
+    window.alert(
+      "Source layer not found."
+    );
+    return;
+  }
+
+  const editableIndexes =
+    targetIndexes.filter(
+      (index) => {
+        if (!objects[index]) {
+          return false;
+        }
+
+        return !isObjectLocked(index);
+      }
+    );
+
+  if (
+    editableIndexes.length === 0
+  ) {
+    window.alert(
+      "Target objects are locked."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const targetSet =
+    new Set(editableIndexes);
+
+  const updatedObjects =
+    objects.map(
+      (object, index) =>
+        targetSet.has(index)
+          ? {
+              ...object,
+              layerId:
+                sourceLayerId,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setFuture([]);
+
+  setSelectedIndexes(
+    editableIndexes
+  );
+
+  setSelectedIndex(
+    editableIndexes[
+      editableIndexes.length - 1
+    ] ?? null
+  );
+};
+
+/* LAYER MATCH */
+
+if (tool === "layermatch") {
+  layerMatch();
+  return;
+}
+
+/* =========================
+   LAYER MERGE
+========================= */
+
+const mergeLayers = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select objects from at least two layers."
+    );
+    return;
+  }
+
+  const selectedLayerIds = [
+    ...new Set(
+      indexes
+        .map(
+          (index) =>
+            objects[index]?.layerId ||
+            "layer-0"
+        )
+    ),
+  ];
+
+  if (selectedLayerIds.length < 2) {
+    window.alert(
+      "Selected objects are already on the same layer."
+    );
+    return;
+  }
+
+  const targetLayerId =
+    activeLayerId || "layer-0";
+
+  const lockedLayer =
+    selectedLayerIds.find(
+      (layerId) =>
+        isLayerLocked(layerId)
+    );
+
+  if (lockedLayer) {
+    window.alert(
+      "One of the selected layers is locked."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) =>
+        selectedLayerIds.includes(
+          object.layerId ||
+          "layer-0"
+        )
+          ? {
+              ...object,
+              layerId:
+                targetLayerId,
+            }
+          : object
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setFuture([]);
+
+  setSelectedIndexes(
+    indexes
+  );
+
+  setSelectedIndex(
+    indexes[indexes.length - 1]
+  );
+};
+
+/* LAYER MERGE */
+
+if (tool === "layermerge") {
+  mergeLayers();
+  return;
+}
+
+/* =========================
+   LAYER UNISOLATE
+========================= */
+
+const unisolateLayers = () => {
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map(
+      (object) => ({
+        ...object,
+        hidden: false,
+      })
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setFuture([]);
+};
+
+/* LAYER UNISOLATE */
+
+if (tool === "layerunisolate") {
+  unisolateLayers();
+  return;
+}
+
+/* =========================
+   LAYOUT
+========================= */
+
+const createLayout = () => {
+  const layoutName = window.prompt(
+    "Enter Layout name:",
+    "Layout1"
+  );
+
+  if (
+    layoutName === null ||
+    !layoutName.trim()
+  ) {
+    return;
+  }
+
+  const trimmedName =
+    layoutName.trim();
+
+  const existingLayout =
+    layouts?.find?.(
+      (layout) =>
+        layout?.name?.toLowerCase() ===
+        trimmedName.toLowerCase()
+    );
+
+  if (existingLayout) {
+    window.alert(
+      "A layout with this name already exists."
+    );
+    return;
+  }
+
+  if (
+    typeof setLayouts !== "function"
+  ) {
+    window.alert(
+      "Layout system is not available yet."
+    );
+    return;
+  }
+
+  setLayouts(
+    (previousLayouts) => [
+      ...(previousLayouts || []),
+      {
+        id:
+          `layout-${Date.now()}`,
+        name:
+          trimmedName,
+      },
+    ]
+  );
+};
+
+/* LAYOUT */
+
+if (tool === "layout") {
+  createLayout();
+  return;
+}
+
+/* =========================
+   MATCH PROPERTIES
+========================= */
+
+const matchProperties = () => {
+  const indexes = [
+    ...selectedIndexes,
+  ];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select source object first, then target object(s)."
+    );
+    return;
+  }
+
+  const sourceIndex =
+    indexes[0];
+
+  const targetIndexes =
+    indexes.slice(1);
+
+  const sourceObject =
+    objects[sourceIndex];
+
+  if (!sourceObject) {
+    window.alert(
+      "Source object not found."
+    );
+    return;
+  }
+
+  if (
+    sourceObject.locked ||
+    isLayerLocked(
+      sourceObject.layerId ||
+      "layer-0"
+    )
+  ) {
+    window.alert(
+      "Source object or its layer is locked."
+    );
+    return;
+  }
+
+  const editableTargets =
+    targetIndexes.filter(
+      (index) => {
+        const object =
+          objects[index];
+
+        if (!object) {
+          return false;
+        }
+
+        if (
+          object.locked ||
+          isLayerLocked(
+            object.layerId ||
+            "layer-0"
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+  if (
+    editableTargets.length === 0
+  ) {
+    window.alert(
+      "Target objects are locked."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const targetSet =
+    new Set(
+      editableTargets
+    );
+
+  const updatedObjects =
+    objects.map(
+      (object, index) => {
+        if (
+          !targetSet.has(index)
+        ) {
+          return object;
+        }
+
+        return {
+          ...object,
+
+          color:
+            sourceObject.color,
+
+          strokeWidth:
+            sourceObject.strokeWidth,
+
+          rotation:
+            sourceObject.rotation || 0,
+
+          ...(sourceObject.fill !==
+            undefined
+            ? {
+                fill:
+                  sourceObject.fill,
+              }
+            : {}),
+
+          ...(sourceObject.opacity !==
+            undefined
+            ? {
+                opacity:
+                  sourceObject.opacity,
+              }
+            : {}),
+
+          ...(sourceObject.fontSize !==
+            undefined
+            ? {
+                fontSize:
+                  sourceObject.fontSize,
+              }
+            : {}),
+
+          ...(sourceObject.hatchSpacing !==
+            undefined
+            ? {
+                hatchSpacing:
+                  sourceObject.hatchSpacing,
+              }
+            : {}),
+
+          ...(sourceObject.hatchAngle !==
+            undefined
+            ? {
+                hatchAngle:
+                  sourceObject.hatchAngle,
+              }
+            : {}),
+        };
+      }
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndexes(
+    editableTargets
+  );
+
+  setSelectedIndex(
+    editableTargets[
+      editableTargets.length - 1
+    ] ?? null
+  );
+
+  setFuture([]);
+};
+
+/* MATCH PROPERTIES */
+
+if (tool === "matchprop") {
+  matchProperties();
+  return;
+}
+
+/* =========================
+   OVERKILL
+========================= */
+
+const overkillObjects = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select at least two objects."
+    );
+    return;
+  }
+
+  const selectedSet =
+    new Set(indexes);
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const seen = new Set();
+  const removeIndexes = new Set();
+
+  indexes.forEach((index) => {
+    const object = objects[index];
+
+    if (!object) {
+      return;
+    }
+
+    let key = "";
+
+    if (
+      object.type === "line" &&
+      Array.isArray(object.points) &&
+      object.points.length >= 4
+    ) {
+      const p1 = `${object.points[0]},${object.points[1]}`;
+      const p2 = `${object.points[2]},${object.points[3]}`;
+
+      key =
+        p1 < p2
+          ? `line:${p1}:${p2}`
+          : `line:${p2}:${p1}`;
+    }
+
+    else if (
+      object.type === "circle"
+    ) {
+      key =
+        `circle:${object.x}:${object.y}:${object.radius}`;
+    }
+
+    else if (
+      object.type === "rectangle"
+    ) {
+      key =
+        `rectangle:${object.x}:${object.y}:${object.width}:${object.height}`;
+    }
+
+    else if (
+      Array.isArray(object.points)
+    ) {
+      key =
+        `${object.type}:${object.points.join(",")}`;
+    }
+
+    if (!key) {
+      return;
+    }
+
+    if (seen.has(key)) {
+      removeIndexes.add(index);
+    } else {
+      seen.add(key);
+    }
+  });
+
+  if (
+    removeIndexes.size === 0
+  ) {
+    window.alert(
+      "No duplicate objects found."
+    );
+    return;
+  }
+
+  const updatedObjects =
+    objects.filter(
+      (_, index) =>
+        !(
+          selectedSet.has(index) &&
+          removeIndexes.has(index)
+        )
+    );
+
+  setObjects(
+    updatedObjects
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setFuture([]);
+
+  window.alert(
+    `${removeIndexes.size} duplicate object(s) removed.`
+  );
+};
+
+/* OVERKILL */
+
+if (tool === "overkill") {
+  overkillObjects();
+  return;
+}
+
+/* =========================
+   AUDIT
+========================= */
+
+const auditDrawing = () => {
+  const errors = [];
+
+  objects.forEach((object, index) => {
+    if (!object) {
+      errors.push(
+        `Object ${index + 1}: empty object`
+      );
+      return;
+    }
+
+    if (!object.type) {
+      errors.push(
+        `Object ${index + 1}: missing type`
+      );
+      return;
+    }
+
+    if (
+      object.type === "line" ||
+      object.type === "polyline"
+    ) {
+      if (
+        !Array.isArray(object.points) ||
+        object.points.length < 4
+      ) {
+        errors.push(
+          `Object ${index + 1}: invalid points`
+        );
+        return;
+      }
+
+      if (
+        object.points.some(
+          (value) =>
+            !Number.isFinite(
+              Number(value)
+            )
+        )
+      ) {
+        errors.push(
+          `Object ${index + 1}: invalid coordinates`
+        );
+      }
+    }
+
+    if (
+      object.type === "circle" ||
+      object.type === "arc"
+    ) {
+      if (
+        !Number.isFinite(
+          Number(object.x)
+        ) ||
+        !Number.isFinite(
+          Number(object.y)
+        ) ||
+        !Number.isFinite(
+          Number(object.radius)
+        ) ||
+        Number(object.radius) <= 0
+      ) {
+        errors.push(
+          `Object ${index + 1}: invalid radius/position`
+        );
+      }
+    }
+
+    if (
+      object.type === "rectangle" ||
+      object.type === "hatch"
+    ) {
+      if (
+        !Number.isFinite(
+          Number(object.x)
+        ) ||
+        !Number.isFinite(
+          Number(object.y)
+        ) ||
+        !Number.isFinite(
+          Number(object.width)
+        ) ||
+        !Number.isFinite(
+          Number(object.height)
+        )
+      ) {
+        errors.push(
+          `Object ${index + 1}: invalid dimensions`
+        );
+      }
+    }
+  });
+
+  if (errors.length === 0) {
+    window.alert(
+      `AUDIT complete.\n\n${objects.length} object(s) checked.\nNo errors found.`
+    );
+    return;
+  }
+
+  window.alert(
+    `AUDIT found ${errors.length} issue(s):\n\n` +
+    errors.slice(0, 20).join("\n")
+  );
+};
+
+/* AUDIT */
+
+if (tool === "audit") {
+  auditDrawing();
+  return;
+}
+
+/* =========================
+   REGEN
+========================= */
+
+const regenDrawing = () => {
+  const previousObjects = [...objects];
+  const previousMeasurements = [...measurements];
+
+  // Force fresh object references so Konva redraws everything
+  setObjects(
+    objects.map((object) => ({
+      ...object,
+      points: Array.isArray(object.points)
+        ? [...object.points]
+        : object.points,
+    }))
+  );
+
+  setMeasurements(
+    measurements.map((measurement) => ({
+      ...measurement,
+    }))
+  );
+
+  saveHistory(
+    previousObjects,
+    previousMeasurements
+  );
+
+  setSnapPoint(null);
+  setSnapType("");
+
+  window.alert(
+    `REGEN complete.\n\n${objects.length} object(s) regenerated.`
+  );
+};
+
+/* REGEN */
+
+if (tool === "regen") {
+  regenDrawing();
+  return;
+}
+
+/* =========================
+   WIPEOUT
+========================= */
+
+const createWipeout = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
+    window.alert("Select an object first.");
+    return;
+  }
+
+  const source = objects[indexes[0]];
+
+  if (!source) {
+    return;
+  }
+
+  let points = [];
+
+  if (
+    source.type === "rectangle"
+  ) {
+    const x = Number(source.x || 0);
+    const y = Number(source.y || 0);
+    const w = Number(source.width || 0);
+    const h = Number(source.height || 0);
+
+    points = [
+      x, y,
+      x + w, y,
+      x + w, y + h,
+      x, y + h,
+    ];
+  }
+
+  else if (
+    source.type === "polyline" &&
+    Array.isArray(source.points)
+  ) {
+    points = [...source.points];
+  }
+
+  else if (
+    source.type === "line" &&
+    Array.isArray(source.points)
+  ) {
+    points = [...source.points];
+  }
+
+  if (points.length < 6) {
+    window.alert(
+      "WIPEOUT requires a rectangle or closed polyline boundary."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const wipeout = {
+    type: "wipeout",
+    points,
+    closed: true,
+    fill: "#111111",
+    color: "#111111",
+    strokeWidth: 0,
+    layerId: activeLayerId,
+  };
+
+  setObjects([
+    ...objects,
+    wipeout,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  const newIndex =
+    objects.length;
+
+  setSelectedIndex(newIndex);
+  setSelectedIndexes([newIndex]);
+  setFuture([]);
+};
+
+/* WIPEOUT */
+
+if (tool === "wipeout") {
+  createWipeout();
+  return;
+}
+
+/* =========================
+   FLATTEN
+========================= */
+
+const flattenObjects = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
+    window.alert("Select object(s) first.");
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map((object, index) => {
+      if (!indexes.includes(index)) {
+        return object;
+      }
+
+      return {
+        ...object,
+
+        x: Number(object.x || 0),
+        y: Number(object.y || 0),
+
+        centerX: Number(
+          object.centerX ?? object.x ?? 0
+        ),
+
+        centerY: Number(
+          object.centerY ?? object.y ?? 0
+        ),
+
+        z: 0,
+        elevation: 0,
+
+        startZ: 0,
+        endZ: 0,
+
+        groupId: undefined,
+        blockId: undefined,
+        blockName: undefined,
+      };
+    });
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndexes(
+    indexes
+  );
+
+  setSelectedIndex(
+    indexes[indexes.length - 1]
+  );
+};
+
+/* FLATTEN */
+
+if (tool === "flatten") {
+  flattenObjects();
+  return;
+}
+
+/* =========================
+   LIST
+========================= */
+
+const listObjects = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
+    window.alert("Select object(s) first.");
+    return;
+  }
+
+  const details = indexes
+    .map((index) => {
+      const object = objects[index];
+
+      if (!object) {
+        return "";
+      }
+
+      return [
+        `Object ${index + 1}`,
+        `Type: ${object.type || "unknown"}`,
+        `Layer: ${object.layerId || "layer-0"}`,
+        `Color: ${object.color || object.stroke || "default"}`,
+        `Stroke Width: ${object.strokeWidth ?? 1}`,
+        `Position: X=${object.x ?? 0}, Y=${object.y ?? 0}`,
+      ].join("\n");
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  window.alert(details);
+};
+
+/* LIST */
+
+if (tool === "list") {
+  listObjects();
+  return;
+}
+
+/* =========================
+   XCLIP
+========================= */
+
+const xclipObject = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
+    window.alert("Select object(s) first.");
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects =
+    objects.map((object, index) => {
+      if (!indexes.includes(index)) {
+        return object;
+      }
+
+      return {
+        ...object,
+        xclipEnabled: !object.xclipEnabled,
+      };
+    });
+
+  setObjects(updatedObjects);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndexes(indexes);
+  setSelectedIndex(indexes[0]);
+};
+
+/* XCLIP */
+
+if (tool === "xclip") {
+  xclipObject();
+  return;
+}
+
+/* =========================
+   BOUNDARY
+========================= */
+
+const createBoundary = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length === 0) {
+    window.alert("Select an object first.");
+    return;
+  }
+
+  const source = objects[indexes[0]];
+
+  if (!source) {
+    return;
+  }
+
+  let boundary = null;
+
+  /* RECTANGLE */
+  if (source.type === "rectangle") {
+    const x = Number(source.x || 0);
+    const y = Number(source.y || 0);
+    const width = Number(source.width || 0);
+    const height = Number(source.height || 0);
+
+    boundary = {
+      type: "polyline",
+      points: [
+        x, y,
+        x + width, y,
+        x + width, y + height,
+        x, y + height,
+        x, y,
+      ],
+      closed: true,
+      color: source.color || "#ffffff",
+      strokeWidth: source.strokeWidth || 1,
+      layerId: source.layerId || activeLayerId,
+      rotation: 0,
+    };
+  }
+
+  /* POLYLINE */
+  else if (
+    source.type === "polyline" &&
+    Array.isArray(source.points)
+  ) {
+    const points = [...source.points];
+
+    if (points.length < 6) {
+      window.alert(
+        "Polyline must contain at least 3 points."
+      );
+      return;
+    }
+
+    const firstX = points[0];
+    const firstY = points[1];
+
+    const lastX =
+      points[points.length - 2];
+
+    const lastY =
+      points[points.length - 1];
+
+    const closedPoints =
+      Math.abs(firstX - lastX) < 0.001 &&
+      Math.abs(firstY - lastY) < 0.001
+        ? points
+        : [
+            ...points,
+            firstX,
+            firstY,
+          ];
+
+    boundary = {
+      type: "polyline",
+      points: closedPoints,
+      closed: true,
+      color: source.color || "#ffffff",
+      strokeWidth: source.strokeWidth || 1,
+      layerId: source.layerId || activeLayerId,
+      rotation: source.rotation || 0,
+    };
+  }
+
+  else {
+    window.alert(
+      "BOUNDARY currently supports Rectangle and Polyline."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const newIndex =
+    objects.length;
+
+  setObjects([
+    ...objects,
+    boundary,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(newIndex);
+  setSelectedIndexes([newIndex]);
+  setFuture([]);
+};
+
+/* BOUNDARY */
+
+if (tool === "boundary") {
+  createBoundary();
+  return;
+}
+
+/* =========================
+   DIVIDE
+========================= */
+
+const divideObject = (index) => {
+  const object = objects[index];
+
+  if (!object) {
+    return;
+  }
+
+  if (object.locked) {
+    window.alert("This object is locked.");
+    return;
+  }
+
+  if (
+    object.type !== "line" &&
+    object.type !== "polyline"
+  ) {
+    window.alert(
+      "DIVIDE currently supports Line and Polyline."
+    );
+    return;
+  }
+
+  const points = Array.isArray(object.points)
+    ? [...object.points]
+    : [];
+
+  if (points.length < 4) {
+    return;
+  }
+
+  const parts = 2;
+
+  const newObjects = [];
+
+  for (
+    let i = 0;
+    i < points.length - 2;
+    i += 2
+  ) {
+    const x1 = points[i];
+    const y1 = points[i + 1];
+
+    const x2 = points[i + 2];
+    const y2 = points[i + 3];
+
+    const middleX =
+      (x1 + x2) / 2;
+
+    const middleY =
+      (y1 + y2) / 2;
+
+    newObjects.push({
+      ...object,
+      type: "line",
+      points: [
+        x1,
+        y1,
+        middleX,
+        middleY,
+      ],
+    });
+
+    newObjects.push({
+      ...object,
+      type: "line",
+      points: [
+        middleX,
+        middleY,
+        x2,
+        y2,
+      ],
+    });
+  }
+
+  if (newObjects.length === 0) {
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const updatedObjects = [
+    ...objects.slice(0, index),
+    ...newObjects,
+    ...objects.slice(index + 1),
+  ];
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(updatedObjects);
+
+  setSelectedIndex(null);
+  setSelectedIndexes([]);
+  setFuture([]);
+};
+
+/* DIVIDE */
+
+if (tool === "divide") {
+  divideObject(index);
+  return;
+}
+
+/* =========================
+   LENGTHEN
+========================= */
+
+if (tool === "lengthen") {
+  lengthenObject(index);
+  return;
+}
+
+
+/* =========================
+   POINT
+========================= */
+
+const createPoint = (x, y) => {
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const pointObject = {
+    type: "point",
+    x: Number(x),
+    y: Number(y),
+    color: "#ffffff",
+    strokeWidth: 1,
+    radius: 4,
+    layerId: activeLayerId,
+  };
+
+  const newIndex =
+    objects.length;
+
+  setObjects([
+    ...objects,
+    pointObject,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setSelectedIndex(newIndex);
+  setSelectedIndexes([newIndex]);
+  setFuture([]);
+};
+
+/* =========================
+   POINT
+========================= */
+
+if (tool === "point") {
+  const point = {
+    x: mousePosition.x,
+    y: mousePosition.y,
+  };
+
+  createPoint(
+    point.x,
+    point.y
+  );
+
+  return;
+}
+
+/* =========================
+   SPLINE
+========================= */
+
+if (tool === "spline") {
+  const newPoints = [
+    ...splinePoints,
+    x,
+    y,
+  ];
+
+  if (newPoints.length < 6) {
+    setSplinePoints(newPoints);
+    return;
+  }
+
+  createSpline(newPoints);
+
+  setSplinePoints([]);
+
+  return;
+}
+
+/* =========================
+   UNION
+========================= */
+
+if (tool === "union") {
+  const currentSelection = [
+    ...selectedIndexes,
+  ];
+
+  if (
+    currentSelection.length === 0
+  ) {
+    setSelectedIndexes([
+      index,
+    ]);
+
+    setSelectedIndex(
+      index
+    );
+
+    return;
+  }
+
+  if (
+    !currentSelection.includes(
+      index
+    )
+  ) {
+    setSelectedIndexes([
+      ...currentSelection,
+      index,
+    ]);
+
+    setSelectedIndex(
+      index
+    );
+
+    return;
+  }
+
+  if (
+    currentSelection.length >= 2
+  ) {
+    unionObjects();
+    return;
+  }
+}
+
+
+/* =========================
+   INTERSECT
+========================= */
+
+if (tool === "intersect") {
+  intersectObjects();
+  return;
+}
+
+/* =========================
+   SUBTRACT
+========================= */
+
+if (tool === "subtract") {
+  subtractObjects();
+  return;
+}
+
  /* =========================
    JOIN - TOUCH FRIENDLY
 ========================= */
@@ -8336,12 +15580,40 @@ if (tool === "join") {
       secondIndex
     );
 
-   joinObject(
+   /* CHECK OBJECT TYPES */
+const firstObject = objects[firstIndex];
+const secondObject = objects[secondIndex];
+
+if (
+  !firstObject ||
+  !secondObject
+) {
+  window.alert("Objects not found.");
+  return;
+}
+
+const supportedTypes = [
+  "line",
+  "polyline",
+  "arc",
+  "hatch",
+];
+
+if (
+  !supportedTypes.includes(firstObject.type) ||
+  !supportedTypes.includes(secondObject.type)
+) {
+  window.alert(
+    "Join supports Line + Line, Polyline + Line, Arc + Arc, and Hatch + Hatch."
+  );
+  return;
+}
+
+joinObject(
   firstIndex,
   secondIndex
 );
 
-/* JOIN COMPLETE */
 changeTool("select");
 
 return;
@@ -8440,6 +15712,18 @@ return;
     return;
   }
 };
+
+/* POLAR ARRAY */
+
+if (
+  tool === "polarArray"
+) {
+  polarArrayObject(
+    index
+  );
+
+  return;
+}
 
 
  /* =========================
@@ -8546,6 +15830,111 @@ if (
           );
       }
 
+      /* =========================
+   SPLINE
+========================= */
+
+if (
+  object.type === "spline"
+) {
+  return (
+    <React.Fragment key={index}>
+      <Line
+        {...commonProps}
+        points={object.points}
+        stroke={
+          object.color ||
+          "#ffffff"
+        }
+        strokeWidth={
+          (object.strokeWidth || 2) /
+          scale
+        }
+        lineCap="round"
+        lineJoin="round"
+        tension={0.5}
+        bezier={false}
+      />
+    </React.Fragment>
+  );
+}
+
+/* =========================
+   SPLINE
+========================= */
+
+if (
+  object.type === "spline"
+) {
+  return (
+    <React.Fragment key={index}>
+
+      <Line
+        {...commonProps}
+        points={object.points}
+        stroke={
+          object.color ||
+          "#ffffff"
+        }
+        strokeWidth={
+          (object.strokeWidth || 2) /
+          scale
+        }
+        lineCap="round"
+        lineJoin="round"
+        tension={0.5}
+        bezier={false}
+      />
+
+      {/* SPLINE GRIPS */}
+
+      {selectedIndex === index &&
+        object.points.map(
+          (point, pointIndex) => {
+
+            if (
+              pointIndex % 2 !== 0
+            ) {
+              return null;
+            }
+
+            return (
+              <Circle
+                key={pointIndex}
+                x={
+                  object.points[
+                    pointIndex
+                  ]
+                }
+                y={
+                  object.points[
+                    pointIndex + 1
+                  ]
+                }
+                radius={6 / scale}
+                fill="#00aaff"
+                stroke="white"
+                strokeWidth={2 / scale}
+                draggable
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                }}
+                onDragEnd={(e) =>
+                  handleSplineGripDragEnd(
+                    index,
+                    pointIndex,
+                    e
+                  )
+                }
+              />
+            );
+          }
+        )}
+
+    </React.Fragment>
+  );
+}
+
       /* ARC */
 
       else if (
@@ -8555,7 +15944,16 @@ if (
         copied.y += GRID_SIZE;
       }
 
-      /* HATCH */
+/* ELLIPSE */
+
+else if (
+  original.type === "ellipse"
+) {
+  copied.x += GRID_SIZE;
+  copied.y += GRID_SIZE;
+}
+
+/* HATCH */
 
 else if (
   original.type === "hatch"
@@ -14718,6 +22116,339 @@ if (
   secondIndex
 ) => {
 
+    /* =========================
+     LINE + LINE CHAMFER
+  ========================= */
+
+  if (
+    objects[firstIndex]?.type === "line" &&
+    objects[secondIndex]?.type === "line"
+  ) {
+    const first = objects[firstIndex];
+    const second = objects[secondIndex];
+
+    const distanceInput = window.prompt(
+      "Enter chamfer distance:",
+      "25"
+    );
+
+    if (distanceInput === null) {
+      return;
+    }
+
+    const distance = Number(distanceInput);
+
+    if (
+      !Number.isFinite(distance) ||
+      distance <= 0
+    ) {
+      window.alert(
+        "Please enter a valid positive chamfer distance."
+      );
+      return;
+    }
+
+    const [x1, y1, x2, y2] =
+      first.points;
+
+    const [x3, y3, x4, y4] =
+      second.points;
+
+    const cross =
+      (x2 - x1) * (y4 - y3) -
+      (y2 - y1) * (x4 - x3);
+
+    if (Math.abs(cross) < 0.000001) {
+      window.alert(
+        "Chamfer requires two intersecting non-parallel lines."
+      );
+      return;
+    }
+
+    const t =
+      (
+        (x3 - x1) * (y4 - y3) -
+        (y3 - y1) * (x4 - x3)
+      ) / cross;
+
+    const u =
+      (
+        (x3 - x1) * (y2 - y1) -
+        (y3 - y1) * (x2 - x1)
+      ) / cross;
+
+    const ix =
+      x1 + t * (x2 - x1);
+
+    const iy =
+      y1 + t * (y2 - y1);
+
+    const firstLength =
+      Math.hypot(
+        x2 - x1,
+        y2 - y1
+      );
+
+    const secondLength =
+      Math.hypot(
+        x4 - x3,
+        y4 - y3
+      );
+
+    if (
+      distance * 2 >= firstLength ||
+      distance * 2 >= secondLength
+    ) {
+      window.alert(
+        "Chamfer distance is too large."
+      );
+      return;
+    }
+
+    const firstDir =
+      normalizeVector(
+        x2 - x1,
+        y2 - y1
+      );
+
+    const secondDir =
+      normalizeVector(
+        x4 - x3,
+        y4 - y3
+      );
+
+    const firstEndCandidates = [
+      {
+        x: x1,
+        y: y1,
+        d: distanceBetween(
+          x1,
+          y1,
+          ix,
+          iy
+        ),
+      },
+      {
+        x: x2,
+        y: y2,
+        d: distanceBetween(
+          x2,
+          y2,
+          ix,
+          iy
+        ),
+      },
+    ];
+
+    const secondEndCandidates = [
+      {
+        x: x3,
+        y: y3,
+        d: distanceBetween(
+          x3,
+          y3,
+          ix,
+          iy
+        ),
+      },
+      {
+        x: x4,
+        y: y4,
+        d: distanceBetween(
+          x4,
+          y4,
+          ix,
+          iy
+        ),
+      },
+    ];
+
+    const firstNearest =
+      firstEndCandidates.sort(
+        (a, b) => a.d - b.d
+      )[0];
+
+    const secondNearest =
+      secondEndCandidates.sort(
+        (a, b) => a.d - b.d
+      )[0];
+
+    const firstSign =
+      (
+        (firstNearest.x - ix) *
+          firstDir.x +
+        (firstNearest.y - iy) *
+          firstDir.y
+      ) >= 0
+        ? 1
+        : -1;
+
+    const secondSign =
+      (
+        (secondNearest.x - ix) *
+          secondDir.x +
+        (secondNearest.y - iy) *
+          secondDir.y
+      ) >= 0
+        ? 1
+        : -1;
+
+    const firstChamferPoint = {
+      x:
+        ix +
+        firstDir.x *
+          distance *
+          firstSign,
+
+      y:
+        iy +
+        firstDir.y *
+          distance *
+          firstSign,
+    };
+
+    const secondChamferPoint = {
+      x:
+        ix +
+        secondDir.x *
+          distance *
+          secondSign,
+
+      y:
+        iy +
+        secondDir.y *
+          distance *
+          secondSign,
+    };
+
+    const updateLine = (
+      object,
+      chamferPoint,
+      intersection
+    ) => {
+      const [
+        ox1,
+        oy1,
+        ox2,
+        oy2,
+      ] = object.points;
+
+      const d1 =
+        distanceBetween(
+          ox1,
+          oy1,
+          intersection.x,
+          intersection.y
+        );
+
+      const d2 =
+        distanceBetween(
+          ox2,
+          oy2,
+          intersection.x,
+          intersection.y
+        );
+
+      if (d1 < d2) {
+        return {
+          ...object,
+          points: [
+            chamferPoint.x,
+            chamferPoint.y,
+            ox2,
+            oy2,
+          ],
+        };
+      }
+
+      return {
+        ...object,
+        points: [
+          ox1,
+          oy1,
+          chamferPoint.x,
+          chamferPoint.y,
+        ],
+      };
+    };
+
+    const previousObjects = [
+      ...objects,
+    ];
+
+    const updatedObjects = [
+      ...objects,
+    ];
+
+    updatedObjects[firstIndex] =
+      updateLine(
+        first,
+        firstChamferPoint,
+        {
+          x: ix,
+          y: iy,
+        }
+      );
+
+    updatedObjects[secondIndex] =
+      updateLine(
+        second,
+        secondChamferPoint,
+        {
+          x: ix,
+          y: iy,
+        }
+      );
+
+    updatedObjects.push({
+      type: "line",
+
+      points: [
+        firstChamferPoint.x,
+        firstChamferPoint.y,
+        secondChamferPoint.x,
+        secondChamferPoint.y,
+      ],
+
+      color:
+        first.color ||
+        "#ffffff",
+
+      strokeWidth:
+        first.strokeWidth ||
+        2,
+
+      layerId:
+        first.layerId ||
+        activeLayerId,
+
+      locked: false,
+      hidden: false,
+    });
+
+    setObjects(
+      updatedObjects
+    );
+
+    const newIndex =
+      updatedObjects.length - 1;
+
+    setSelectedIndex(
+      newIndex
+    );
+
+    setSelectedIndexes([
+      newIndex,
+    ]);
+
+    saveHistory(
+      previousObjects,
+      [...measurements]
+    );
+
+    return;
+  }
+
   /* =========================
    HATCH + HATCH CHAMFER
 ========================= */
@@ -15317,6 +23048,501 @@ const arrayObject = (index) => {
     );
     return;
   }
+
+  /* =========================
+   POLAR ARRAY
+========================= */
+
+const polarArrayObject = (index) => {
+  const indexesToArray =
+    selectedIndexes.length > 1
+      ? selectedIndexes
+      : index !== null
+        ? [index]
+        : [];
+
+  const validIndexes =
+    indexesToArray.filter(
+      (i) =>
+        i >= 0 &&
+        i < objects.length &&
+        objects[i] &&
+        !objects[i].hidden
+    );
+
+  if (validIndexes.length === 0) {
+    window.alert(
+      "Select an object first."
+    );
+    return;
+  }
+
+  const editableIndexes =
+    validIndexes.filter(
+      (i) => {
+        const object =
+          objects[i];
+
+        if (
+          !object ||
+          object.locked
+        ) {
+          return false;
+        }
+
+        const layerId =
+          object.layerId ||
+          "layer-0";
+
+        if (
+          isLayerLocked(
+            layerId
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+  if (
+    editableIndexes.length === 0
+  ) {
+    window.alert(
+      "Selected object or its layer is locked."
+    );
+    return;
+  }
+
+  const countInput =
+    window.prompt(
+      "Number of items:",
+      "6"
+    );
+
+  if (
+    countInput === null
+  ) {
+    return;
+  }
+
+  const angleInput =
+    window.prompt(
+      "Total angle:",
+      "360"
+    );
+
+  if (
+    angleInput === null
+  ) {
+    return;
+  }
+
+  const centerXInput =
+    window.prompt(
+      "Center X:",
+      "0"
+    );
+
+  if (
+    centerXInput === null
+  ) {
+    return;
+  }
+
+  const centerYInput =
+    window.prompt(
+      "Center Y:",
+      "0"
+    );
+
+  if (
+    centerYInput === null
+  ) {
+    return;
+  }
+
+  const count =
+    Number(countInput);
+
+  const totalAngle =
+    Number(angleInput);
+
+  const centerX =
+    Number(centerXInput);
+
+  const centerY =
+    Number(centerYInput);
+
+  if (
+    !Number.isInteger(count) ||
+    count < 2
+  ) {
+    window.alert(
+      "Number of items must be an integer greater than 1."
+    );
+    return;
+  }
+
+  if (
+    !Number.isFinite(totalAngle) ||
+    totalAngle === 0
+  ) {
+    window.alert(
+      "Please enter a valid angle."
+    );
+    return;
+  }
+
+  if (
+    !Number.isFinite(centerX) ||
+    !Number.isFinite(centerY)
+  ) {
+    window.alert(
+      "Please enter valid center coordinates."
+    );
+    return;
+  }
+
+  if (
+    count *
+      editableIndexes.length >
+    1000
+  ) {
+    window.alert(
+      "Array is too large. Maximum 1000 objects."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const newObjects = [
+    ...objects,
+  ];
+
+  const angleStep =
+    totalAngle /
+    count;
+
+  const rotatePoint = (
+    x,
+    y,
+    angle
+  ) => {
+    const radians =
+      angle *
+      Math.PI /
+      180;
+
+    const cos =
+      Math.cos(radians);
+
+    const sin =
+      Math.sin(radians);
+
+    const dx =
+      x - centerX;
+
+    const dy =
+      y - centerY;
+
+    return {
+      x:
+        centerX +
+        dx * cos -
+        dy * sin,
+
+      y:
+        centerY +
+        dx * sin +
+        dy * cos,
+    };
+  };
+
+  const rotateObject =
+    (
+      object,
+      angle
+    ) => {
+      const copy = {
+        ...object,
+      };
+
+      if (
+        object.type ===
+          "line" &&
+        Array.isArray(
+          object.points
+        )
+      ) {
+        const p1 =
+          rotatePoint(
+            object.points[0],
+            object.points[1],
+            angle
+          );
+
+        const p2 =
+          rotatePoint(
+            object.points[2],
+            object.points[3],
+            angle
+          );
+
+        copy.points = [
+          p1.x,
+          p1.y,
+          p2.x,
+          p2.y,
+        ];
+      }
+
+      else if (
+        object.type ===
+          "rectangle"
+      ) {
+        const points = [
+          rotatePoint(
+            object.x,
+            object.y,
+            angle
+          ),
+          rotatePoint(
+            object.x +
+              object.width,
+            object.y,
+            angle
+          ),
+          rotatePoint(
+            object.x +
+              object.width,
+            object.y +
+              object.height,
+            angle
+          ),
+          rotatePoint(
+            object.x,
+            object.y +
+              object.height,
+            angle
+          ),
+        ];
+
+        copy.type =
+          "polyline";
+
+        copy.points =
+          points.flatMap(
+            (p) => [
+              p.x,
+              p.y,
+            ]
+          );
+
+        copy.closed =
+          true;
+
+        delete copy.x;
+        delete copy.y;
+        delete copy.width;
+        delete copy.height;
+      }
+
+      else if (
+        object.type ===
+          "circle"
+      ) {
+        const center =
+          rotatePoint(
+            object.x,
+            object.y,
+            angle
+          );
+
+        copy.x =
+          center.x;
+
+        copy.y =
+          center.y;
+      }
+
+      else if (
+  object.type ===
+  "ellipse"
+) {
+  const center =
+    rotatePoint(
+      object.x,
+      object.y,
+      angle
+    );
+
+  copy.x =
+    center.x;
+
+  copy.y =
+    center.y;
+
+  copy.rotation =
+    (object.rotation || 0) +
+    angle * (180 / Math.PI);
+}
+
+      else if (
+        object.type ===
+          "arc"
+      ) {
+        const center =
+          rotatePoint(
+            object.x,
+            object.y,
+            angle
+          );
+
+        copy.x =
+          center.x;
+
+        copy.y =
+          center.y;
+
+        copy.startAngle =
+          (object.startAngle || 0) +
+          angle;
+
+        copy.endAngle =
+          (object.endAngle || 0) +
+          angle;
+      }
+
+      else if (
+        object.type ===
+          "text"
+      ) {
+        const point =
+          rotatePoint(
+            object.x,
+            object.y,
+            angle
+          );
+
+        copy.x =
+          point.x;
+
+        copy.y =
+          point.y;
+
+        copy.rotation =
+          (object.rotation || 0) +
+          angle;
+      }
+
+      else if (
+        object.type ===
+          "polyline" ||
+        object.type ===
+          "hatch"
+      ) {
+        if (
+          Array.isArray(
+            object.points
+          )
+        ) {
+          const rotatedPoints =
+            [];
+
+          for (
+            let i = 0;
+            i <
+              object.points.length;
+            i += 2
+          ) {
+            const point =
+              rotatePoint(
+                object.points[i],
+                object.points[i + 1],
+                angle
+              );
+
+            rotatedPoints.push(
+              point.x,
+              point.y
+            );
+          }
+
+          copy.points =
+            rotatedPoints;
+        }
+      }
+
+      return copy;
+    };
+
+  for (
+    let step = 1;
+    step < count;
+    step++
+  ) {
+    const angle =
+      angleStep * step;
+
+    editableIndexes.forEach(
+      (sourceIndex) => {
+        const source =
+          objects[
+            sourceIndex
+          ];
+
+        if (!source) {
+          return;
+        }
+
+        const duplicate =
+          rotateObject(
+            source,
+            angle
+          );
+
+        newObjects.push(
+          {
+            ...duplicate,
+
+            locked: false,
+
+            hidden: false,
+
+            layerId:
+              source.layerId ||
+              activeLayerId,
+          }
+        );
+      }
+    );
+  }
+
+  setObjects(
+    newObjects
+  );
+
+  const lastIndex =
+    newObjects.length - 1;
+
+  setSelectedIndex(
+    lastIndex
+  );
+
+  setSelectedIndexes([
+    lastIndex,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+};
 
   /* =========================
      FILTER EDITABLE OBJECTS
@@ -16594,6 +24820,59 @@ const mirrorObject = (index) => {
       }
 
       /* =========================
+   ELLIPSE
+========================= */
+
+else if (
+  original.type ===
+  "ellipse"
+) {
+  const x =
+    Number(original.x);
+
+  const y =
+    Number(original.y);
+
+  const radiusX =
+    Number(original.radiusX);
+
+  const radiusY =
+    Number(original.radiusY);
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(radiusX) ||
+    !Number.isFinite(radiusY)
+  ) {
+    return;
+  }
+
+  copy.x =
+    axis === "V"
+      ? -x
+      : x;
+
+  copy.y =
+    axis === "H"
+      ? -y
+      : y;
+
+  copy.radiusX =
+    radiusX;
+
+  copy.radiusY =
+    radiusY;
+
+  copy.rotation =
+    -(
+      Number(
+        original.rotation || 0
+      )
+    );
+}
+
+      /* =========================
          RECTANGLE
       ========================= */
 
@@ -17443,6 +25722,108 @@ const explodeObject = (index) => {
         return;
       }
 
+      /* =========================
+   ELLIPSE → LINE SEGMENTS
+========================= */
+
+if (
+  original.type === "ellipse"
+) {
+  const centerX = Number(original.x);
+  const centerY = Number(original.y);
+
+  const radiusX = Number(original.radiusX);
+  const radiusY = Number(original.radiusY);
+
+  const rotation =
+    (Number(original.rotation) || 0) *
+    (Math.PI / 180);
+
+  if (
+    !Number.isFinite(centerX) ||
+    !Number.isFinite(centerY) ||
+    !Number.isFinite(radiusX) ||
+    !Number.isFinite(radiusY) ||
+    radiusX <= 0 ||
+    radiusY <= 0
+  ) {
+    newObjects.push(original);
+    return;
+  }
+
+  const steps = 64;
+  const lines = [];
+
+  const cosRotation = Math.cos(rotation);
+  const sinRotation = Math.sin(rotation);
+
+  for (let i = 0; i < steps; i++) {
+    const a1 = (i / steps) * Math.PI * 2;
+    const a2 = ((i + 1) / steps) * Math.PI * 2;
+
+    const localX1 = radiusX * Math.cos(a1);
+    const localY1 = radiusY * Math.sin(a1);
+
+    const localX2 = radiusX * Math.cos(a2);
+    const localY2 = radiusY * Math.sin(a2);
+
+    const x1 =
+      centerX +
+      localX1 * cosRotation -
+      localY1 * sinRotation;
+
+    const y1 =
+      centerY +
+      localX1 * sinRotation +
+      localY1 * cosRotation;
+
+    const x2 =
+      centerX +
+      localX2 * cosRotation -
+      localY2 * sinRotation;
+
+    const y2 =
+      centerY +
+      localX2 * sinRotation +
+      localY2 * cosRotation;
+
+    lines.push({
+      type: "line",
+
+      points: [
+        x1,
+        y1,
+        x2,
+        y2,
+      ],
+
+      rotation: 0,
+
+      color:
+        original.color || "#ffffff",
+
+      strokeWidth:
+        original.strokeWidth || 2,
+
+      layerId:
+        original.layerId || activeLayerId,
+
+      locked: false,
+      hidden: false,
+    });
+  }
+
+  const startIndex = newObjects.length;
+
+  newObjects.push(...lines);
+
+  for (let i = 0; i < lines.length; i++) {
+    newSelectedIndexes.push(startIndex + i);
+  }
+
+  return;
+}
+
       /* OTHER OBJECTS */
 
       window.alert(
@@ -17870,6 +26251,396 @@ const finishMove = () => {
   ========================= */
 
   moveStartRef.current = null;
+};
+
+/* =========================
+   UNION
+========================= */
+
+const unionObjects = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? [...selectedIndexes]
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select at least two objects."
+    );
+    return;
+  }
+
+  const selectedObjects = indexes
+    .map((index) => objects[index])
+    .filter(Boolean);
+
+  if (selectedObjects.length < 2) {
+    return;
+  }
+
+  const supportedTypes = [
+    "line",
+    "polyline",
+    "rectangle",
+    "circle",
+    "arc",
+  ];
+
+  const unsupported =
+    selectedObjects.some(
+      (object) =>
+        !supportedTypes.includes(
+          object.type
+        )
+    );
+
+  if (unsupported) {
+    window.alert(
+      "UNION supports Line, Polyline, Rectangle, Circle and Arc."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const baseObject =
+    selectedObjects[0];
+
+  const unionObject = {
+    ...baseObject,
+
+    type: "polyline",
+
+    points: selectedObjects.flatMap(
+      (object) => {
+        if (
+          Array.isArray(
+            object.points
+          )
+        ) {
+          return object.points;
+        }
+
+        if (
+          object.type ===
+            "rectangle"
+        ) {
+          const x =
+            Number(object.x || 0);
+
+          const y =
+            Number(object.y || 0);
+
+          const width =
+            Number(
+              object.width || 0
+            );
+
+          const height =
+            Number(
+              object.height || 0
+            );
+
+          return [
+            x,
+            y,
+            x + width,
+            y,
+            x + width,
+            y + height,
+            x,
+            y + height,
+            x,
+            y,
+          ];
+        }
+
+        if (
+          object.type ===
+          "circle"
+        ) {
+          const x =
+            Number(object.x || 0);
+
+          const y =
+            Number(object.y || 0);
+
+          const radius =
+            Number(
+              object.radius || 0
+            );
+
+          return [
+            x + radius,
+            y,
+            x,
+            y + radius,
+            x - radius,
+            y,
+            x,
+            y - radius,
+            x + radius,
+            y,
+          ];
+        }
+
+        return [];
+      }
+    ),
+
+    closed: false,
+
+    color:
+      baseObject.color ||
+      "#ffffff",
+
+    strokeWidth:
+      baseObject.strokeWidth ||
+      1,
+
+    layerId:
+      baseObject.layerId ||
+      activeLayerId,
+  };
+
+  const firstIndex =
+    Math.min(...indexes);
+
+  const indexSet =
+    new Set(indexes);
+
+  const updatedObjects =
+    objects.filter(
+      (_, index) =>
+        !indexSet.has(index)
+    );
+
+  updatedObjects.splice(
+    firstIndex,
+    0,
+    unionObject
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(
+    firstIndex
+  );
+
+  setSelectedIndexes([
+    firstIndex,
+  ]);
+
+  setFuture([]);
+
+  changeTool("select");
+};
+
+
+/* =========================
+   INTERSECT
+========================= */
+
+const intersectObjects = () => {
+  const indexes =
+    selectedIndexes.length > 0
+      ? selectedIndexes
+      : selectedIndex !== null
+        ? [selectedIndex]
+        : [];
+
+  if (indexes.length < 2) {
+    window.alert(
+      "Select at least two objects."
+    );
+    return;
+  }
+
+  const selectedObjects =
+    indexes
+      .map((index) => objects[index])
+      .filter(Boolean);
+
+  if (selectedObjects.length < 2) {
+    return;
+  }
+
+  const getBounds = (object) => {
+    if (
+      object.type === "rectangle"
+    ) {
+      return {
+        minX: Number(object.x || 0),
+        minY: Number(object.y || 0),
+        maxX:
+          Number(object.x || 0) +
+          Number(object.width || 0),
+        maxY:
+          Number(object.y || 0) +
+          Number(object.height || 0),
+      };
+    }
+
+    if (
+      object.type === "circle"
+    ) {
+      const x = Number(object.x || 0);
+      const y = Number(object.y || 0);
+      const r = Number(object.radius || 0);
+
+      return {
+        minX: x - r,
+        minY: y - r,
+        maxX: x + r,
+        maxY: y + r,
+      };
+    }
+
+    if (
+      Array.isArray(object.points) &&
+      object.points.length >= 2
+    ) {
+      const xs = [];
+      const ys = [];
+
+      for (
+        let i = 0;
+        i < object.points.length;
+        i += 2
+      ) {
+        xs.push(
+          Number(object.points[i])
+        );
+        ys.push(
+          Number(object.points[i + 1])
+        );
+      }
+
+      return {
+        minX: Math.min(...xs),
+        minY: Math.min(...ys),
+        maxX: Math.max(...xs),
+        maxY: Math.max(...ys),
+      };
+    }
+
+    return null;
+  };
+
+  const bounds =
+    selectedObjects
+      .map(getBounds)
+      .filter(Boolean);
+
+  if (bounds.length < 2) {
+    window.alert(
+      "INTERSECT supports Rectangle, Circle, Line and Polyline."
+    );
+    return;
+  }
+
+  let minX = -Infinity;
+  let minY = -Infinity;
+  let maxX = Infinity;
+  let maxY = Infinity;
+
+  bounds.forEach((box) => {
+    minX = Math.max(
+      minX,
+      box.minX
+    );
+
+    minY = Math.max(
+      minY,
+      box.minY
+    );
+
+    maxX = Math.min(
+      maxX,
+      box.maxX
+    );
+
+    maxY = Math.min(
+      maxY,
+      box.maxY
+    );
+  });
+
+  if (
+    minX >= maxX ||
+    minY >= maxY
+  ) {
+    window.alert(
+      "The selected objects do not intersect."
+    );
+    return;
+  }
+
+  const previousObjects = [
+    ...objects,
+  ];
+
+  const intersection = {
+    type: "rectangle",
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+    color:
+      selectedObjects[0].color ||
+      "#ffffff",
+    strokeWidth:
+      selectedObjects[0].strokeWidth || 1,
+    fill:
+      selectedObjects[0].fill ||
+      undefined,
+    layerId:
+      selectedObjects[0].layerId ||
+      activeLayerId,
+  };
+
+  const updatedObjects =
+    objects.filter(
+      (_, index) =>
+        !indexes.includes(index)
+    );
+
+  const newIndex =
+    updatedObjects.length;
+
+  updatedObjects.push(
+    intersection
+  );
+
+  saveHistory(
+    previousObjects,
+    [...measurements]
+  );
+
+  setObjects(
+    updatedObjects
+  );
+
+  setSelectedIndex(
+    newIndex
+  );
+
+  setSelectedIndexes([
+    newIndex,
+  ]);
+
+  setFuture([]);
 };
 
   /* =========================
@@ -18390,10 +27161,8 @@ if (
 
     const best = cases[0];
 
-    if (best.distance > 25) {
-  window.alert(
-    "Objects are not connected."
-  );
+  if (best.distance > 50) {
+  window.alert("Objects are not connected.");
   return;
 }
 
@@ -19160,6 +27929,34 @@ if (handle === "rotate-grip") {
       startObject.radius *
       factor;
   }
+
+  /* ELLIPSE */
+
+else if (
+  startObject.type === "ellipse"
+) {
+  object.x =
+    centerX +
+    (
+      startObject.x -
+      centerX
+    ) * factor;
+
+  object.y =
+    centerY +
+    (
+      startObject.y -
+      centerY
+    ) * factor;
+
+  object.radiusX =
+    startObject.radiusX *
+    factor;
+
+  object.radiusY =
+    startObject.radiusY *
+    factor;
+}
 
   /* ARC */
 
@@ -20171,21 +28968,21 @@ zoomFactor = Math.max(
 
   let newScale =
     oldScale * zoomFactor;
+const MIN_ZOOM =
+  0.000001;
 
-  const MIN_ZOOM =
-    0.001;
+const MAX_ZOOM =
+  1000000;
 
-  const MAX_ZOOM =
-    1000000;
+newScale =
+  Math.max(
+    MIN_ZOOM,
+    Math.min(
+      MAX_ZOOM,
+      newScale
+    )
+  );
 
-  newScale =
-    Math.max(
-      MIN_ZOOM,
-      Math.min(
-        MAX_ZOOM,
-        newScale
-      )
-    );
 
   /* =========================
      KEEP POINTER POSITION
@@ -20283,6 +29080,51 @@ zoomFactor = Math.max(
           y: object.y + radius,
         });
       }
+
+      /* =========================
+   ELLIPSE — ZOOM FIT
+========================= */
+
+if (
+  object.type === "ellipse" &&
+  Number.isFinite(object.x) &&
+  Number.isFinite(object.y)
+) {
+  const rx = Math.abs(
+    Number(object.radiusX) || 0
+  );
+
+  const ry = Math.abs(
+    Number(object.radiusY) || 0
+  );
+
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  const halfWidth = Math.sqrt(
+    rx * rx * cos * cos +
+    ry * ry * sin * sin
+  );
+
+  const halfHeight = Math.sqrt(
+    rx * rx * sin * sin +
+    ry * ry * cos * cos
+  );
+
+  points.push({
+    x: object.x - halfWidth,
+    y: object.y - halfHeight,
+  });
+
+  points.push({
+    x: object.x + halfWidth,
+    y: object.y + halfHeight,
+  });
+}
 
      if (
   object.type === "rectangle" ||
@@ -20386,9 +29228,9 @@ const canvasHeight =
 
   const newScale =
   Math.max(
-    0.001,
+    MIN_ZOOM,
     Math.min(
-      1000000,
+      MAX_ZOOM,
       Math.min(
         scaleX,
         scaleY
@@ -20456,7 +29298,6 @@ const getTouchCenter = (touches) => {
       (rect?.top || 0),
   };
 };
-
 const handleTouchStart = (e) => {
   const touches = e.evt.touches;
 
@@ -20465,20 +29306,15 @@ const handleTouchStart = (e) => {
   e.evt.preventDefault();
 
   /* =========================
-     TWO FINGERS
-     PINCH + PAN
+     TWO FINGERS — PINCH + PAN
   ========================= */
 
   if (touches.length === 2) {
     touchStateRef.current = {
-      lastDistance:
-        getTouchDistance(touches),
-
-      lastCenter:
-        getTouchCenter(touches),
+      lastDistance: getTouchDistance(touches),
+      lastCenter: getTouchCenter(touches),
     };
 
-    /* Stop any one-finger action */
     setIsPanning(false);
     panStartRef.current = null;
 
@@ -20492,34 +29328,41 @@ const handleTouchStart = (e) => {
   if (touches.length === 1) {
     lastTouchTimeRef.current = Date.now();
 
-    const stage =
-      e.target.getStage();
+    const stage = e.target.getStage();
 
-    if (!stage) return;
+    if (!stage) {
+      return;
+    }
 
     stage.setPointersPositions(e.evt);
 
     /* =========================
-       SELECT = PAN CANVAS
+       SELECT — OBJECT TAP
+       OR BLANK CANVAS PAN
     ========================= */
 
     if (tool === "select") {
       const touch = touches[0];
 
-      const rect =
-        stage
-          .container()
-          .getBoundingClientRect();
+      const stageNode = e.target.getStage();
+      const tappedBlankCanvas = e.target === stageNode;
+
+      /* OBJECT TAP */
+      if (!tappedBlankCanvas) {
+        setIsPanning(false);
+        panStartRef.current = null;
+
+        handleMouseDown(e);
+
+        return;
+      }
+
+      /* BLANK CANVAS — START PAN */
+      const rect = stage.container().getBoundingClientRect();
 
       panStartRef.current = {
-        mouseX:
-          touch.clientX -
-          rect.left,
-
-        mouseY:
-          touch.clientY -
-          rect.top,
-
+        mouseX: touch.clientX - rect.left,
+        mouseY: touch.clientY - rect.top,
         positionX: position.x,
         positionY: position.y,
       };
@@ -20530,7 +29373,7 @@ const handleTouchStart = (e) => {
     }
 
     /* =========================
-       LINE = START DRAWING
+       LINE — START DRAWING
     ========================= */
 
     if (tool === "line") {
@@ -20539,22 +29382,22 @@ const handleTouchStart = (e) => {
     }
 
     /* =========================
-   OFFSET = SELECT OBJECT
-========================= */
+       OFFSET — SELECT OBJECT
+    ========================= */
 
-if (tool === "offset") {
-  handleMouseDown(e);
-  return;
-}
+    if (tool === "offset") {
+      handleMouseDown(e);
+      return;
+    }
 
     /* =========================
-   MOVE = MOVE OBJECT
-========================= */
+       MOVE — SELECT OBJECT
+    ========================= */
 
-if (tool === "move") {
-  handleMouseDown(e);
-  return;
-}
+    if (tool === "move") {
+      handleMouseDown(e);
+      return;
+    }
 
     /* =========================
        OTHER TOOLS
@@ -20663,6 +29506,16 @@ const handleTouchMove = (e) => {
 
   if (touches.length === 1) {
 
+        /* =========================
+       UPDATE MOBILE TOUCH POINTER
+    ========================= */
+
+    const touchStage = e.target.getStage();
+
+    if (touchStage) {
+      touchStage.setPointersPositions(e.evt);
+    }
+
     /* SELECT = PAN */
     if (
       tool === "select" &&
@@ -20752,32 +29605,27 @@ if (
 
   }
 };
-
 const handleTouchEnd = (e) => {
   e.evt.preventDefault();
 
-  const touches =
-    e.evt.touches;
+  const touches = e.evt.touches;
 
   /* =========================
      ONE FINGER REMAINS
      AFTER PINCH
   ========================= */
 
- if (
-  touches &&
-  touches.length === 1
-) {
-  touchStateRef.current = {
-    lastDistance: null,
-    lastCenter: null,
-  };
+  if (touches && touches.length === 1) {
+    touchStateRef.current = {
+      lastDistance: null,
+      lastCenter: null,
+    };
 
-  setIsPanning(false);
-  panStartRef.current = null;
+    setIsPanning(false);
+    panStartRef.current = null;
 
-  return;
-}
+    return;
+  }
 
   /* =========================
      TOUCH FINISHED
@@ -20788,21 +29636,10 @@ const handleTouchEnd = (e) => {
     lastCenter: null,
   };
 
-setIsPanning(false);
-panStartRef.current = null;
+  setIsPanning(false);
+  panStartRef.current = null;
 
-/* =========================
-   TOUCH FINISHED
-========================= */
-
-touchStateRef.current = {
-  lastDistance: null,
-  lastCenter: null,
-};
-
-setIsPanning(false);
-panStartRef.current = null;
-handleMouseUp(e);
+  handleMouseUp(e);
 };
 
   /* =========================
@@ -23091,16 +31928,14 @@ const canvasHeight =
     drawingHeight;
 
   const newScale =
-    Math.max(
-      0.2,
-      Math.min(
-        5,
-        Math.min(
-          scaleX,
-          scaleY
-        )
-      )
-    );
+   Math.max(
+  0.000001,
+  Math.min(
+    1000000,
+    Math.min(scaleX, scaleY)
+  )
+);
+    
 
   const centerX =
     (minX + maxX) / 2;
@@ -25862,6 +34697,84 @@ if (
         }
       }
     }
+
+    /* =========================
+   ELLIPSE — DXF IMPORT
+========================= */
+
+if (
+  code === "0" &&
+  value === "ELLIPSE"
+) {
+  let x = null;
+  let y = null;
+  let majorX = null;
+  let majorY = null;
+  let ratio = null;
+
+  for (
+    let j = i + 2;
+    j < values.length - 1;
+    j += 2
+  ) {
+    const groupCode = values[j];
+    const groupValue = values[j + 1];
+
+    // Next DXF entity starts
+    if (groupCode === "0") {
+      break;
+    }
+
+    if (groupCode === "10") {
+      x = parseFloat(groupValue);
+    } else if (groupCode === "20") {
+      y = parseFloat(groupValue);
+    } else if (groupCode === "11") {
+      majorX = parseFloat(groupValue);
+    } else if (groupCode === "21") {
+      majorY = parseFloat(groupValue);
+    } else if (groupCode === "40") {
+      ratio = parseFloat(groupValue);
+    }
+  }
+
+  if (
+    Number.isFinite(x) &&
+    Number.isFinite(y) &&
+    Number.isFinite(majorX) &&
+    Number.isFinite(majorY) &&
+    Number.isFinite(ratio) &&
+    ratio > 0 &&
+    ratio <= 1
+  ) {
+    const radiusX = Math.hypot(
+      majorX,
+      majorY
+    );
+
+    const radiusY = radiusX * ratio;
+
+    const rotation =
+      Math.atan2(majorY, majorX) *
+      (180 / Math.PI);
+
+    if (radiusX > 0 && radiusY > 0) {
+      importedObjects.push({
+        type: "ellipse",
+        x,
+        y,
+        radiusX,
+        radiusY,
+        rotation,
+        color: "#ffffff",
+        strokeWidth: 2,
+        layerId: activeLayerId,
+        locked: false,
+        hidden: false,
+      });
+    }
+  }
+}
     
 /* =========================
  ARC
@@ -26446,6 +35359,59 @@ const clearAutoSave = () => {
       dxf += `20\n${object.y}\n`;
       dxf += `40\n${object.radius}\n`;
     }
+
+    /* =========================
+   ELLIPSE → DXF EXPORT
+========================= */
+
+if (
+  object.type === "ellipse" &&
+  Number.isFinite(object.x) &&
+  Number.isFinite(object.y)
+) {
+  const rx = Math.abs(
+    Number(object.radiusX) || 0
+  );
+
+  const ry = Math.abs(
+    Number(object.radiusY) || 0
+  );
+
+  const rotation =
+    (Number(object.rotation) || 0) *
+    (Math.PI / 180);
+
+  if (rx > 0 && ry > 0) {
+    let majorX;
+    let majorY;
+    let ratio;
+
+    if (rx >= ry) {
+      majorX = rx * Math.cos(rotation);
+      majorY = rx * Math.sin(rotation);
+      ratio = ry / rx;
+    } else {
+      majorX = -ry * Math.sin(rotation);
+      majorY = ry * Math.cos(rotation);
+      ratio = rx / ry;
+    }
+
+    dxf += "0\nELLIPSE\n";
+    dxf += "8\n0\n";
+
+    dxf += `10\n${object.x}\n`;
+    dxf += `20\n${object.y}\n`;
+    dxf += "30\n0\n";
+
+    dxf += `11\n${majorX}\n`;
+    dxf += `21\n${majorY}\n`;
+    dxf += "31\n0\n";
+
+    dxf += `40\n${ratio}\n`;
+    dxf += "41\n0\n";
+    dxf += `42\n${Math.PI * 2}\n`;
+  }
+}
 
         if (
       object.type === "rectangle" &&
@@ -27302,11 +36268,16 @@ if (
   "rectangle",
   "circle",
   "arc",
+  "ellipse",
+  "hatch",
   "measure",
   "dimension",
   "radiusDimension",
   "diameterDimension",
   "angularDimension",
+  "area",
+  "volume",
+  "quickMeasure",
 ];
 
   if (
@@ -27592,23 +36563,34 @@ if (showHome) {
     Drawing1.dwg
   </div>
 
-  {/* UNDO */}
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
+{/* UNDO */}
+<button
+  type="button"
+  onPointerDown={(e) =>
+    e.stopPropagation()
+  }
+  onTouchStart={(e) =>
+    e.stopPropagation()
+  }
+  onClick={(e) => {
+    e.stopPropagation();
 
-      try {
-        undo();
-      } catch (error) {
-        console.error("Undo failed:", error);
-      }
-    }}
-  >
-    ↶
-  </button>
+    if (undoActiveLineSegment()) {
+      return;
+    }
+
+    try {
+      undo();
+    } catch (error) {
+      console.error(
+        "Undo failed:",
+        error
+      );
+    }
+  }}
+>
+  ↶
+</button>
 
   {/* REDO */}
   <button
@@ -27685,15 +36667,38 @@ if (showHome) {
     ⛶
   </button>
 
- {/* MORE / PROPERTIES */}
+{/* MORE / PROPERTIES */}
 <button
   type="button"
+  disabled={
+    !selectedObject ||
+    selectedIndex === null
+  }
+  onPointerDown={(e) =>
+    e.stopPropagation()
+  }
+  onTouchStart={(e) =>
+    e.stopPropagation()
+  }
   onClick={(e) => {
     e.stopPropagation();
 
-    setShowMobileProperties((prev) => !prev);
+    if (
+      !selectedObject ||
+      selectedIndex === null
+    ) {
+      return;
+    }
+
+    setShowMobileLayers(false);
+    setMobileCommandPanel("home");
+    setCommandText("");
+
+    setShowMobileProperties(
+      (prev) => !prev
+    );
   }}
-  title="More"
+  title="More / Properties"
 >
   ⋮
 </button>
@@ -27764,22 +36769,77 @@ if (showHome) {
         <button
   type="button"
   onClick={() => {
-    if (
-      tool === "line" &&
-      (
-        lineStart ||
-        showLineInput ||
-        pendingLinePoint
-      )
-    ) {
-      setLineStart(null);
-      setLinePreview(null);
-      setPendingLinePoint(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-      setIsDrawing(false);
-      return;
-    }
+    /* =========================
+   LINE — MOBILE UNDO
+========================= */
+
+if (
+  tool === "line" &&
+  lineStart
+) {
+  const lastIndex =
+    objects.length - 1;
+
+  const lastObject =
+    objects[lastIndex];
+
+  if (
+    lastObject &&
+    lastObject.type === "line" &&
+    Array.isArray(lastObject.points) &&
+    lastObject.points.length >= 4
+  ) {
+    saveHistory(
+      [...objects],
+      [...measurements]
+    );
+
+    const startX =
+      lastObject.points[0];
+
+    const startY =
+      lastObject.points[1];
+
+    setObjects((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+
+      return prev.slice(0, -1);
+    });
+
+    setLineStart({
+      x: startX,
+      y: startY,
+    });
+
+    setPendingLinePoint(null);
+    setLineLengthInput("");
+    setShowLineInput(false);
+
+    setLinePreview({
+      x1: startX,
+      y1: startY,
+      x2: startX,
+      y2: startY,
+    });
+
+    setSnapPoint(null);
+    setSnapType("");
+
+    setIsDrawing(true);
+
+    return;
+  }
+
+  setPendingLinePoint(null);
+  setLineLengthInput("");
+  setShowLineInput(false);
+  setLinePreview(null);
+  setIsDrawing(true);
+
+  return;
+}
 
     undo();
   }}
@@ -28073,20 +37133,20 @@ disabled={
           </button>
 
           <button
-            onClick={() =>
-              setScale((prev) =>
-                Math.min(prev * 1.2, 5)
-              )
-            }
-            title="Zoom In"
-          >
-            +
-          </button>
+  onClick={() =>
+    setScale((prev) =>
+      Math.min(prev * 1.25, 1000000)
+    )
+  }
+  title="Zoom In"
+>
+  +
+</button>
 
           <button
             onClick={() =>
               setScale((prev) =>
-                Math.max(prev / 1.2, 0.2)
+                Math.max(prev / 1.25, 0.000001)
               )
             }
             title="Zoom Out"
@@ -29889,16 +38949,1233 @@ return [
     }
   >
 
-  {snapPoint && (
+{snapPoint && (
   <Circle
     x={snapPoint.x}
     y={snapPoint.y}
     radius={5 / scale}
-stroke="#ffd54f"
+    stroke="#ffd54f"
     strokeWidth={2 / scale}
     listening={false}
   />
 )}
+
+{/* =========================
+   QUICK MEASURE — FINAL
+========================= */}
+
+{tool === "quickMeasure" && (() => {
+  const px = mousePosition.x;
+  const py = mousePosition.y;
+
+   const TWO_PI = Math.PI * 2;
+
+   /* =========================
+     GET ARC SWEEP
+  ========================= */
+
+  const getArcSweep = (object) => {
+    const start = Number(object?.angleStart);
+    const end = Number(object?.angleEnd);
+
+    if (
+      !Number.isFinite(start) ||
+      !Number.isFinite(end)
+    ) {
+      return 0;
+    }
+
+    return Math.abs(end - start);
+  };
+  let nearest = null;
+  let quickArea = null;
+  const measureSegments = [];
+
+  /* =========================
+     UNIT FORMATTING
+  ========================= */
+
+  const formatLength = (rawValue) => {
+    const value = Number(rawValue) || 0;
+
+    if (unit === "inch") {
+      return `${(value / 25.4).toFixed(2)} in`;
+    }
+
+    if (unit === "ft-in") {
+      const sign = value < 0 ? "-" : "";
+      const totalInches = Math.abs(value) / 25.4;
+
+      let feet = Math.floor(totalInches / 12);
+      let inches = Number(
+        (totalInches - feet * 12).toFixed(2)
+      );
+
+      if (inches >= 12) {
+        feet += 1;
+        inches = 0;
+      }
+
+      return `${sign}${feet}'-${inches.toFixed(2)}"`;
+    }
+
+    return `${value.toFixed(2)} mm`;
+  };
+
+  const formatArea = (rawValue) => {
+    const value = Number(rawValue) || 0;
+
+    if (unit === "inch") {
+      return `${(value / (25.4 * 25.4)).toFixed(2)} in²`;
+    }
+
+    if (unit === "ft-in") {
+      return `${(value / (304.8 * 304.8)).toFixed(3)} ft²`;
+    }
+
+    return `${value.toFixed(2)} mm²`;
+  };
+
+  /* =========================
+     OBJECT VISIBILITY
+  ========================= */
+
+  const isVisibleObject = (object) => {
+    if (!object || object.hidden) {
+      return false;
+    }
+
+    const objectLayer = layers.find(
+      (layer) =>
+        layer.id === (object.layerId || "layer-0")
+    );
+
+    return !objectLayer || objectLayer.visible !== false;
+  };
+
+/* =========================
+   CLOSED POLYLINE CHECK
+========================= */
+
+const isClosedPolyline = (object) => {
+  if (
+    object?.type !== "polyline" ||
+    !Array.isArray(object.points) ||
+    object.points.length < 6 ||
+    object.points.length % 2 !== 0
+  ) {
+    return false;
+  }
+
+  if (
+    object.closed === true ||
+    object.isClosed === true
+  ) {
+    return true;
+  }
+
+  const points = object.points;
+
+  if (
+    !points.every(
+      (value) => Number.isFinite(Number(value))
+    )
+  ) {
+    return false;
+  }
+
+  const firstX = Number(points[0]);
+  const firstY = Number(points[1]);
+
+  const lastX = Number(points[points.length - 2]);
+  const lastY = Number(points[points.length - 1]);
+
+  const closingDistance = Math.hypot(
+    firstX - lastX,
+    firstY - lastY
+  );
+
+  /* Fixed drawing-unit tolerance; independent of zoom */
+  return closingDistance <= 0.5;
+};
+
+  /* =========================
+     TOTAL POLYLINE LENGTH
+  ========================= */
+
+  const getPolylineLength = (object) => {
+    if (
+      !Array.isArray(object.points) ||
+      object.points.length < 4
+    ) {
+      return 0;
+    }
+
+    const points = object.points;
+    let total = 0;
+
+    for (let i = 0; i < points.length - 2; i += 2) {
+      total += Math.hypot(
+        points[i + 2] - points[i],
+        points[i + 3] - points[i + 1]
+      );
+    }
+
+    if (isClosedPolyline(object)) {
+      const firstX = points[0];
+      const firstY = points[1];
+      const lastX = points[points.length - 2];
+      const lastY = points[points.length - 1];
+
+      const closingDistance = Math.hypot(
+        firstX - lastX,
+        firstY - lastY
+      );
+
+      if (closingDistance > 0.001) {
+        total += closingDistance;
+      }
+    }
+
+    return total;
+  };
+
+  /* =========================
+     OBJECT DETAILS
+  ========================= */
+
+  const getObjectSummary = (object) => {
+    if (!object) {
+      return "";
+    }
+
+    if (
+      object.type === "circle" &&
+      Number(object.radius) > 0
+    ) {
+      const radius = Number(object.radius);
+
+      return (
+        `R ${formatLength(radius)} | ` +
+        `D ${formatLength(radius * 2)} | ` +
+        `CIRC ${formatLength(TWO_PI * radius)}`
+      );
+    }
+    if (
+      object.type === "arc" &&
+      Number(object.radius) > 0 &&
+      Number.isFinite(object.angleStart) &&
+      Number.isFinite(object.angleEnd)
+    ) {
+      const radius = Number(object.radius);
+      const sweep = getArcSweep(object);
+
+      return (
+        `R ${formatLength(radius)} | ` +
+        `SWEEP ${(sweep * 180 / Math.PI).toFixed(1)}° | ` +
+        `ARC ${formatLength(radius * sweep)}`
+      );
+    }
+
+    if (
+      object.type === "ellipse" &&
+      Number(object.radiusX) > 0 &&
+      Number(object.radiusY) > 0
+    ) {
+      const rx = Number(object.radiusX);
+      const ry = Number(object.radiusY);
+
+      const perimeter =
+        Math.PI *
+        (
+          3 * (rx + ry) -
+          Math.sqrt(
+            Math.max(
+              0,
+              (3 * rx + ry) * (rx + 3 * ry)
+            )
+          )
+        );
+
+      return (
+        `RX ${formatLength(rx)} | ` +
+        `RY ${formatLength(ry)} | ` +
+        `PERIM ≈ ${formatLength(perimeter)}`
+      );
+    }
+
+    if (
+      object.type === "rectangle" ||
+      object.type === "hatch"
+    ) {
+      const width = Math.abs(
+        Number(object.width) || 0
+      );
+
+      const height = Math.abs(
+        Number(object.height) || 0
+      );
+
+      return (
+        `W ${formatLength(width)} | ` +
+        `H ${formatLength(height)} | ` +
+        `PERIM ${formatLength(2 * (width + height))}`
+      );
+    }
+
+    if (
+      object.type === "line" ||
+      object.type === "polyline"
+    ) {
+      const length = getPolylineLength(object);
+
+      return (
+        `${isClosedPolyline(object) ? "PERIM" : "LENGTH"} ` +
+        formatLength(length)
+      );
+    }
+
+    return "";
+  };
+
+  /* =========================
+     FIND NEAREST POINT
+  ========================= */
+
+  const considerPoint = (x, y, object) => {
+    const distance = Math.hypot(
+      px - x,
+      py - y
+    );
+
+    if (
+      !nearest ||
+      distance < nearest.distance
+    ) {
+      nearest = {
+        x,
+        y,
+        distance,
+        type: object.type,
+        object,
+      };
+    }
+  };
+
+  /* =========================
+     TEST SEGMENT
+  ========================= */
+
+  const testSegment = (
+    x1,
+    y1,
+    x2,
+    y2,
+    object
+  ) => {
+    measureSegments.push({
+      x1,
+      y1,
+      x2,
+      y2,
+      object,
+    });
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    const lengthSquared = dx * dx + dy * dy;
+
+    let t = 0;
+
+    if (lengthSquared > 0) {
+      t = Math.max(
+        0,
+        Math.min(
+          1,
+          (
+            (px - x1) * dx +
+            (py - y1) * dy
+          ) / lengthSquared
+        )
+      );
+    }
+
+    considerPoint(
+      x1 + t * dx,
+      y1 + t * dy,
+      object
+    );
+  };
+
+  /* =========================
+     SCAN ALL VISIBLE OBJECTS
+  ========================= */
+
+  objects.forEach((object) => {
+    if (!isVisibleObject(object)) {
+      return;
+    }
+
+    /* LINE / POLYLINE */
+
+    if (
+      (
+        object.type === "line" ||
+        object.type === "polyline"
+      ) &&
+      Array.isArray(object.points) &&
+      object.points.length >= 4
+    ) {
+      const points = object.points;
+
+      for (
+        let i = 0;
+        i < points.length - 2;
+        i += 2
+      ) {
+        testSegment(
+          points[i],
+          points[i + 1],
+          points[i + 2],
+          points[i + 3],
+          object
+        );
+      }
+
+      /* CLOSED POLYLINE EDGE */
+
+      if (isClosedPolyline(object)) {
+        const firstX = points[0];
+        const firstY = points[1];
+        const lastX = points[points.length - 2];
+        const lastY = points[points.length - 1];
+
+        if (
+          Math.hypot(
+            firstX - lastX,
+            firstY - lastY
+          ) > 0.001
+        ) {
+          testSegment(
+            lastX,
+            lastY,
+            firstX,
+            firstY,
+            object
+          );
+        }
+      }
+
+      return;
+    }
+
+    /* CIRCLE */
+
+    if (
+      object.type === "circle" &&
+      Number(object.radius) > 0
+    ) {
+      const radius = Number(object.radius);
+      const steps = 96;
+
+      let previous = {
+        x: object.x + radius,
+        y: object.y,
+      };
+
+      for (let i = 1; i <= steps; i++) {
+        const angle = TWO_PI * i / steps;
+
+        const current = {
+          x: object.x + Math.cos(angle) * radius,
+          y: object.y + Math.sin(angle) * radius,
+        };
+
+        testSegment(
+          previous.x,
+          previous.y,
+          current.x,
+          current.y,
+          object
+        );
+
+        previous = current;
+      }
+
+      return;
+    }
+    /* ARC */
+
+    if (
+      object.type === "arc" &&
+      Number(object.radius) > 0 &&
+      Number.isFinite(object.angleStart) &&
+      Number.isFinite(object.angleEnd)
+    ) {
+      const radius = Number(object.radius);
+      const sweep =
+        object.angleEnd - object.angleStart;
+
+      const absoluteSweep = Math.abs(sweep);
+
+      if (absoluteSweep <= 0.000001) {
+        return;
+      }
+
+      const steps = Math.max(
+        24,
+        Math.min(
+          120,
+          Math.ceil(absoluteSweep * 24)
+        )
+      );
+
+      let previous = {
+        x:
+          object.x +
+          Math.cos(object.angleStart) * radius,
+        y:
+          object.y +
+          Math.sin(object.angleStart) * radius,
+      };
+
+      for (let i = 1; i <= steps; i++) {
+        const angle =
+          object.angleStart +
+          (sweep * i) / steps;
+
+        const current = {
+          x:
+            object.x +
+            Math.cos(angle) * radius,
+          y:
+            object.y +
+            Math.sin(angle) * radius,
+        };
+
+        testSegment(
+          previous.x,
+          previous.y,
+          current.x,
+          current.y,
+          object
+        );
+
+        previous = current;
+      }
+
+      return;
+    }
+
+    /* RECTANGLE / HATCH */
+
+    if (
+      object.type === "rectangle" ||
+      object.type === "hatch"
+    ) {
+      const width = Number(object.width) || 0;
+      const height = Number(object.height) || 0;
+
+      const rotation =
+        (Number(object.rotation) || 0) *
+        Math.PI / 180;
+
+      const corners = [
+        [0, 0],
+        [width, 0],
+        [width, height],
+        [0, height],
+      ].map(([localX, localY]) => ({
+        x:
+          object.x +
+          localX * Math.cos(rotation) -
+          localY * Math.sin(rotation),
+        y:
+          object.y +
+          localX * Math.sin(rotation) +
+          localY * Math.cos(rotation),
+      }));
+
+      for (let i = 0; i < 4; i++) {
+        const a = corners[i];
+        const b = corners[(i + 1) % 4];
+
+        testSegment(
+          a.x,
+          a.y,
+          b.x,
+          b.y,
+          object
+        );
+      }
+
+      return;
+    }
+
+    /* ELLIPSE */
+
+    if (
+      object.type === "ellipse" &&
+      Number(object.radiusX) > 0 &&
+      Number(object.radiusY) > 0
+    ) {
+      const rx = Number(object.radiusX);
+      const ry = Number(object.radiusY);
+
+      const rotation =
+        (Number(object.rotation) || 0) *
+        Math.PI / 180;
+
+      const pointAt = (angle) => {
+        const localX = rx * Math.cos(angle);
+        const localY = ry * Math.sin(angle);
+
+        return {
+          x:
+            object.x +
+            localX * Math.cos(rotation) -
+            localY * Math.sin(rotation),
+          y:
+            object.y +
+            localX * Math.sin(rotation) +
+            localY * Math.cos(rotation),
+        };
+      };
+
+      const steps = 96;
+      let previous = pointAt(0);
+
+      for (let i = 1; i <= steps; i++) {
+        const current = pointAt(
+          TWO_PI * i / steps
+        );
+
+        testSegment(
+          previous.x,
+          previous.y,
+          current.x,
+          current.y,
+          object
+        );
+
+        previous = current;
+      }
+    }
+  });
+
+  /* QUICK MEASURE — IGNORE DISTANT OBJECTS */
+
+if (
+  nearest &&
+  nearest.distance * scale > 120
+) {
+  nearest = null;
+}
+
+  /* =========================
+     FIND AREA UNDER CURSOR
+  ========================= */
+
+  objects.forEach((object) => {
+    if (!isVisibleObject(object)) {
+      return;
+    }
+
+    let inside = false;
+    let area = 0;
+
+    /* CIRCLE AREA */
+
+    if (
+      object.type === "circle" &&
+      Number(object.radius) > 0
+    ) {
+      inside =
+        Math.hypot(
+          px - object.x,
+          py - object.y
+        ) <= object.radius;
+
+      area =
+        Math.PI *
+        object.radius *
+        object.radius;
+    }
+
+    /* ELLIPSE AREA */
+
+    else if (
+      object.type === "ellipse" &&
+      Number(object.radiusX) > 0 &&
+      Number(object.radiusY) > 0
+    ) {
+      const rotation =
+        -(Number(object.rotation) || 0) *
+        Math.PI / 180;
+
+      const dx = px - object.x;
+      const dy = py - object.y;
+
+      const localX =
+        dx * Math.cos(rotation) -
+        dy * Math.sin(rotation);
+
+      const localY =
+        dx * Math.sin(rotation) +
+        dy * Math.cos(rotation);
+
+      const rx = Number(object.radiusX);
+      const ry = Number(object.radiusY);
+
+      inside =
+        (
+          localX * localX / (rx * rx) +
+          localY * localY / (ry * ry)
+        ) <= 1;
+
+      area = Math.PI * rx * ry;
+    }
+
+    /* RECTANGLE / HATCH AREA */
+
+    else if (
+      object.type === "rectangle" ||
+      object.type === "hatch"
+    ) {
+      const width = Number(object.width) || 0;
+      const height = Number(object.height) || 0;
+
+      const rotation =
+        -(Number(object.rotation) || 0) *
+        Math.PI / 180;
+
+      const dx = px - object.x;
+      const dy = py - object.y;
+
+      const localX =
+        dx * Math.cos(rotation) -
+        dy * Math.sin(rotation);
+
+      const localY =
+        dx * Math.sin(rotation) +
+        dy * Math.cos(rotation);
+
+      inside =
+        localX >= Math.min(0, width) &&
+        localX <= Math.max(0, width) &&
+        localY >= Math.min(0, height) &&
+        localY <= Math.max(0, height);
+
+      area = Math.abs(width * height);
+    }
+
+    /* CLOSED POLYLINE AREA */
+
+    else if (
+      object.type === "polyline" &&
+      isClosedPolyline(object)
+    ) {
+      const points = object.points;
+      const count = Math.floor(points.length / 2);
+
+      let insidePolygon = false;
+      let doubledArea = 0;
+
+      for (
+        let i = 0, j = count - 1;
+        i < count;
+        j = i++
+      ) {
+        const xi = points[i * 2];
+        const yi = points[i * 2 + 1];
+
+        const xj = points[j * 2];
+        const yj = points[j * 2 + 1];
+
+        if (
+          (yi > py) !== (yj > py) &&
+          px <
+            ((xj - xi) * (py - yi)) /
+              (yj - yi) +
+            xi
+        ) {
+          insidePolygon = !insidePolygon;
+        }
+
+        doubledArea += xi * yj - xj * yi;
+      }
+
+      inside = insidePolygon;
+      area = Math.abs(doubledArea) / 2;
+    }
+
+    if (
+      inside &&
+      area > 0 &&
+      (
+        !quickArea ||
+        area < quickArea.area
+      )
+    ) {
+      quickArea = {
+        type: object.type,
+        area,
+        object,
+      };
+    }
+  });
+
+
+  /* =========================
+     EDGE ANGLE
+  ========================= */
+
+  let nearestSegment = null;
+
+  const angleObject =
+    quickArea?.object || nearest?.object;
+
+  for (const segment of measureSegments) {
+    if (
+      angleObject &&
+      segment.object !== angleObject
+    ) {
+      continue;
+    }
+
+    const dx = segment.x2 - segment.x1;
+    const dy = segment.y2 - segment.y1;
+
+    const lengthSquared =
+      dx * dx + dy * dy;
+
+    if (lengthSquared < 0.000001) {
+      continue;
+    }
+
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        (
+          (px - segment.x1) * dx +
+          (py - segment.y1) * dy
+        ) / lengthSquared
+      )
+    );
+
+    const closestX = segment.x1 + t * dx;
+    const closestY = segment.y1 + t * dy;
+
+    const cursorDistance = Math.hypot(
+      px - closestX,
+      py - closestY
+    );
+
+    if (
+      !nearestSegment ||
+      cursorDistance < nearestSegment.distance
+    ) {
+      let angle =
+        Math.atan2(dy, dx) * 180 / Math.PI;
+
+      if (angle < 0) {
+        angle += 360;
+      }
+
+      nearestSegment = {
+        distance: cursorDistance,
+        angle,
+      };
+    }
+  }
+
+  /* HIDE DISTANT EDGE ANGLE */
+
+  if (
+    nearestSegment &&
+    nearestSegment.distance * scale > 120
+  ) {
+    nearestSegment = null;
+  }
+
+  /* =========================
+     GAP BETWEEN OBJECTS
+  ========================= */
+
+  let nearestGap = null;
+
+  if (nearest) {
+    for (const segment of measureSegments) {
+      if (segment.object === nearest.object) {
+        continue;
+      }
+
+      const dx = segment.x2 - segment.x1;
+      const dy = segment.y2 - segment.y1;
+
+      const lengthSquared =
+        dx * dx + dy * dy;
+
+      let t = 0;
+
+      if (lengthSquared > 0) {
+        t = Math.max(
+          0,
+          Math.min(
+            1,
+            (
+              (nearest.x - segment.x1) * dx +
+              (nearest.y - segment.y1) * dy
+            ) / lengthSquared
+          )
+        );
+      }
+
+      const x2 = segment.x1 + t * dx;
+      const y2 = segment.y1 + t * dy;
+
+      const distance = Math.hypot(
+        nearest.x - x2,
+        nearest.y - y2
+      );
+
+      if (
+        distance > 0.5 / Math.max(scale, 0.01) &&
+        distance <= 250 / Math.max(scale, 0.01) &&
+        (
+          !nearestGap ||
+          distance < nearestGap.distance
+        )
+      ) {
+        nearestGap = {
+          x1: nearest.x,
+          y1: nearest.y,
+          x2,
+          y2,
+          distance,
+        };
+      }
+    }
+  }
+
+  /* =========================
+     LIVE MEASUREMENT LABEL
+  ========================= */
+
+  const edgeText =
+    (nearest || quickArea) && nearestSegment
+      ? `EDGE ${nearestSegment.angle.toFixed(1)}°`
+      : "";
+
+  const mainText = quickArea
+    ? `AREA ${formatArea(quickArea.area)}`
+    : nearestGap
+      ? `GAP ${formatLength(nearestGap.distance)}`
+      : nearest
+        ? `OFFSET ${formatLength(nearest.distance)}`
+        : "No nearby object";
+
+  const metricObject =
+    quickArea?.object || nearest?.object;
+
+  const summaryText =
+    getObjectSummary(metricObject);
+
+  const firstLine = [
+    mainText,
+    edgeText,
+  ].filter(Boolean).join(" | ");
+
+  const labelText = summaryText
+    ? `${firstLine}\n${summaryText}`
+    : firstLine;
+
+  /* =========================
+     RESPONSIVE CANVAS SIZE
+  ========================= */
+
+  const canvasWidth =
+    viewportSize.width <= 768
+      ? viewportSize.width
+      : viewportSize.width - 298;
+
+  const canvasHeight =
+    viewportSize.width <= 768
+      ? viewportSize.height - 87 - 64
+      : viewportSize.height - 87;
+
+   /* =========================
+     LABEL SIZE
+  ========================= */
+
+  const labelWidthPx = Math.max(
+    120,
+    Math.min(340, canvasWidth - 12)
+  );
+
+  const labelHeightPx = summaryText
+    ? (viewportSize.width <= 768 ? 60 : 48)
+    : 30;
+
+  const fontPx =
+    viewportSize.width <= 768 ? 10 : 12;
+
+  /* =========================
+     POINTER SCREEN POSITION
+  ========================= */
+
+  const pointerScreenX =
+    position.x + px * scale + 12;
+
+  const pointerScreenY =
+    position.y + py * scale + 12;
+
+  /* =========================
+     KEEP LABEL INSIDE CANVAS
+  ========================= */
+
+  const labelScreenX = Math.max(
+    4,
+    Math.min(
+      canvasWidth - labelWidthPx - 4,
+      pointerScreenX
+    )
+  );
+
+  const labelScreenY = Math.max(
+    4,
+    Math.min(
+      canvasHeight - labelHeightPx - 4,
+      pointerScreenY
+    )
+  );
+
+  /* =========================
+     SCREEN TO WORLD POSITION
+  ========================= */
+
+  const safeScale =
+    Math.max(0.001, scale);
+
+  const labelX =
+    (labelScreenX - position.x) / safeScale;
+
+  const labelY =
+    (labelScreenY - position.y) / safeScale;
+
+  /* =========================
+     FINAL RENDER
+  ========================= */
+
+  return (
+    <>
+
+          {/* =========================
+         QUICK MEASURE AREA HIGHLIGHT
+      ========================= */}
+
+      {quickArea?.object && (() => {
+        const obj = quickArea.object;
+
+        const fillColor = "rgba(0, 229, 255, 0.12)";
+        const edgeColor = "#00e5ff";
+
+        /* CIRCLE */
+        if (
+          obj.type === "circle" &&
+          Number(obj.radius) > 0
+        ) {
+          return (
+            <Circle
+              x={obj.x}
+              y={obj.y}
+              radius={obj.radius}
+              fill={fillColor}
+              stroke={edgeColor}
+              strokeWidth={2 / scale}
+              listening={false}
+            />
+          );
+        }
+
+        /* ELLIPSE */
+        if (
+          obj.type === "ellipse" &&
+          Number(obj.radiusX) > 0 &&
+          Number(obj.radiusY) > 0
+        ) {
+          return (
+            <Ellipse
+              x={obj.x}
+              y={obj.y}
+              radiusX={obj.radiusX}
+              radiusY={obj.radiusY}
+              rotation={Number(obj.rotation) || 0}
+              fill={fillColor}
+              stroke={edgeColor}
+              strokeWidth={2 / scale}
+              listening={false}
+            />
+          );
+        }
+
+        /* RECTANGLE / HATCH */
+        if (
+          obj.type === "rectangle" ||
+          obj.type === "hatch"
+        ) {
+          const width = Number(obj.width) || 0;
+          const height = Number(obj.height) || 0;
+
+          const angle =
+            (Number(obj.rotation) || 0) *
+            Math.PI / 180;
+
+          const corners = [
+            [0, 0],
+            [width, 0],
+            [width, height],
+            [0, height],
+          ].map(([x, y]) => ({
+            x:
+              obj.x +
+              x * Math.cos(angle) -
+              y * Math.sin(angle),
+            y:
+              obj.y +
+              x * Math.sin(angle) +
+              y * Math.cos(angle),
+          }));
+
+          return (
+            <Line
+              points={corners.flatMap((p) => [p.x, p.y])}
+              closed
+              fill={fillColor}
+              stroke={edgeColor}
+              strokeWidth={2 / scale}
+              lineJoin="round"
+              listening={false}
+            />
+          );
+        }
+
+        /* CLOSED POLYLINE */
+        if (
+          obj.type === "polyline" &&
+          Array.isArray(obj.points) &&
+          obj.points.length >= 6
+        ) {
+          return (
+            <Line
+              points={obj.points}
+              closed
+              fill={fillColor}
+              stroke={edgeColor}
+              strokeWidth={2 / scale}
+              lineJoin="round"
+              listening={false}
+            />
+          );
+        }
+
+        return null;
+      })()}
+           {/* POINTER TO NEAREST EDGE */}
+
+      {nearest && !nearestGap && (
+        <Line
+          points={[
+            px,
+            py,
+            nearest.x,
+            nearest.y,
+          ]}
+          stroke="#00e5ff"
+          strokeWidth={1.5 / scale}
+          dash={[5 / scale, 3 / scale]}
+          listening={false}
+        />
+      )}
+
+      {/* GAP BETWEEN OBJECTS */}
+
+      {nearestGap && (
+        <Line
+          points={[
+            nearestGap.x1,
+            nearestGap.y1,
+            nearestGap.x2,
+            nearestGap.y2,
+          ]}
+          stroke="#00e5ff"
+          strokeWidth={1.5 / scale}
+          dash={[5 / scale, 3 / scale]}
+          listening={false}
+        />
+      )}
+
+      {/* NEAREST POINT */}
+
+      {nearest && (
+        <Circle
+          x={nearest.x}
+          y={nearest.y}
+          radius={4 / scale}
+          fill="#00e5ff"
+          listening={false}
+        />
+      )}
+
+      {/* SECOND GAP POINT */}
+
+      {nearestGap && (
+        <Circle
+          x={nearestGap.x2}
+          y={nearestGap.y2}
+          radius={4 / scale}
+          fill="#00e5ff"
+          listening={false}
+        />
+      )}
+
+      {/* LIVE MEASUREMENT LABEL */}
+
+      <Group
+        x={labelX}
+        y={labelY}
+        listening={false}
+      >
+        <Rect
+          width={labelWidthPx / scale}
+          height={labelHeightPx / scale}
+          fill="#171717"
+          stroke="#00e5ff"
+          strokeWidth={1 / scale}
+          cornerRadius={4 / scale}
+          listening={false}
+        />
+
+        <Text
+          x={7 / scale}
+          y={5 / scale}
+          width={(labelWidthPx - 14) / scale}
+          height={(labelHeightPx - 8) / scale}
+          text={labelText}
+          fontSize={fontPx / scale}
+          lineHeight={1.15}
+          wrap="word"
+          verticalAlign="middle"
+          fill="#ffffff"
+          listening={false}
+        />
+      </Group>
+    </>
+  );
+})()}
+
 
 {/* =========================
    LINE LIVE PREVIEW
@@ -30027,7 +40304,11 @@ stroke="#ffd54f"
    AUTOCAD CROSSHAIR
 ========================= */}
 
-{(tool === "line" || tool === "polyline") && (
+{(
+  tool === "line" ||
+  tool === "polyline" ||
+  tool === "quickMeasure"
+) && (
   <>
     {/* SMALL HORIZONTAL CROSSHAIR */}
   <Line
@@ -30060,21 +40341,24 @@ stroke="#ffd54f"
     <Circle
   x={mousePosition.x}
   y={mousePosition.y}
-  radius={2}
+  radius={2 / scale}
   fill="#00ff66"
   strokeScaleEnabled={false}
   listening={false}
 />
 
-    {/* LIVE COORDINATES */}
-    <Text
-      x={mousePosition.x + 12 / scale}
-      y={mousePosition.y + 12 / scale}
-      text={`X: ${mousePosition.x}  Y: ${mousePosition.y}`}
-      fontSize={12 / scale}
-      fill="#ffffff"
-      listening={false}
-    />
+{/* LIVE COORDINATES */}
+
+{(tool === "line" || tool === "polyline") && (
+  <Text
+    x={mousePosition.x + 12 / scale}
+    y={mousePosition.y + 12 / scale}
+    text={`X: ${mousePosition.x}  Y: ${mousePosition.y}`}
+    fontSize={12 / scale}
+    fill="#ffffff"
+    listening={false}
+  />
+)}
   </>
 )}
 
@@ -30084,6 +40368,7 @@ stroke="#ffd54f"
   <Group
     x={mousePosition.x - 19 / scale}
     y={mousePosition.y - 40 / scale}
+    listening={false}
 
       onMouseDown={(e) => {
   e.cancelBubble = true;
@@ -30486,46 +40771,36 @@ onTouchStart={(e) => {
     </>
   )}
 
- {objectSnapTrackingEnabled &&
+{objectSnapTrackingEnabled &&
   snapPoint && (
     <>
-   <Line
-  points={[
-    -100000,
-    snapPoint.y,
-    100000,
-    snapPoint.y,
-  ]}
-  stroke="#00ff66"
-  strokeWidth={1}
-  strokeScaleEnabled={false}
-  dash={[8, 6]}
-  listening={false}
-/>
+      <Line
+        points={[
+          snapPoint.x - 12 / scale,
+          snapPoint.y,
+          snapPoint.x + 12 / scale,
+          snapPoint.y,
+        ]}
+        stroke="#00ff66"
+        strokeWidth={1 / scale}
+        listening={false}
+      />
 
-<Line
-  points={[
-    snapPoint.x,
-    -100000,
-    snapPoint.x,
-    100000,
-  ]}
-  stroke="#00ff66"
-  strokeWidth={1}
-  strokeScaleEnabled={false}
-  dash={[8, 6]}
-  listening={false}
-/>
+      <Line
+        points={[
+          snapPoint.x,
+          snapPoint.y - 12 / scale,
+          snapPoint.x,
+          snapPoint.y + 12 / scale,
+        ]}
+        stroke="#00ff66"
+        strokeWidth={1 / scale}
+        listening={false}
+      />
 
       <Text
-        x={
-          snapPoint.x +
-          10 / scale
-        }
-        y={
-          snapPoint.y -
-          22 / scale
-        }
+        x={snapPoint.x + 10 / scale}
+        y={snapPoint.y - 22 / scale}
         text="TRACK"
         fontSize={11 / scale}
         fill="#00ff66"
@@ -32160,17 +42435,31 @@ if (object?.hidden) {
     !isObjectVisible(object)
   ) {
     return null;
-                }
+  }
 
 
-                  const commonProps = {
+const commonProps = {
   
   id: `object-${index}`,
 
   draggable: false,
 
 onMouseDown: (event) => {
-if (tool === "arc") {
+  if (tool === "arc") {
+    return;
+  }
+
+  if (
+    tool === "line" ||
+    tool === "polyline"
+  ) {
+    return;
+  }
+
+  if (
+    tool === "area" ||
+    tool === "volume"
+  ) {
     return;
   }
 
@@ -32216,6 +42505,7 @@ if (tool === "move") {
     tool === "mirror" ||
     tool === "scale" ||
     tool === "explode" ||
+    tool === "break" ||
     tool === "join"
   ) {
     selectObject(
@@ -32364,7 +42654,7 @@ if (tool === "move") {
               ]}
             />
           );
-        }
+       }
 
         /* =========================
            ARC
@@ -32556,34 +42846,38 @@ if (
   return (
     <React.Fragment key={index}>
 
-      <Line
-        {...commonProps}
-        points={object.points}
-      stroke={
-  joinSelected
-    ? "#00ff66"
-    : selected
-      ? "#00aaff"
-      : object.color ||
-        "#ffffff"
-}
-   strokeWidth={
-  Math.max(
-    2,
-    (
-      joinSelected
-        ? 4
-        : selected
-          ? 3
-          : (object.strokeWidth || 2)
-    ) / scale
-  )
-}
-        hitStrokeWidth={25}
-        rotation={
-          object.rotation || 0
-        }
-      />
+    <Line
+  {...commonProps}
+  points={object.points}
+  stroke={
+    joinSelected
+      ? "#00ff66"
+      : selected
+        ? "#00aaff"
+        : object.color ||
+          "#ffffff"
+  }
+  strokeWidth={
+    Math.max(
+      2,
+      (
+        joinSelected
+          ? 4
+          : selected
+            ? 3
+            : (object.strokeWidth || 2)
+      ) / scale
+    )
+  }
+  hitStrokeWidth={
+    tool === "join"
+      ? 40
+      : 25
+  }
+  rotation={
+    object.rotation || 0
+  }
+/>
 
       {/* =========================
           LINE GRIPS
@@ -32646,6 +42940,41 @@ if (
   );
 }
 
+/* POINT */
+
+if (
+  object.type ===
+  "point"
+) {
+  return (
+    <React.Fragment key={index}>
+      <Circle
+        {...commonProps}
+        x={object.x}
+        y={object.y}
+        radius={
+          (object.radius || 4) /
+          scale
+        }
+        fill={
+          object.color ||
+          "#ffffff"
+        }
+        stroke={
+          selectedIndex === index
+            ? "#00aaff"
+            : undefined
+        }
+        strokeWidth={
+          selectedIndex === index
+            ? 2 / scale
+            : 0
+        }
+      />
+    </React.Fragment>
+  );
+}
+
 /* CIRCLE */
 
 if (
@@ -32683,40 +43012,54 @@ rotation={
         (180 / Math.PI)
     : object.rotation || 0
 }
-   stroke={
-  joinSelected
-    ? "#00ff66"
-    : selectedIndex === index
-      ? "yellow"
-      : object.color || "#ffffff"
-}
-   strokeWidth={
-  selectedIndex === index
-    ? 4 / scale
-    : (object.strokeWidth || 2) / scale
+  strokeWidth={
+  Math.max(
+    2,
+    (
+      joinSelected
+        ? 4
+        : selectedIndex === index
+          ? 4
+          : (object.strokeWidth || 2)
+    ) / scale
+  )
 }
 
   />
 ) : (
   <Circle
-    {...commonProps}
-    x={object.x}
-    y={object.y}
-    radius={object.radius}
-    stroke={
-      selectedIndex === index
+  {...commonProps}
+  x={object.x}
+  y={object.y}
+  radius={object.radius}
+  stroke={
+    joinSelected
+      ? "#00ff66"
+      : selectedIndex === index
         ? "yellow"
         : object.color || "#ffffff"
-    }
-    strokeWidth={
-  selectedIndex === index
-    ? 4 / scale
-    : (object.strokeWidth || 2) / scale
-}
+  }
+  strokeWidth={
+    Math.max(
+      2,
+      (
+        joinSelected
+          ? 4
+          : selectedIndex === index
+            ? 4
+            : (object.strokeWidth || 2)
+      ) / scale
+    )
+  }
+  hitStrokeWidth={
+    tool === "join"
+      ? 40
+      : 20
+  }
   rotation={
-      object.rotation || 0
-    }
-  />
+    object.rotation || 0
+  }
+/>
 )}
 
 
@@ -32853,6 +43196,115 @@ rotation={
     />
   </>
 )}
+
+
+/* =========================
+   ELLIPSE RENDERING
+========================= */
+
+if (object.type === "ellipse") {
+  const ellipseRotation =
+    ((Number(object.rotation) || 0) * Math.PI) / 180;
+
+  const radiusX = Math.abs(Number(object.radiusX) || 0);
+  const radiusY = Math.abs(Number(object.radiusY) || 0);
+
+  return (
+    <React.Fragment key={index}>
+      <Ellipse
+        {...commonProps}
+        x={object.x}
+        y={object.y}
+        radiusX={radiusX}
+        radiusY={radiusY}
+        rotation={object.rotation || 0}
+        stroke={
+          selectedIndex === index
+            ? "yellow"
+            : object.color || "#ffffff"
+        }
+        strokeWidth={
+          Math.max(
+            2,
+            (selectedIndex === index
+              ? 4
+              : object.strokeWidth || 2) / scale
+          )
+        }
+        hitStrokeWidth={tool === "join" ? 40 : 20}
+      />
+
+      {/* ELLIPSE GRIPS */}
+      {selectedIndex === index && (
+        <>
+          {/* CENTER GRIP */}
+          <Circle
+            x={object.x}
+            y={object.y}
+            radius={6 / scale}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2 / scale}
+            draggable={tool === "move"}
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) =>
+              handleEllipseGripDragEnd(index, "center", e)
+            }
+          />
+
+          {/* HORIZONTAL GRIP */}
+          <Circle
+            x={
+              object.x +
+              radiusX * Math.cos(ellipseRotation)
+            }
+            y={
+              object.y +
+              radiusX * Math.sin(ellipseRotation)
+            }
+            radius={6 / scale}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2 / scale}
+            draggable={tool === "move"}
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) =>
+              handleEllipseGripDragEnd(index, "radiusX", e)
+            }
+          />
+
+          {/* VERTICAL GRIP */}
+          <Circle
+            x={
+              object.x -
+              radiusY * Math.sin(ellipseRotation)
+            }
+            y={
+              object.y +
+              radiusY * Math.cos(ellipseRotation)
+            }
+            radius={6 / scale}
+            fill="#00aaff"
+            stroke="white"
+            strokeWidth={2 / scale}
+            draggable={tool === "move"}
+            onMouseDown={(e) => {
+              e.cancelBubble = true;
+            }}
+            onDragEnd={(e) =>
+              handleEllipseGripDragEnd(index, "radiusY", e)
+            }
+          />
+        </>
+      )}
+    </React.Fragment>
+  );
+}
+
 
 /* =========================
    RECTANGLE
@@ -33404,26 +43856,32 @@ if (
   return (
     <React.Fragment key={index}>
 
-      <Line
-        {...commonProps}
-        points={object.points}
-        rotation={
-          object.rotation ||
-          0
-        }
-        stroke={
-          selectedIndex === index
-            ? "yellow"
-            : object.color ||
-              "#ffffff"
-        }
-       strokeWidth={
-  selectedIndex === index
-    ? 4 / scale
-    : (object.strokeWidth || 2) / scale
-}
-        hitStrokeWidth={15}
-      />
+    <Line
+  {...commonProps}
+  points={object.points}
+  rotation={
+    object.rotation ||
+    0
+  }
+  stroke={
+    joinSelected
+      ? "#00ff66"
+      : selectedIndex === index
+        ? "yellow"
+        : object.color ||
+          "#ffffff"
+  }
+  strokeWidth={
+    selectedIndex === index
+      ? 4 / scale
+      : (object.strokeWidth || 2) / scale
+  }
+  hitStrokeWidth={
+    tool === "join"
+      ? 40
+      : 20
+  }
+/>
 
       {/* POLYLINE GRIPS */}
 
@@ -33465,6 +43923,78 @@ if (
 }
 
 /* =========================
+   SPLINE PREVIEW
+========================= */
+
+if (
+  tool === "spline" &&
+  splinePoints.length >= 2 &&
+  splinePreviewPoint
+) {
+  const previewPoints = [
+    ...splinePoints,
+    splinePreviewPoint.x,
+    splinePreviewPoint.y,
+  ];
+
+  return (
+    <Line
+      points={previewPoints}
+      stroke="#00aaff"
+      strokeWidth={2 / scale}
+      lineCap="round"
+      lineJoin="round"
+      tension={0.5}
+      bezier={false}
+      listening={false}
+      dash={[
+        8 / scale,
+        6 / scale,
+      ]}
+    />
+  );
+}
+
+/* =========================
+   SPLINE
+========================= */
+
+if (
+  object.type ===
+  "spline"
+) {
+  return (
+    <React.Fragment key={index}>
+
+      <Line
+        {...commonProps}
+        points={object.points}
+        rotation={
+          object.rotation ||
+          0
+        }
+        stroke={
+          selectedIndex === index
+            ? "yellow"
+            : object.color ||
+              "#ffffff"
+        }
+        strokeWidth={
+          selectedIndex === index
+            ? 4 / scale
+            : (object.strokeWidth || 2) / scale
+        }
+        tension={0.5}
+        lineCap="round"
+        lineJoin="round"
+        hitStrokeWidth={20}
+      />
+
+    </React.Fragment>
+  );
+}
+
+/* =========================
    ARC
 ========================= */
 
@@ -33472,8 +44002,8 @@ if (object.type === "arc") {
   const start = object.angleStart || 0;
   const end = object.angleEnd || 0;
 const radius = Math.max(
-  20,
-  object.radius || 0
+  0,
+  Number(object.radius) || 0
 );
 
   const points = [];
@@ -33513,14 +44043,17 @@ return (
 }
       lineCap="round"
       lineJoin="round"
-      hitStrokeWidth={15}
+      hitStrokeWidth={
+  tool === "join"
+    ? 40
+    : 15
+}
     />
   );
 }
 
-                 /* TEXT */
-
-                 if (
+/* TEXT */
+if (
   object.type ===
   "text"
 ) {
@@ -33540,10 +44073,15 @@ return (
     : object.color ||
       "#ffffff"
 }
-      rotation={
-        object.rotation ||
-        0
-      }
+     rotation={
+  object.rotation ||
+  0
+}
+hitStrokeWidth={
+  tool === "join"
+    ? 40
+    : 20
+}
 onDblClick={() => {
   if (isObjectLocked(index)) {
     window.alert(
@@ -35256,18 +45794,6 @@ const y = snappedPoint.y;
   />
 )}
 
-    {snapPoint && snapType && (
-  <Text
-    x={snapPoint.x + 12 / scale}
-    y={snapPoint.y + 12 / scale}
-    text={snapType}
-    fontSize={12 / scale}
-    fill="#ffd400"
-    fontStyle="bold"
-    listening={false}
-  />
-)}
-
     {/* SNAP LABEL */}
     <div
       style={{
@@ -35567,6 +46093,59 @@ const y = snappedPoint.y;
           );
         }}
         onKeyDown={(e) => {
+          if (e.key === "ArrowUp") {
+  e.preventDefault();
+
+  setMobileCommandHistory((history) => {
+    if (history.length === 0) {
+      return history;
+    }
+
+    setMobileCommandHistoryIndex((current) => {
+      const nextIndex =
+        current <= 0
+          ? history.length - 1
+          : current - 1;
+
+      setCommandText(
+        history[nextIndex] || ""
+      );
+
+      return nextIndex;
+    });
+
+    return history;
+  });
+
+  return;
+}
+
+if (e.key === "ArrowDown") {
+  e.preventDefault();
+
+  setMobileCommandHistory((history) => {
+    if (history.length === 0) {
+      return history;
+    }
+
+    setMobileCommandHistoryIndex((current) => {
+      const nextIndex =
+        current >= history.length - 1
+          ? 0
+          : current + 1;
+
+      setCommandText(
+        history[nextIndex] || ""
+      );
+
+      return nextIndex;
+    });
+
+    return history;
+  });
+
+  return;
+}
           if (e.key === "Enter") {
             e.preventDefault();
             confirmLineInput();
@@ -35792,7 +46371,7 @@ const y = snappedPoint.y;
   ⌃
 </button>
 
- {showMobileLayers && (
+{showMobileLayers && (
   <div
     onPointerDown={(e) => {
       e.stopPropagation();
@@ -35828,9 +46407,12 @@ const y = snappedPoint.y;
       overflowY: "auto",
       pointerEvents: "auto",
       touchAction: "pan-y",
-      boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+      boxShadow:
+        "0 10px 30px rgba(0,0,0,0.5)",
     }}
   >
+    {/* HEADER */}
+
     <div
       style={{
         display: "flex",
@@ -35839,11 +46421,14 @@ const y = snappedPoint.y;
         marginBottom: "10px",
       }}
     >
-      <strong>Layers</strong>
+      <strong>
+        Layers
+      </strong>
 
       <button
         type="button"
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           setShowMobileLayers(false);
         }}
         style={{
@@ -35855,9 +46440,35 @@ const y = snappedPoint.y;
       </button>
     </div>
 
+    {/* ACTIVE LAYER */}
+
+    <div
+      style={{
+        fontSize: "12px",
+        color: "#aaa",
+        marginBottom: "8px",
+      }}
+    >
+      Active Layer:{" "}
+      <strong
+        style={{
+          color: "#fff",
+        }}
+      >
+        {layers.find(
+          (layer) =>
+            layer.id === activeLayerId
+        )?.name ||
+          "Layer 0"}
+      </strong>
+    </div>
+
+    {/* ADD LAYER */}
+
     <button
       type="button"
-      onClick={() => {
+      onClick={(e) => {
+        e.stopPropagation();
         addLayer();
       }}
       style={{
@@ -35869,11 +46480,15 @@ const y = snappedPoint.y;
       ➕ Add Layer
     </button>
 
+    {/* LAYERS */}
+
     {layers.map((layer) => (
       <div
         key={layer.id}
         onClick={() => {
-          setActiveLayerId(layer.id);
+          setActiveLayerId(
+            layer.id
+          );
         }}
         style={{
           display: "flex",
@@ -35882,179 +46497,710 @@ const y = snappedPoint.y;
           padding: "8px",
           marginBottom: "6px",
           borderRadius: "6px",
+
           background:
-            activeLayerId === layer.id
+            activeLayerId ===
+            layer.id
               ? "#2d4058"
               : "#222",
+
+          border:
+            activeLayerId ===
+            layer.id
+              ? "1px solid #4b6b91"
+              : "1px solid #333",
+
           cursor: "pointer",
         }}
       >
+        {/* VISIBILITY */}
+
         <button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            toggleLayerVisibility(layer.id);
+
+            toggleLayerVisibility(
+              layer.id
+            );
           }}
+          title={
+            layer.visible
+              ? "Hide Layer"
+              : "Show Layer"
+          }
         >
-          {layer.visible ? "👁" : "○"}
+          {layer.visible
+            ? "👁"
+            : "○"}
         </button>
 
+        {/* LOCK */}
+
         <button
-  type="button"
-  onClick={(event) => {
-    event.stopPropagation();
-    toggleLayerLock(
-      layer.id
-    );
-  }}
->
-  {layer.locked
-    ? "🔒"
-    : "🔓"}
-</button>
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+
+            toggleLayerLock(
+              layer.id
+            );
+          }}
+          title={
+            layer.locked
+              ? "Unlock Layer"
+              : "Lock Layer"
+          }
+        >
+          {layer.locked
+            ? "🔒"
+            : "🔓"}
+        </button>
+
+        {/* NAME */}
 
         <span
           style={{
             flex: 1,
             minWidth: 0,
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            textOverflow:
+              "ellipsis",
+            whiteSpace:
+              "nowrap",
+            fontSize: "13px",
           }}
         >
           {layer.name}
         </span>
 
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            renameLayer(layer.id);
-          }}
-        >
-          ✎
-        </button>
+        {/* RENAME */}
 
         <button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            deleteLayer(layer.id);
+
+            renameLayer(
+              layer.id
+            );
           }}
+          title="Rename Layer"
+        >
+          ✎
+        </button>
+
+        {/* DELETE */}
+
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+
+            deleteLayer(
+              layer.id
+            );
+          }}
+          title="Delete Layer"
         >
           ×
         </button>
       </div>
     ))}
+
+    {/* DONE */}
+
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        setShowMobileLayers(false);
+      }}
+      style={{
+        width: "100%",
+        minHeight: "42px",
+        marginTop: "4px",
+      }}
+    >
+      Done
+    </button>
   </div>
 )}
 
-  <div className="mobile-command-status">
-  {showLineInput ? (
-   "Specify distance / angle"
-  ) : (tool === "line" || tool === "polyline") && linePreview ? (
-    (() => {
-      const dx =
-        linePreview.x2 -
-        linePreview.x1;
+<div className="mobile-command-status">
 
-      const dy =
-        linePreview.y2 -
-        linePreview.y1;
+  {tool === "line" ? (
+    <>
+      <div>
+        Command: _LINE
+      </div>
 
-      const distance =
-        Math.hypot(dx, dy);
+      <strong>
+        {showLineInput
+          ? "LINE Specify distance / angle"
+          : linePreview && lineStart
+            ? (() => {
+                const dx =
+                  linePreview.x2 -
+                  linePreview.x1;
 
-      let angle =
-        Math.atan2(dy, dx) *
-        (180 / Math.PI);
+                const dy =
+                  linePreview.y2 -
+                  linePreview.y1;
 
-      if (angle < 0) {
-        angle += 360;
-      }
+                const distance =
+                  Math.hypot(dx, dy);
 
-      return `Length: ${Math.round(
-        distance
-      )}    Angle: ${angle.toFixed(1)}°`;
-    })()
-    ) : tool === "select" &&
-    selectedObject?.type === "line" ? (
-    (() => {
-      const x1 =
-        selectedObject.points[0];
+                let angle =
+                  Math.atan2(dy, dx) *
+                  (180 / Math.PI);
 
-      const y1 =
-        selectedObject.points[1];
+                if (angle < 0) {
+                  angle += 360;
+                }
 
-      const x2 =
-        selectedObject.points[2];
+                return `LINE  Length: ${Math.round(
+                  distance
+                )}    Angle: ${angle.toFixed(
+                  1
+                )}°`;
+              })()
+            : lineStart
+              ? "LINE Specify next point"
+              : "LINE Specify first point"}
+      </strong>
+    </>
+  ) : tool === "polyline" ? (
+    <>
+      <div>
+        Command: _PLINE
+      </div>
 
-      const y2 =
-        selectedObject.points[3];
+      <strong>
+        {lineStart
+          ? "POLYLINE Specify next point"
+          : "POLYLINE Specify first point"}
+      </strong>
+    </>
+  ) : tool === "measure" ? (
+    <>
+      <div>
+        Command: _MEASUREGEOM
+      </div>
 
-      const length =
-        Math.hypot(
-          x2 - x1,
-          y2 - y1
-        );
+      <strong>
+        MEASURE Move cursor or select object
+      </strong>
+    </>
+    ) : tool === "dimension" ? (
+  <>
+    <div>
+      Command: _DIMENSION
+    </div>
 
-      let angle =
-        Math.atan2(
-          y2 - y1,
-          x2 - x1
-        ) *
-        (180 / Math.PI);
+    <strong>
+      DIMENSION Select first point
+    </strong>
+  </>
+  ) : tool === "radiusDimension" ? (
+    <>
+      <div>
+        Command: _RADIUS
+      </div>
 
-      if (angle < 0) {
-        angle += 360;
-      }
+      <strong>
+        RADIUS Select circle or arc
+      </strong>
+    </>
+  ) : tool === "diameterDimension" ? (
+    <>
+      <div>
+        Command: _DIAMETER
+      </div>
 
-      return `Length: ${Math.round(
-        length
-      )}    Angle: ${angle.toFixed(1)}°`;
-    })()
-  ) : tool === "line" && lineStart ? (
-    "Specify next point or [Undo]"
-  ) : tool === "line" ? (
-    "Specify first point"
+      <strong>
+        DIAMETER Select circle or arc
+      </strong>
+    </>
+  ) : tool === "angularDimension" ? (
+    <>
+      <div>
+        Command: _ANGULAR
+      </div>
+
+      <strong>
+        ANGLE Select two lines
+      </strong>
+    </>
+    ) : tool === "quickMeasure" ? (
+    <>
+      <div>Command: _QUICKMEASURE</div>
+
+      <strong>
+        QUICK MEASURE · Touch near an edge or inside a shape · Unit: {unit}
+      </strong>
+    </>
+  ) : tool === "volume" ? (
+    <>
+      <div>Command: _VOLUME</div>
+
+      <strong>
+        {commandText.trim()
+          ? commandText
+          : "VOLUME Select a closed shape"}
+      </strong>
+    </>
+  ) : tool === "area" ? (
+    <>
+      <div>
+        Command: _AREA
+      </div>
+
+      <strong>
+        {commandText.trim()
+          ? commandText
+          : "AREA Select closed object"}
+      </strong>
+    </>
+  ) : tool === "rectangle" ? (
+    <>
+      <div>
+        Command: _RECTANGLE
+      </div>
+
+      <strong>
+        RECTANGLE Specify first corner
+      </strong>
+    </>
+  ) : tool === "circle" ? (
+    <>
+      <div>
+        Command: _CIRCLE
+      </div>
+
+      <strong>
+        CIRCLE Specify center point
+      </strong>
+    </>
+  ) : tool === "arc" ? (
+    <>
+      <div>
+        Command: _ARC
+      </div>
+
+      <strong>
+        ARC Specify center point
+      </strong>
+    </>
+  ) : tool === "text" ? (
+    <>
+      <div>
+        Command: _TEXT
+      </div>
+
+      <strong>
+        TEXT Specify insertion point
+      </strong>
+    </>
+  ) : tool === "hatch" ? (
+    <>
+      <div>
+        Command: _HATCH
+      </div>
+
+      <strong>
+        HATCH Select boundary
+      </strong>
+    </>
+  ) : tool === "move" ? (
+    <>
+      <div>
+        Command: _MOVE
+      </div>
+
+      <strong>
+        MOVE Select object
+      </strong>
+    </>
+  ) : tool === "copy" ? (
+    <>
+      <div>
+        Command: _COPY
+      </div>
+
+      <strong>
+        COPY Select object
+      </strong>
+    </>
+  ) : tool === "rotate" ? (
+    <>
+      <div>
+        Command: _ROTATE
+      </div>
+
+      <strong>
+        ROTATE Select object
+      </strong>
+    </>
+  ) : tool === "trim" ? (
+    <>
+      <div>
+        Command: _TRIM
+      </div>
+
+      <strong>
+        {trimFirstIndex === null
+          ? "TRIM Select cutting edge"
+          : "TRIM Select object to trim"}
+      </strong>
+    </>
+  ) : tool === "extend" ? (
+    <>
+      <div>
+        Command: _EXTEND
+      </div>
+
+      <strong>
+        {extendFirstIndex === null
+          ? "EXTEND Select boundary edge"
+          : "EXTEND Select object to extend"}
+      </strong>
+    </>
+  ) : tool === "stretch" ? (
+    <>
+      <div>
+        Command: _STRETCH
+      </div>
+
+      <strong>
+        STRETCH Select object or grip
+      </strong>
+    </>
+  ) : tool === "offset" ? (
+    <>
+      <div>
+        Command: _OFFSET
+      </div>
+
+      <strong>
+        OFFSET Select object
+      </strong>
+    </>
+  ) : tool === "mirror" ? (
+    <>
+      <div>
+        Command: _MIRROR
+      </div>
+
+      <strong>
+        MIRROR Select object
+      </strong>
+    </>
+  ) : tool === "scale" ? (
+    <>
+      <div>
+        Command: _SCALE
+      </div>
+
+      <strong>
+        SCALE Select object
+      </strong>
+    </>
+  ) : tool === "fillet" ? (
+    <>
+      <div>
+        Command: _FILLET
+      </div>
+
+      <strong>
+        {commandFirstIndex === null
+          ? "FILLET Select first object"
+          : "FILLET Select second object"}
+      </strong>
+    </>
+  ) : tool === "chamfer" ? (
+    <>
+      <div>
+        Command: _CHAMFER
+      </div>
+
+      <strong>
+        {commandFirstIndex === null
+          ? "CHAMFER Select first object"
+          : "CHAMFER Select second object"}
+      </strong>
+    </>
+  ) : tool === "array" ? (
+    <>
+      <div>
+        Command: _ARRAY
+      </div>
+
+      <strong>
+        ARRAY Select object
+      </strong>
+    </>
+  ) : tool === "explode" ? (
+    <>
+      <div>
+        Command: _EXPLODE
+      </div>
+
+      <strong>
+        EXPLODE Select object
+      </strong>
+    </>
+  ) : tool === "join" ? (
+    <>
+      <div>
+        Command: _JOIN
+      </div>
+
+      <strong>
+        JOIN Select objects
+      </strong>
+    </>
+  ) : tool === "select" ? (
+    <>
+      <div>
+        Command: _SELECT
+      </div>
+
+      <strong>
+        SELECT Select objects
+      </strong>
+    </>
   ) : (
-    `${tool.toUpperCase()} command`
+    <>
+      <div>
+        Command: _{tool.toUpperCase()}
+      </div>
+
+      <strong>
+        {tool.toUpperCase()} command
+      </strong>
+    </>
   )}
+
 </div>
+
 <div className="mobile-command-title">
   <strong>
-    {tool === "select" &&
-    selectedObject?.type === "line"
+    {tool === "select" && selectedObject?.type === "line"
       ? "LINE"
       : tool === "select"
         ? "SELECT"
-        : tool.toUpperCase()}
+        : tool === "dimension"
+          ? "DIMENSION"
+          : tool === "radiusDimension"
+            ? "RADIUS"
+            : tool === "diameterDimension"
+              ? "DIAMETER"
+             : tool === "angularDimension"
+  ? "ANGULAR"
+  : tool === "quickMeasure"
+    ? "QUICK MEASURE"
+    : tool.toUpperCase()}
   </strong>
 
-  {(tool === "line" || tool === "polyline") && (
-    <span>
-      {showLineInput
+  <span>
+    {tool === "line"
+      ? showLineInput
         ? " Enter exact length"
         : lineStart
           ? " Specify next point"
-          : " Specify first point"}
-    </span>
-  )}
+          : " Specify first point"
+
+      : tool === "polyline"
+        ? lineStart
+          ? " Specify next point"
+          : " Specify first point"
+
+      : tool === "measure"
+        ? measureStart
+          ? " Specify second point"
+          : " Specify first point"
+
+      : tool === "dimension"
+        ? measureStart
+          ? " Specify second point"
+          : " Specify first point"
+
+      : tool === "radiusDimension"
+        ? " Select circle or arc"
+
+      : tool === "diameterDimension"
+        ? " Select circle or arc"
+
+      : tool === "angularDimension"
+        ? " Select two lines"
+
+      : tool === "area"
+        ? " Select closed object"
+
+      : tool === "rectangle"
+        ? " Specify first corner"
+
+      : tool === "circle"
+        ? " Specify center point"
+
+      : tool === "arc"
+        ? " Specify center point"
+
+      : tool === "text"
+        ? " Specify insertion point"
+
+      : tool === "hatch"
+        ? " Select boundary"
+
+      : tool === "move"
+        ? " Select base point"
+
+      : tool === "copy"
+        ? " Specify base point"
+
+      : tool === "rotate"
+        ? " Specify base point"
+
+      : tool === "trim"
+        ? " Select cutting edge or object"
+
+      : tool === "extend"
+        ? " Select boundary or object"
+
+      : tool === "stretch"
+        ? " Select objects"
+
+      : tool === "offset"
+        ? " Specify distance"
+
+      : tool === "mirror"
+        ? " Select objects"
+
+      : tool === "scale"
+        ? " Specify base point"
+
+      : tool === "fillet"
+        ? " Select first object"
+
+      : tool === "chamfer"
+        ? " Select first object"
+
+      : tool === "array"
+        ? " Select objects"
+
+      : tool === "explode"
+        ? " Select object"
+
+          : tool === "break"
+       ? " Select object"
+
+      : tool === "join"
+        ? " Select objects to join"
+
+      : ""}
+  </span>
 </div>
   <div className="mobile-quick-actions">
 
- <button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("select");
-  }}
->
-  Select
-</button>
+  {/* =====================================================
+     MOBILE HOME
+  ===================================================== */}
 
+  {mobileCommandPanel === "home" && (
+    <>
+
+      {/* SELECT */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setShowMobileLayers(false);
+          setCommandText("");
+
+          selectMobileTool("select");
+        }}
+      >
+        🎯 Select
+      </button>
+
+      {/* FIND */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setShowMobileLayers(false);
+          setCommandText("");
+
+          openMobilePanel("find");
+        }}
+      >
+        🔍 Find
+      </button>
+
+      {/* MEASURE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setShowMobileLayers(false);
+          setCommandText("");
+
+          openMobilePanel("measure");
+        }}
+      >
+        📏 Measure
+      </button>
+
+      {/* DRAW */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setShowMobileLayers(false);
+          setCommandText("");
+
+          openMobilePanel("draw");
+        }}
+      >
+        ✏️ Draw
+      </button>
+
+      {/* MODIFY */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setShowMobileLayers(false);
+          setCommandText("");
+
+          openMobilePanel("modify");
+        }}
+      >
+        🛠 Modify
+      </button>
+
+      {/* QUICK ANNOTATE */}
 <button
   type="button"
   onPointerDown={(e) => e.stopPropagation()}
@@ -36062,1214 +47208,1218 @@ const y = snappedPoint.y;
   onClick={(e) => {
     e.stopPropagation();
 
-    if (!objects || objects.length === 0) {
-      setSelectedIndexes([]);
-      setSelectedIndex(null);
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+    setCommandText("");
+
+    selectMobileTool("text");
+  }}
+>
+  📝 Annotate
+</button>
+
+      {/* QUICK TRIM */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+    setCommandText("");
+
+    selectMobileTool("trim");
+  }}
+>
+  ✂️ Quick Trim
+</button>
+
+{/* QUICK DIMENSION */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+    setCommandText("");
+
+    selectMobileTool("dimension");
+  }}
+>
+  📐 Quick Dimension
+</button>
+
+      {/* LAYERS */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setShowMobileLayers(true);
+          setCommandText("");
+          setMobileCommandPanel("home");
+        }}
+      >
+        🗂 Layers
+      </button>
+
+      {/* PROPERTIES */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          setShowMobileLayers(false);
+          setShowMobileProperties(true);
+          setMobileCommandPanel("home");
+          setCommandText("");
+        }}
+      >
+        ⚙ Properties
+      </button>
+
+      {/* =================================================
+         SELECTED OBJECT ACTIONS
+      ================================================= */}
+
+      {/* DELETE */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          deleteSelected();
+          setShowMobileProperties(false);
+        }}
+      >
+        🗑 Delete
+      </button>
+
+      {/* DUPLICATE */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          duplicateSelected();
+        }}
+      >
+        🧬 Duplicate
+      </button>
+
+      {/* MOVE */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          selectMobileTool("move");
+        }}
+      >
+        ✥ Move
+      </button>
+
+      {/* COPY */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          selectMobileTool("copy");
+        }}
+      >
+        📋 Copy
+      </button>
+
+      {/* CUT */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          cutDrawing();
+        }}
+      >
+        ✂ Cut
+      </button>
+
+      {/* PASTE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          pasteDrawing();
+        }}
+      >
+        📥 Paste
+      </button>
+
+      {/* SIMILAR */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          const indexes = objects
+            .map((object, index) =>
+              object?.type === selectedObject.type
+                ? index
+                : null
+            )
+            .filter((index) => index !== null);
+
+          setSelectedIndexes(indexes);
+
+          if (indexes.length > 0) {
+            setSelectedIndex(
+              indexes[indexes.length - 1]
+            );
+          }
+        }}
+      >
+        🔎 Similar
+      </button>
+
+      {/* ZOOM SELECTED */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          zoomToSelected();
+        }}
+      >
+        🔍 Zoom Selected
+      </button>
+
+      {/* FRONT */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          bringToFront();
+        }}
+      >
+        ⬆ Front
+      </button>
+
+      {/* BACK */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          sendToBack();
+        }}
+      >
+        ⬇ Back
+      </button>
+
+      {/* FORWARD */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          bringForward();
+        }}
+      >
+        ⬆ Forward
+      </button>
+
+      {/* ISOLATE */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          isolateSelectedLayer();
+        }}
+      >
+        👁 Isolate
+      </button>
+
+      {/* ALL LAYERS */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          unisolateLayers();
+        }}
+      >
+        👁 All Layers
+      </button>
+
+      {/* REVERSE */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          reverseSelectedDirection();
+        }}
+      >
+        ↔ Reverse
+      </button>
+
+      {/* INVERT */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          invertSelection();
+        }}
+      >
+        🔄 Invert
+      </button>
+
+      {/* LAYER ALL */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectCurrentLayer();
+        }}
+      >
+        📚 Layer All
+      </button>
+
+      {/* ACTIVE LAYER */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setSelectedLayerActive();
+        }}
+      >
+        🎯 Active Layer
+      </button>
+
+      {/* CLEAR LAYER */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          clearCurrentLayer();
+        }}
+      >
+        🧹 Clear Layer
+      </button>
+
+      {/* RESET VIEW */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          resetView();
+        }}
+      >
+        ⛶ Reset View
+      </button>
+
+      {/* ZOOM FIT */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          zoomFit();
+        }}
+      >
+        🔍 Zoom Fit
+      </button>
+
+      {/* LOCK */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          lockSelectedObjects();
+        }}
+      >
+        🔒 Lock
+      </button>
+
+      {/* UNLOCK */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          unlockSelectedObjects();
+        }}
+      >
+        🔓 Unlock
+      </button>
+
+      {/* FLIP H */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          flipSelectedHorizontal();
+        }}
+      >
+        ↔ Flip H
+      </button>
+
+      {/* FLIP V */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          flipSelectedVertical();
+        }}
+      >
+        ↕ Flip V
+      </button>
+
+      {/* WIDTH */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          changeSelectedLineWidth();
+        }}
+      >
+        🖊 Width
+      </button>
+
+      {/* LOCK ALL */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          lockAllSelected();
+        }}
+      >
+        🔒 Lock All
+      </button>
+
+      {/* UNLOCK ALL */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          unlockAllObjects();
+        }}
+      >
+        🔓 Unlock All
+      </button>
+
+      {/* DELETE SELECTED */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          deleteSelectedOnly();
+          setShowMobileProperties(false);
+        }}
+      >
+        🗑 Delete Selected
+      </button>
+
+      {/* DUPLICATE ALL */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null &&
+          selectedIndexes.length === 0
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null &&
+            selectedIndexes.length === 0
+          ) {
+            return;
+          }
+
+          duplicateAllSelected();
+        }}
+      >
+        🧬 Duplicate All
+      </button>
+
+      {/* ROTATE 90 */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          rotateSelected90();
+        }}
+      >
+        ↻ 90°
+      </button>
+
+      {/* ROTATE -90 */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          rotateSelectedMinus90();
+        }}
+      >
+        ↺ -90°
+      </button>
+
+      {/* ROTATE 180 */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          rotateSelected180();
+        }}
+      >
+        ↻ 180°
+      </button>
+
+      {/* ROTATE 45 */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          rotateSelected45();
+        }}
+      >
+        ↻ 45°
+      </button>
+
+      {/* RESET ROTATION */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          resetSelectedRotation();
+        }}
+      >
+        🔄 Reset Rotation
+      </button>
+
+      {/* EXACT ROTATION */}
+      <button
+        type="button"
+        disabled={
+          selectedIndex === null ||
+          !selectedObject
+        }
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          if (
+            selectedIndex === null ||
+            !selectedObject
+          ) {
+            return;
+          }
+
+          setExactRotation();
+        }}
+      >
+        🎯 Exact Rotation
+      </button>
+    </>
+  )}
+
+  {/* =====================================================
+     MOBILE DRAW
+  ===================================================== */}
+
+  {mobileCommandPanel === "draw" && (
+    <>
+
+      {/* LINE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("line");
+        }}
+      >
+        ╱ Line
+      </button>
+
+      {/* POLYLINE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("polyline");
+        }}
+      >
+        ╱╲ Polyline
+      </button>
+
+      {/* RECTANGLE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("rectangle");
+        }}
+      >
+        □ Rectangle
+      </button>
+
+      {/* CIRCLE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("circle");
+        }}
+      >
+        ○ Circle
+      </button>
+
+      {/* ELLIPSE */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+    selectMobileTool("ellipse");
+  }}
+>
+  ⬭ Ellipse
+</button>
+
+      {/* ARC */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("arc");
+        }}
+      >
+        ◜ Arc
+      </button>
+
+      {/* TEXT */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("text");
+        }}
+      >
+        T Text
+      </button>
+
+      {/* HATCH */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("hatch");
+        }}
+      >
+        ▧ Hatch
+      </button>
+
+      {/* BACK */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          closeMobilePanel();
+        }}
+      >
+        ← Back
+      </button>
+    </>
+  )}
+
+  {/* =====================================================
+     MOBILE MEASURE
+  ===================================================== */}
+
+  {mobileCommandPanel === "measure" && (
+    <>
+
+      {/* DISTANCE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setCommandText("");
+          setMobileCommandPanel("measure");
+
+          changeTool("measure");
+        }}
+      >
+        📏 Distance
+      </button>
+
+      {/* DIMENSION */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setCommandText("");
+          setMobileCommandPanel("measure");
+
+          changeTool("dimension");
+        }}
+      >
+        📐 Dimension
+      </button>
+
+      {/* RADIUS */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setCommandText("");
+          setMobileCommandPanel("measure");
+
+          changeTool("radiusDimension");
+        }}
+      >
+        R Radius
+      </button>
+
+      {/* DIAMETER */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setCommandText("");
+          setMobileCommandPanel("measure");
+
+          changeTool("diameterDimension");
+        }}
+      >
+        Ø Diameter
+      </button>
+
+      {/* ANGLE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setCommandText("");
+          setMobileCommandPanel("measure");
+
+          changeTool("angularDimension");
+        }}
+      >
+        ∠ Angle
+      </button>
+
+      {/* AREA */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setShowMobileProperties(false);
+          setCommandText("");
+          setMobileCommandPanel("measure");
+
+          changeTool("area");
+        }}
+      >
+        ▣ Area
+      </button>
+
+      {/* VOLUME */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileProperties(false);
+    setCommandText("");
+    setMobileCommandPanel("measure");
+
+    changeTool("volume");
+  }}
+>
+  ▰ Volume
+</button>
+
+{/* QUICK MEASURE */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileProperties(false);
+    setCommandText("");
+
+    selectMobileTool("quickMeasure");
+  }}
+>
+  ↔ Quick
+</button>
+
+{/* MODE / UNITS */}
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    const selectedUnit = window.prompt(
+      "Measurement mode:\nEnter mm, inch, or ft-in",
+      unit
+    );
+
+    if (selectedUnit === null) {
       return;
     }
 
-    const allIndexes = objects.map(
-      (_, index) => index
-    );
+    const normalizedUnit =
+      selectedUnit.trim().toLowerCase();
 
-    setSelectedIndexes(allIndexes);
-    setSelectedIndex(
-      allIndexes.length > 0
-        ? allIndexes[0]
-        : null
-    );
+    if (
+      ["mm", "inch", "ft-in"].includes(normalizedUnit)
+    ) {
+      setUnit(normalizedUnit);
 
-    changeTool("select");
-  }}
->
-  ☑ All
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("select");
-    setShowMobileProperties(false);
-  }}
->
-  🖱 Select
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("select");
-  }}
->
-  ✋ Pan
-</button>
-
-
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("line");
-  }}
->
-  ╱ Line
-</button>
-
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("rectangle");
-  }}
->
-  □ Rectangle
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("circle");
-  }}
->
-  ○ Circle
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("polyline");
-  }}
->
-  ╱╲ Polyline
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("arc");
-  }}
->
-  ◜ Arc
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("text");
-  }}
->
-  T Text
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("dimension");
-  }}
->
-  📐 DIM
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("angularDimension");
-  }}
->
-  ∠ ANG
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("radiusDimension");
-  }}
->
-  R RAD
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("diameterDimension");
-  }}
->
-  Ø DIA
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileProperties(false);
-    setCommandText("");
-    changeTool("measure");
-  }}
->
-  📏 Measure
-</button>
-
-
-{selectedIndex !== null && selectedObject && (
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
-
-      const object = selectedObject;
-
-      const details = [
-        `Type: ${object.type}`,
-        object.x !== undefined
-          ? `X: ${Math.round(object.x)}`
-          : null,
-        object.y !== undefined
-          ? `Y: ${Math.round(object.y)}`
-          : null,
-        object.radius !== undefined
-          ? `Radius: ${Math.round(object.radius)}`
-          : null,
-        object.width !== undefined
-          ? `W: ${Math.round(object.width)}`
-          : null,
-        object.height !== undefined
-          ? `H: ${Math.round(object.height)}`
-          : null,
-        object.rotation !== undefined
-          ? `Rotation: ${object.rotation}°`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" | ");
-
-      setCommandText(details);
-    }}
-  >
-    ℹ Properties
-  </button>
-)}
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setSelectedIndex(null);
-    setSelectedIndexes([]);
-    setSelectedMeasurementIndex(null);
-    setCommandFirstIndex(null);
-  }}
->
-  ✖ Deselect
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("move");
-  }}
->
-  ✥ Move
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("copy");
-  }}
->
-  📋 Copy
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("rotate");
-  }}
->
-  🔄 Rotate
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("trim");
-  }}
->
-  ✂ Trim
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("extend");
-  }}
->
-  ↔ Extend
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("stretch");
-  }}
->
-  ↔ Stretch
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("offset");
-  }}
->
-  ⤴ Offset
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("fillet");
-  }}
->
-  ◯ Fillet
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("chamfer");
-  }}
->
-  ◇ Chamfer
-</button>
-
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
-      mirrorObject(selectedIndex);
-    }}
-  >
-    ↔ Mirror
-  </button>
-)}
-
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
-      scaleObject(selectedIndex);
-    }}
-  >
-    ⤢ Scale
-  </button>
-)}
-
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
-      arrayObject(selectedIndex);
-    }}
-  >
-    ▦ Array
-  </button>
-)}
-
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
-      explodeObject(selectedIndex);
-    }}
-  >
-    💥 Explode
-  </button>
-)}
-
-<button
-  type="button"
-  className={
-    tool === "join"
-      ? "mobile-tool-button active"
-      : "mobile-tool-button"
-  }
-  onPointerDown={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchStart={(e) => {
-    e.stopPropagation();
-  }}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    setSelectedIndexes([]);
-    setSelectedIndex(null);
-
-    changeTool("join");
-  }}
->
-  🔗 Join
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeTool("hatch");
-  }}
->
-  ▧ Hatch
-</button>
-
-{/* OSNAP */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    if (typeof toggleOsnap === "function") {
-      toggleOsnap();
-      return;
-    }
-
-    if (typeof setOsnap === "function") {
-      setOsnap((prev) => !prev);
-      return;
-    }
-
-    window.alert("OSNAP control is not available.");
-  }}
->
-  🎯 OSNAP
-</button>
-
-{/* SNAP */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    if (typeof toggleGridSnap === "function") {
-      toggleGridSnap();
-      return;
-    }
-
-    setGridSnapEnabled((prev) => !prev);
-  }}
->
-  ⛓ SNAP
-</button>
-
-{/* GRID */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setGridEnabled((prev) => !prev);
-  }}
->
-  ▦ Grid
-</button>
-
-{/* LAYER */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    addLayer();
-  }}
->
-  ➕ Layer
-</button>
-
-{/* LAYERS */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setShowMobileLayers(true);
-  }}
->
-  📚 Layers
-</button>
-
-{/* ORTHO */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    toggleOrtho();
-  }}
->
-  ⊥ Ortho
-</button>
-
-{/* POLAR */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    togglePolar();
-  }}
->
-  ∠ Polar
-</button>
-
-
-{/* PREVIOUS */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectPreviousObject();
-  }}
->
-  ◀ Prev
-</button>
-
-{/* NEXT */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectNextObject();
-  }}
->
-  Next ▶
-</button>
-
-{/* DESELECT ALL */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    deselectAllObjects();
-  }}
->
-  ✖ Deselect All
-</button>
-
-{/* ZOOM SELECTED */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    zoomToAllSelected();
-  }}
->
-  🔍 Zoom Selected All
-</button>
-
-{/* LOCK */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    toggleSelectedLock();
-  }}
->
-  🔒 Lock
-</button>
-
-{/* LOCK ALL */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    lockAllSelected();
-  }}
->
-  🔒 Lock All
-</button>
-
-{/* UNLOCK ALL */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    unlockAllObjects();
-  }}
->
-  🔓 Unlock All
-</button>
-
-{/* DELETE SELECTED */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    deleteSelectedOnly();
-  }}
->
-  🗑 Delete Selected
-</button>
-
-{/* ROTATE -90 */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    rotateSelectedMinus90();
-  }}
->
-  ↺ -90°
-</button>
-
-{/* ROTATE 180 */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    rotateSelected180();
-  }}
->
-  ↻ 180°
-</button>
-
-{/* ROTATE 45 */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    rotateSelected45();
-  }}
->
-  ↻ 45°
-</button>
-
-{/* EXACT ANGLE */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setExactRotation();
-  }}
->
-  🔢 Angle
-</button>
-
-{/* HIDE */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    hideAllSelected();
-  }}
->
-  🙈 Hide Selected
-</button>
-
-{/* SHOW */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    showSelectedObjects();
-  }}
->
-  👁 Show Selected
-</button>
-
-{/* LOCK SELECTED */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    lockSelectedObjects();
-  }}
->
-  🔒 Lock Selected
-</button>
-
-{/* UNLOCK SELECTED */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    unlockSelectedObjects();
-  }}
->
-  🔓 Unlock Selected
-</button>
-
-{/* FLIP H */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    flipSelectedHorizontal();
-  }}
->
-  ↔ Flip H
-</button>
-
-{/* FLIP V */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    flipSelectedVertical();
-  }}
->
-  ↕ Flip V
-</button>
-
-{/* DUPLICATE ALL */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    duplicateAllSelected();
-  }}
->
-  🧬 Duplicate All
-</button>
-
-{/* DUPLICATE OFFSET */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    duplicateWithOffset();
-  }}
->
-  🧬 Duplicate + Offset
-</button>
-
-{/* UNLOCK EVERYTHING */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    unlockEveryObject();
-  }}
->
-  🔓 Unlock Everything
-</button>
-
-{/* SHOW EVERYTHING */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    showEverything();
-  }}
->
-  👁 Show Everything
-</button>
-
-{/* SELECT LOCKED */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectLockedObjects();
-  }}
->
-  🔒 Select Locked
-</button>
-
-{/* SELECT HIDDEN */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectHiddenObjects();
-  }}
->
-  🙈 Select Hidden
-</button>
-
-{/* SELECT UNLOCKED */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectUnlockedObjects();
-  }}
->
-  🔓 Select Unlocked
-</button>
-
-{/* NO LAYER */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectObjectsWithoutLayer();
-  }}
->
-  📚 No Layer
-</button>
-
-{/* RESET COLOR */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    resetSelectedColor();
-  }}
->
-  🎨 Reset Color
-</button>
-
-{/* RESET WIDTH */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    resetSelectedWidth();
-  }}
->
-  🖊 Reset Width
-</button>
-
-{/* RESET OBJECT */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    resetSelectedObject();
-  }}
->
-  ♻ Reset Object
-</button>
-
-{/* ZOOM IN */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    const oldScale = scale;
-    const newScale = Math.min(
-      oldScale * 1.25,
-      20
-    );
-
-    const centerX =
-      viewportSize.width / 2;
-
-    const centerY =
-      (viewportSize.height - 87 - 64) / 2;
-
-    const worldX =
-      (centerX - position.x) / oldScale;
-
-    const worldY =
-      (centerY - position.y) / oldScale;
-
-    setScale(newScale);
-
-    setPosition({
-      x: centerX - worldX * newScale,
-      y: centerY - worldY * newScale,
-    });
-  }}
->
-  ＋ Zoom
-</button>
-
-{/* ZOOM OUT */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    const oldScale = scale;
-    const newScale = Math.max(
-      oldScale / 1.25,
-      0.2
-    );
-
-    const centerX =
-      viewportSize.width / 2;
-
-    const centerY =
-      (viewportSize.height - 87 - 64) / 2;
-
-    const worldX =
-      (centerX - position.x) / oldScale;
-
-    const worldY =
-      (centerY - position.y) / oldScale;
-
-    setScale(newScale);
-
-    setPosition({
-      x: centerX - worldX * newScale,
-      y: centerY - worldY * newScale,
-    });
-  }}
->
-  － Zoom
-</button>
-
-{/* ZOOM FIT */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    zoomFit();
-  }}
->
-  ⛶ Fit
-</button>
-
-{/* 100% */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    setScale(1);
-
-    setPosition({
-      x: viewportSize.width / 2,
-      y:
-        (viewportSize.height - 87 - 64) / 2,
-    });
-  }}
->
-  100%
-</button>
-
-{/* NEW */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    clearDrawing();
-  }}
->
-  🆕 New
-</button>
-
-{/* OPEN */}
-<button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-    openDrawing();
-  }}
->
-  📂 Open
-</button>
-
-
-<input
-  id="dxfImportInput"
-  type="file"
-  accept=".dxf,application/dxf,text/plain"
-  onChange={importDXF}
-  style={{ display: "none" }}
-/>
-
-{/* IMPORT DXF */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    document
-      .getElementById("dxfImportInput")
-      ?.click();
-  }}
->
-  📐 Import DXF
-</button>
-
-{/* SAVE */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    try {
-      saveDrawing();
-    } catch (error) {
-      console.error(
-        "Save failed:",
-        error
-      );
       window.alert(
-        "Save nahi ho paya."
+        `Measurement mode set to ${normalizedUnit}`
+      );
+    } else {
+      window.alert(
+        "Invalid mode. Enter mm, inch, or ft-in."
       );
     }
   }}
 >
-  💾 Save
+  ⚙ Mode
 </button>
 
-{/* SAVE AS */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    saveDrawingAs();
-  }}
->
-  💾 Save As
-</button>
-
-{/* COPY */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    copyDrawing();
-  }}
->
-  📋 Copy
-</button>
-
-{/* SHARE */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    shareDrawing();
-  }}
->
-  📤 Share
-</button>
-
-{/* PNG */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    exportPNG();
-  }}
->
-  🖼 PNG
-</button>
-
-{/* SVG */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    exportSVG();
-  }}
->
-  📄 SVG
-</button>
-
-{/* DXF */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    exportDXF();
-  }}
->
-  📐 DXF
-</button>
-
-{/* FULLSCREEN */}
+{/* EXIT MEASURE */}
 <button
   type="button"
   onPointerDown={(e) => e.stopPropagation()}
@@ -37277,203 +48427,627 @@ const y = snappedPoint.y;
   onClick={(e) => {
     e.stopPropagation();
 
-    if (
-      document.documentElement
-        .requestFullscreen
-    ) {
-      document.documentElement
-        .requestFullscreen();
-    }
-  }}
->
-  ⛶ Full
-</button>
+    setCommandText("");
+    setMeasureStart(null);
+    setAnglePoints([]);
+    setSelectedMeasurementIndex(null);
 
-{/* PRINT */}
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    window.print();
-  }}
->
-  🖨 Print
-</button>
+    setMobileCommandPanel("home");
 
-
-
-
- <button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-
-    const query = window.prompt(
-      "Find object type:",
-      "line"
-    );
-
-    if (!query || !query.trim()) {
-      return;
-    }
-
-   const search = query.trim().toLowerCase();
-
-const visibleObjects =
-  getVisibleObjectsForFind();
-
-const foundObject =
-  visibleObjects.find((object) => {
-    const type = String(
-      object?.type || ""
-    ).toLowerCase();
-
-    const text = String(
-      object?.text || ""
-    ).toLowerCase();
-
-    return (
-      type.includes(search) ||
-      text.includes(search)
-    );
-  });
-
-const index =
-  foundObject
-    ? objects.indexOf(foundObject)
-    : -1;
-
-    if (index === -1) {
-      window.alert(`No "${query}" object found.`);
-      return;
-    }
-
-    const object = objects[index];
-
-    setSelectedIndex(index);
-    setSelectedIndexes([index]);
     changeTool("select");
-
-    let centerX = 0;
-    let centerY = 0;
-
-    if (
-      object?.type === "line" ||
-      object?.type === "dimension"
-    ) {
-      centerX =
-        (object.points?.[0] +
-          object.points?.[2]) / 2;
-
-      centerY =
-        (object.points?.[1] +
-          object.points?.[3]) / 2;
-    } else if (
-      object?.type === "rectangle"
-    ) {
-      centerX =
-        (object.points?.[0] +
-          object.points?.[2]) / 2;
-
-      centerY =
-        (object.points?.[1] +
-          object.points?.[3]) / 2;
-    } else if (
-      object?.type === "circle" ||
-      object?.type === "arc"
-    ) {
-      centerX = object.x || 0;
-      centerY = object.y || 0;
-    } else if (
-      object?.type === "text"
-    ) {
-      centerX = object.x || 0;
-      centerY = object.y || 0;
-    } else if (
-      object?.points &&
-      object.points.length >= 2
-    ) {
-      const xs = [];
-      const ys = [];
-
-      for (
-        let i = 0;
-        i < object.points.length;
-        i += 2
-      ) {
-        xs.push(object.points[i]);
-        ys.push(object.points[i + 1]);
-      }
-
-      centerX =
-        (Math.min(...xs) +
-          Math.max(...xs)) / 2;
-
-      centerY =
-        (Math.min(...ys) +
-          Math.max(...ys)) / 2;
-    }
-
-    const viewWidth =
-      viewportSize.width <= 768
-        ? viewportSize.width
-        : viewportSize.width - 298;
-
-    const viewHeight =
-      viewportSize.width <= 768
-        ? viewportSize.height - 87 - 64
-        : viewportSize.height - 87;
-
-    const newScale = Math.max(
-      0.5,
-      Math.min(scale < 1 ? 2 : scale, 20)
-    );
-
-    setScale(newScale);
-
-    setPosition({
-      x:
-        viewWidth / 2 -
-        centerX * newScale,
-
-      y:
-        viewHeight / 2 -
-        centerY * newScale,
-    });
   }}
 >
-  🔍 Find
+  🚪 Exit Measure
 </button>
 
-  <button
-    onClick={() =>
-      changeTool("measure")
-    }
-  >
-    📏 Measure
-  </button>
+      {/* BACK */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
 
-  <button
-    onClick={() =>
-      changeTool("line")
-    }
-  >
-    🖊 Draw
-  </button>
+          setCommandText("");
+          setMobileCommandPanel("home");
+        }}
+      >
+        ← Back
+      </button>
+    </>
+  )}
 
- {(tool === "line" || tool === "polyline") &&
-  !showLineInput && (
+  {/* =====================================================
+     MOBILE MODIFY
+  ===================================================== */}
+
+  {mobileCommandPanel === "modify" && (
+    <>
+
+      {/* MOVE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("move");
+        }}
+      >
+        ✥ Move
+      </button>
+
+      {/* COPY */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("copy");
+        }}
+      >
+        📋 Copy
+      </button>
+
+      {/* ROTATE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("rotate");
+        }}
+      >
+        🔄 Rotate
+      </button>
+
+      {/* TRIM */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("trim");
+        }}
+      >
+        ✂ Trim
+      </button>
+
+      {/* EXTEND */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("extend");
+        }}
+      >
+        ↔ Extend
+      </button>
+
+      {/* STRETCH */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("stretch");
+        }}
+      >
+        ↔ Stretch
+      </button>
+
+      {/* OFFSET */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("offset");
+        }}
+      >
+        ⬌ Offset
+      </button>
+
+      {/* MIRROR */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("mirror");
+        }}
+      >
+        🪞 Mirror
+      </button>
+
+      {/* SCALE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("scale");
+        }}
+      >
+        ⤢ Scale
+      </button>
+
+      {/* FILLET */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("fillet");
+        }}
+      >
+        ◯ Fillet
+      </button>
+
+      {/* CHAMFER */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("chamfer");
+        }}
+      >
+        ◇ Chamfer
+      </button>
+
+      {/* ARRAY */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("array");
+        }}
+      >
+        ▦ Array
+      </button>
+
+      {/* EXPLODE */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("explode");
+        }}
+      >
+        💥 Explode
+      </button>
+
+      {/* JOIN */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          selectMobileTool("join");
+        }}
+      >
+        🔗 Join
+      </button>
+
+      {/* BACK */}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          closeMobilePanel();
+        }}
+      >
+        ← Back
+      </button>
+    </>
+  )}
+
+  {/* =====================================================
+     MOBILE FIND
+  ===================================================== */}
+
+  {mobileCommandPanel === "find" && (
+    <>
+
+      <input
+        type="text"
+        value={commandText}
+        placeholder="Find object"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          setCommandText(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+
+            runMobileFind();
+          }
+        }}
+      />
+
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          runMobileFind();
+        }}
+      >
+        🔍 Find
+      </button>
+
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+
+          setCommandText("");
+          closeMobilePanel();
+        }}
+      >
+        ← Back
+      </button>
+
+    </>
+  )}
+
+<div className="mobile-command-status">
+
+  {tool === "line" ? (
+    <>
+      <div>Command: _LINE</div>
+
+      <strong>
+        {showLineInput
+          ? "LINE Specify distance / angle"
+          : linePreview && lineStart
+            ? (() => {
+                const dx =
+                  linePreview.x2 -
+                  linePreview.x1;
+
+                const dy =
+                  linePreview.y2 -
+                  linePreview.y1;
+
+                const distance =
+                  Math.hypot(dx, dy);
+
+                let angle =
+                  Math.atan2(dy, dx) *
+                  (180 / Math.PI);
+
+                if (angle < 0) {
+                  angle += 360;
+                }
+
+                return `LINE  Length: ${Math.round(
+                  distance
+                )}    Angle: ${angle.toFixed(
+                  1
+                )}°`;
+              })()
+            : lineStart
+              ? "LINE Specify next point"
+              : "LINE Specify first point"}
+      </strong>
+    </>
+  ) : tool === "polyline" ? (
+    <>
+      <div>Command: _PLINE</div>
+
+      <strong>
+        {lineStart
+          ? "POLYLINE Specify next point"
+          : "POLYLINE Specify first point"}
+      </strong>
+    </>
+  ) : tool === "measure" ? (
+    <>
+      <div>Command: _MEASUREGEOM</div>
+
+      <strong>
+        {measureStart
+          ? "MEASURE Specify second point"
+          : "MEASURE Specify first point"}
+      </strong>
+    </>
+  ) : tool === "dimension" ? (
+    <>
+      <div>Command: _DIMENSION</div>
+
+      <strong>
+        {measureStart
+          ? "DIMENSION Specify second point"
+          : "DIMENSION Specify first point"}
+      </strong>
+    </>
+  ) : tool === "radiusDimension" ? (
+    <>
+      <div>Command: _RADIUS</div>
+
+      <strong>
+        RADIUS Select circle or arc
+      </strong>
+    </>
+  ) : tool === "diameterDimension" ? (
+    <>
+      <div>Command: _DIAMETER</div>
+
+      <strong>
+        DIAMETER Select circle or arc
+      </strong>
+    </>
+  ) : tool === "angularDimension" ? (
+    <>
+      <div>Command: _ANGULAR</div>
+
+      <strong>
+        ANGLE Select two lines
+      </strong>
+    </>
+  ) : tool === "area" ? (
+    <>
+      <div>Command: _AREA</div>
+
+      <strong>
+        {commandText.trim()
+          ? commandText
+          : "AREA Select closed object"}
+      </strong>
+    </>
+  ) : tool === "rectangle" ? (
+    <>
+      <div>Command: _RECTANGLE</div>
+
+      <strong>
+        RECTANGLE Specify first corner
+      </strong>
+    </>
+  ) : tool === "circle" ? (
+    <>
+      <div>Command: _CIRCLE</div>
+
+      <strong>
+        CIRCLE Specify center point
+      </strong>
+    </>
+  ) : tool === "arc" ? (
+    <>
+      <div>Command: _ARC</div>
+
+      <strong>
+        ARC Specify center point
+      </strong>
+    </>
+  ) : tool === "text" ? (
+    <>
+      <div>Command: _TEXT</div>
+
+      <strong>
+        TEXT Specify insertion point
+      </strong>
+    </>
+  ) : tool === "hatch" ? (
+    <>
+      <div>Command: _HATCH</div>
+
+      <strong>
+        HATCH Select boundary
+      </strong>
+    </>
+  ) : tool === "move" ? (
+    <>
+      <div>Command: _MOVE</div>
+
+      <strong>
+        MOVE Select base point
+      </strong>
+    </>
+  ) : tool === "copy" ? (
+    <>
+      <div>Command: _COPY</div>
+
+      <strong>
+        COPY Specify base point
+      </strong>
+    </>
+  ) : tool === "rotate" ? (
+    <>
+      <div>Command: _ROTATE</div>
+
+      <strong>
+        ROTATE Specify base point
+      </strong>
+    </>
+  ) : tool === "trim" ? (
+    <>
+      <div>Command: _TRIM</div>
+
+      <strong>
+        TRIM Select cutting edge or object
+      </strong>
+    </>
+  ) : tool === "extend" ? (
+    <>
+      <div>Command: _EXTEND</div>
+
+      <strong>
+        EXTEND Select boundary or object
+      </strong>
+    </>
+  ) : tool === "stretch" ? (
+    <>
+      <div>Command: _STRETCH</div>
+
+      <strong>
+        STRETCH Select objects
+      </strong>
+    </>
+  ) : tool === "offset" ? (
+    <>
+      <div>Command: _OFFSET</div>
+
+      <strong>
+        OFFSET Specify distance
+      </strong>
+    </>
+  ) : tool === "mirror" ? (
+    <>
+      <div>Command: _MIRROR</div>
+
+      <strong>
+        MIRROR Select objects
+      </strong>
+    </>
+  ) : tool === "scale" ? (
+    <>
+      <div>Command: _SCALE</div>
+
+      <strong>
+        SCALE Specify base point
+      </strong>
+    </>
+  ) : tool === "fillet" ? (
+    <>
+      <div>Command: _FILLET</div>
+
+      <strong>
+        FILLET Select first object
+      </strong>
+    </>
+  ) : tool === "chamfer" ? (
+    <>
+      <div>Command: _CHAMFER</div>
+
+      <strong>
+        CHAMFER Select first object
+      </strong>
+    </>
+  ) : tool === "array" ? (
+    <>
+      <div>Command: _ARRAY</div>
+
+      <strong>
+        ARRAY Select objects
+      </strong>
+    </>
+  ) : tool === "explode" ? (
+    <>
+      <div>Command: _EXPLODE</div>
+
+      <strong>
+        EXPLODE Select object
+      </strong>
+    </>
+  ) : tool === "join" ? (
+    <>
+      <div>Command: _JOIN</div>
+
+      <strong>
+        JOIN Select objects to join
+      </strong>
+    </>
+  ) : tool === "select" ? (
+    <>
+      <div>Command: _SELECT</div>
+
+      <strong>
+        SELECT Select objects
+      </strong>
+    </>
+  ) : (
+    <>
+      <div>
+        Command: _{tool.toUpperCase()}
+      </div>
+
+      <strong>
+        {tool.toUpperCase()} command
+      </strong>
+    </>
+  )}
+
+</div>
+
+{/* =====================================================
+    MOBILE COMMAND CONTROLS
+===================================================== */}
+
+<div
+  className="mobile-command-controls"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onTouchMove={(e) => e.stopPropagation()}
+  onTouchEnd={(e) => e.stopPropagation()}
+>
+
+  {/* =========================
+    CLOSE ACTIVE COMMAND
+========================= */}
+
+{(tool === "line" || tool === "polyline") &&
+  lineStart && (
   <button
     type="button"
-    onClick={() => {
+    onClick={(e) => {
+      e.stopPropagation();
+
       setLineStart(null);
       setLinePreview(null);
       setPendingLinePoint(null);
       setLineLengthInput("");
       setShowLineInput(false);
+
       setIsDrawing(false);
+
+      actionStartRef.current = null;
+
+      setSnapPoint(null);
+      setSnapType("");
+
+      setCommandText("");
+      setMobileCommandPanel("home");
 
       changeTool("select");
     }}
@@ -37482,1095 +49056,9 @@ const index =
   </button>
 )}
 
-{selectedIndex !== null && (
-  <button
-    type="button"
-    onClick={() => {
-      deleteSelected();
-    }}
-  >
-    🗑 Delete
-  </button>
-)}
-
-{selectedIndex !== null &&
-  selectedObject && (
-    <button
-      type="button"
-      onClick={() => {
-        setShowMobileProperties(true);
-      }}
-    >
-      ℹ Properties
-    </button>
-  )}
-
-  {selectedIndex !== null && (
-  <>
-    <button
-      type="button"
-      onClick={() => {
-        changeTool("move");
-      }}
-    >
-      ✥ Move
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
-        changeTool("copy");
-      }}
-    >
-      📋 Copy
-    </button>
-
-    <button
-  type="button"
-  onClick={() => {
-    pasteDrawing();
-  }}
->
-  📥 Paste
-</button>
-
-<button
-  type="button"
-  onClick={() => {
-    cutDrawing();
-  }}
->
-  ✂ Cut
-</button>
-
-<button
-  type="button"
-  onClick={() => {
-    if (selectedIndex === null || !selectedObject) {
-      window.alert("Select an object first.");
-      return;
-    }
-
-    const indexes = objects
-      .map((object, index) =>
-        object?.type === selectedObject.type
-          ? index
-          : null
-      )
-      .filter((index) => index !== null);
-
-    setSelectedIndexes(indexes);
-
-    if (indexes.length > 0) {
-      setSelectedIndex(indexes[indexes.length - 1]);
-    }
-  }}
->
-  🔎 Similar
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    zoomToSelected();
-  }}
->
-  🔍 Zoom Selected
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    duplicateSelected();
-  }}
->
-  🧬 Duplicate
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    bringToFront();
-  }}
->
-  ⬆ Front
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    sendToBack();
-  }}
->
-  ⬇ Back
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    bringForward();
-  }}
->
-  ⬆ Forward
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    isolateSelectedLayer();
-  }}
->
-  👁 Isolate
-</button>
-  </>
-)}
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    unisolateLayers();
-  }}
->
-  👁 All Layers
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    reverseSelectedDirection();
-  }}
->
-  ↔ Reverse
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    invertSelection();
-  }}
->
-  🔄 Invert
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectCurrentLayer();
-  }}
->
-  📚 Layer All
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setSelectedLayerActive();
-  }}
->
-  🎯 Active Layer
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeSelectedLineWidth();
-  }}
->
-  🖊 Width
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    clearCurrentLayer();
-  }}
->
-  🧹 Clear Layer
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    resetView();
-  }}
->
-  ⛶ Reset View
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    rotateSelected90();
-  }}
->
-  ↻ Rotate 90°
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    resetSelectedRotation();
-  }}
->
-  ⟲ Reset Rotation
-</button>
-
-{selectedIndex !== null &&
-  selectedObject?.type === "text" && (
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        increaseSelectedTextSize();
-      }}
-    >
-      🔤 Text +
-    </button>
-  )}
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    decreaseSelectedTextSize();
-  }}
->
-  🔤 Text -
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    resetSelectedTextSize();
-  }}
->
-  🔤 Text Reset
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    increaseSelectedLineWidth();
-  }}
->
-  🖊 Width +
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    decreaseSelectedLineWidth();
-  }}
->
-  🖊 Width -
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllLines();
-  }}
->
-  ╱ All Lines
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllCircles();
-  }}
->
-  ○ All Circles
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllRectangles();
-  }}
->
-  □ All Rectangles
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllText();
-  }}
->
-  T All Text
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllPolylines();
-  }}
->
-  ╱╲ All Polyline
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllArcs();
-  }}
->
-  ◜ All Arc
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllDimensions();
-  }}
->
-  📐 All DIM
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectAllVisible();
-  }}
->
-  👁 Visible All
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    hideSelectedObject();
-  }}
->
-  🙈 Hide
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    showAllHiddenObjects();
-  }}
->
-  👁 Show Hidden
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    toggleSelectedVisibility();
-  }}
->
-  👁 Toggle
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    centerSelected();
-  }}
->
-  🎯 Center
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    nudgeSelectedLeft();
-  }}
->
-  ← 5
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    nudgeSelectedRight();
-  }}
->
-  → 5
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    nudgeSelectedUp();
-  }}
->
-  ↑ 5
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    nudgeSelectedDown();
-  }}
->
-  ↓ 5
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    fitAllObjects();
-  }}
->
-  ⛶ Fit All
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    deleteAllHiddenObjects();
-  }}
->
-  🗑 Hidden
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectByLayerPrompt();
-  }}
->
-  📚 Select Layer
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    showObjectCount();
-  }}
->
-  🔢 Object Count
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    selectByColorPrompt();
-  }}
->
-  🎨 Select Color
-</button>
-
-<button
-  type="button"
-  className={gridEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setGridEnabled((prev) => !prev);
-  }}
->
-  ▦ Grid
-</button>
-
-<button
-  type="button"
-  className={objectSnapEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setObjectSnapEnabled((prev) => !prev);
-  }}
->
-  🎯 OSNAP
-</button>
-
-<button
-  type="button"
-  className={orthoEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setOrthoEnabled((prev) => !prev);
-  }}
->
-  ⊥ Ortho
-</button>
-
-<button
-  type="button"
-  className={polarEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setPolarEnabled((prev) => !prev);
-  }}
->
-  ∠ Polar
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    changeSelectedColor();
-  }}
->
-  🎨 Color
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    editSelectedText();
-  }}
->
-  ✏ Text
-</button>
-
-{selectedIndex !== null &&
-  selectedObject && (
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        moveSelectedToLayerPrompt();
-      }}
-    >
-      📚 Move Layer
-    </button>
-  )}
-
-{selectedIndex !== null && (
-  <>
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("rotate");
-      }}
-    >
-      🔄 Rotate
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("stretch");
-      }}
-    >
-      ↔ Stretch
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("trim");
-      }}
-    >
-      ✂ Trim
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("extend");
-      }}
-    >
-      ↔ Extend
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        mirrorObject(selectedIndex);
-      }}
-    >
-      ↔ Mirror
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        scaleObject(selectedIndex);
-      }}
-    >
-      ⤢ Scale
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        offsetObject(selectedIndex);
-      }}
-    >
-      ⤴ Offset
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("fillet");
-      }}
-    >
-      ◯ Fillet
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("chamfer");
-      }}
-    >
-      ◇ Chamfer
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        explodeObject(selectedIndex);
-      }}
-    >
-      💥 Explode
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        changeTool("join");
-      }}
-    >
-      🔗 Join
-    </button>
-
-    <button
-      type="button"
-      onPointerDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        arrayObject(selectedIndex);
-      }}
-    >
-      ▦ Array
-    </button>
-  </>
-)}
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setScale((prev) => Math.min(prev * 1.25, 20));
-  }}
->
-  ＋ Zoom
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setScale((prev) => Math.max(prev / 1.25, 0.2));
-  }}
->
-  － Zoom
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    zoomFit();
-  }}
->
-  ⛶ Fit
-</button>
-
-<button
-  type="button"
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    setScale(1);
-
-    setPosition({
-      x: 0,
-      y: 0,
-    });
-  }}
->
-  100%
-</button>
-
-<button
-  type="button"
-  className={objectSnapEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setObjectSnapEnabled((prev) => !prev);
-  }}
->
-  OSNAP
-</button>
-
-<button
-  type="button"
-  className={gridEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setGridEnabled((prev) => !prev);
-  }}
->
-  GRID
-</button>
-
-<button
-  type="button"
-  className={gridSnapEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setGridSnapEnabled((prev) => !prev);
-  }}
->
-  SNAP
-</button>
-
-<button
-  type="button"
-  className={orthoEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setOrthoEnabled((prev) => !prev);
-  }}
->
-  ORTHO
-</button>
-
-<button
-  type="button"
-  className={polarEnabled ? "active" : ""}
-  onPointerDown={(e) => e.stopPropagation()}
-  onTouchStart={(e) => e.stopPropagation()}
-  onClick={(e) => {
-    e.stopPropagation();
-    setPolarEnabled((prev) => !prev);
-  }}
->
-  POLAR
-</button>
-{/* DYN */}
-<button
-  type="button"
-  className={
-    dynamicInputEnabled
-      ? "active"
-      : ""
-  }
-  onPointerDown={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchStart={(e) => {
-    e.stopPropagation();
-  }}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    setDynamicInputEnabled(
-      (prev) => !prev
-    );
-  }}
->
-  DYN
-</button>
-
-{/* TRACK */}
-<button
-  type="button"
-  className={
-    objectSnapTrackingEnabled
-      ? "active"
-      : ""
-  }
-  onPointerDown={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchStart={(e) => {
-    e.stopPropagation();
-  }}
-  onClick={(e) => {
-    e.stopPropagation();
-
-    setObjectSnapTrackingEnabled(
-      (prev) => !prev
-    );
-  }}
->
-  TRACK
-</button>
-
-<div
-  className="mobile-command-controls"
-  onPointerDown={(e) => {
-    e.stopPropagation();
-  }}
-  onPointerUp={(e) => {
-    e.stopPropagation();
-  }}
-  onPointerMove={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchStart={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchMove={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchEnd={(e) => {
-    e.stopPropagation();
-  }}
-  onMouseDown={(e) => {
-    e.stopPropagation();
-  }}
-  onMouseUp={(e) => {
-    e.stopPropagation();
-  }}
-  onClick={(e) => {
-    e.stopPropagation();
-  }}
-  style={{
-    position: "relative",
-    zIndex: 1000002,
-    pointerEvents: "auto",
-    touchAction: "manipulation",
-  }}
->
-  {/* =====================================================
-      CLOSE / CANCEL ACTIVE COMMAND
-  ===================================================== */}
-
-  {(
-    ((tool === "line" || tool === "polyline") && lineStart) ||
-    (tool === "hatch" && isDrawing)
-  ) && (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-
-        if (tool === "hatch" && isDrawing) {
-          setObjects((prev) => {
-            const lastIndex = prev.length - 1;
-            const lastObject = prev[lastIndex];
-
-            if (
-              lastObject &&
-              lastObject.type === "hatch"
-            ) {
-              return prev.slice(0, -1);
-            }
-
-            return prev;
-          });
-        }
-
-        setLineStart(null);
-        setLinePreview(null);
-        setPendingLinePoint(null);
-        setLineLengthInput("");
-        setShowLineInput(false);
-        setIsDrawing(false);
-
-        actionStartRef.current = null;
-        setSnapPoint(null);
-        setSnapType("");
-
-        changeTool("select");
-      }}
-    >
-      Close
-    </button>
-  )}
-
-  {/* =====================================================
+  {/* =========================
       UNDO
-  ===================================================== */}
+  ========================= */}
 
   <button
     type="button"
@@ -38623,8 +49111,14 @@ const index =
             lastObject.points.length - 2;
 
           setLineStart({
-            x: lastObject.points[newLength - 2],
-            y: lastObject.points[newLength - 1],
+            x:
+              lastObject.points[
+                newLength - 2
+              ],
+            y:
+              lastObject.points[
+                newLength - 1
+              ],
           });
 
           setLinePreview(null);
@@ -38632,33 +49126,26 @@ const index =
           setLineLengthInput("");
           setShowLineInput(false);
           setSnapPoint(null);
+          setSnapType("");
 
           return;
         }
       }
 
-      /* LINE — CANCEL CURRENT DRAWING */
-
-      if (
-        tool === "line" &&
-        (
-          lineStart ||
-          showLineInput ||
-          pendingLinePoint
-        )
-      ) {
-        setLinePreview(null);
-        setPendingLinePoint(null);
-        setLineLengthInput("");
-        setShowLineInput(false);
-        setIsDrawing(false);
-
+      /* LINE — REMOVE LAST SEGMENT */
+      if (undoActiveLineSegment()) {
         return;
       }
 
       /* NORMAL UNDO */
-
-      undo();
+      try {
+        undo();
+      } catch (error) {
+        console.error(
+          "Undo failed:",
+          error
+        );
+      }
     }}
     disabled={
       tool === "line"
@@ -38671,24 +49158,33 @@ const index =
     ↶ Undo
   </button>
 
-  {/* =====================================================
+    {/* =========================
       REDO
-  ===================================================== */}
+  ========================= */}
 
   <button
     type="button"
     onClick={(e) => {
       e.stopPropagation();
-      redo();
+
+      try {
+        redo();
+      } catch (error) {
+        console.error(
+          "Redo failed:",
+          error
+        );
+      }
     }}
     disabled={future.length === 0}
   >
     ↷ Redo
   </button>
 
-  {/* =====================================================
+
+  {/* =========================
       ESC
-  ===================================================== */}
+  ========================= */}
 
   <button
     type="button"
@@ -38702,13 +49198,16 @@ const index =
       setShowLineInput(false);
 
       setIsDrawing(false);
+
       setMeasureStart(null);
       setAnglePoints([]);
+
       setSnapType("");
       setSnapPoint(null);
 
       setSelectedIndex(null);
       setSelectedIndexes([]);
+
       setSelectedMeasurementIndex(null);
       setCommandFirstIndex(null);
 
@@ -38719,475 +49218,588 @@ const index =
       setShowMobileProperties(false);
       setShowMobileLayers(false);
 
+      setCommandText("");
+      setMobileCommandPanel("home");
+
       changeTool("select");
     }}
   >
     ESC
   </button>
 
-  {/* =====================================================
+
+  {/* =========================
       FIND
-  ===================================================== */}
+  ========================= */}
 
   <button
     type="button"
     onClick={(e) => {
       e.stopPropagation();
 
-      const query =
-        window.prompt(
-          "Find object type:",
-          "line"
-        );
-
-      if (!query || !query.trim()) {
-        return;
-      }
-
-      const search =
-        query.trim().toLowerCase();
-
-     const visibleObjects =
-  getVisibleObjectsForSearch();
-
-const foundObject =
-  visibleObjects.find(
-    (object) =>
-      String(object?.type || "")
-        .toLowerCase()
-        .includes(search) ||
-      String(object?.text || "")
-        .toLowerCase()
-        .includes(search)
-  );
-
-const index =
-  foundObject
-    ? objects.indexOf(foundObject)
-    : -1;
-
-      if (index === -1) {
-        window.alert(
-          "Object not found."
-        );
-        return;
-      }
-
-      setSelectedIndex(index);
-      setSelectedIndexes([index]);
-      setTool("select");
+      setCommandText("");
+      openMobilePanel("find");
     }}
   >
     🔍 Find
   </button>
 
-  {/* =====================================================
+
+  {/* =========================
       COMMAND INPUT
-  ===================================================== */}
+  ========================= */}
 
- <input
-  type="text"
-  inputMode="text"
-  value={
-    showLineInput
-      ? lineLengthInput
-      : commandText
-  }
-  autoFocus={showLineInput}
-  onChange={(e) => {
-    if (showLineInput) {
-      setLineLengthInput(e.target.value);
-    } else {
-      setCommandText(e.target.value);
+  <input
+    type="text"
+    inputMode={
+      showLineInput
+        ? "decimal"
+        : "text"
     }
-  }}
-  onKeyDown={(e) => {
-    if (e.key !== "Enter") {
-      return;
+    value={
+      showLineInput
+        ? lineLengthInput
+        : commandText
     }
+    autoFocus={showLineInput}
 
-    e.preventDefault();
+    onChange={(e) => {
+      if (showLineInput) {
+        setLineLengthInput(
+          e.target.value
+        );
+      } else {
+        setCommandText(
+          e.target.value
+        );
+      }
+    }}
 
-    if (showLineInput) {
-      confirmLineInput();
-      return;
-    }
+    onKeyDown={(e) => {
+      if (e.key !== "Enter") {
+        return;
+      }
 
-    const command = commandText
-      .trim()
-      .toLowerCase();
+      e.preventDefault();
 
-    if (!command) {
-      return;
-    }
+      /* LINE LENGTH */
+      if (showLineInput) {
+        confirmLineInput();
+        return;
+      }
 
-    const toolMap = {
-      select: "select",
-      line: "line",
-      circle: "circle",
-      rectangle: "rectangle",
-      polyline: "polyline",
-      arc: "arc",
-      text: "text",
-      measure: "measure",
-      dimension: "dimension",
-      angulardimension: "angularDimension",
-      radiusdimension: "radiusDimension",
-      diameterdimension: "diameterDimension",
-      move: "move",
-      copy: "copy",
-      rotate: "rotate",
-      trim: "trim",
-      extend: "extend",
-      stretch: "stretch",
-      offset: "offset",
-      fillet: "fillet",
-      chamfer: "chamfer",
-      array: "array",
-      mirror: "mirror",
-      scale: "scale",
-      explode: "explode",
-      join: "join",
-      hatch: "hatch",
-    };
-
-    if (command === "find") {
-      const searchText = window.prompt(
-        "Find object:",
-        "line"
-      );
-
-      if (searchText && searchText.trim()) {
-        const query = searchText
+      const command =
+        commandText
           .trim()
           .toLowerCase();
 
-       const visibleObjects =
-  getVisibleObjectsForFind();
+      if (!command) {
+        return;
+      }
 
-const foundObject =
-  visibleObjects.find(
-    (object) =>
-      String(object?.type || "")
-        .toLowerCase()
-        .includes(query) ||
-      String(object?.text || "")
-        .toLowerCase()
-        .includes(query)
+    const toolMap = {
+  /* BASIC DRAWING */
+  select: "select",
+  s: "select",
+
+  line: "line",
+  l: "line",
+  ln: "line",
+
+  polyline: "polyline",
+  pl: "polyline",
+  pline: "polyline",
+
+  spline: "spline",
+  spl: "spline",
+
+  arc: "arc",
+
+  ellipse: "ellipse",
+  ell: "ellipse",
+
+  circle: "circle",
+  c: "circle",
+  ci: "circle",
+
+  rectangle: "rectangle",
+  rec: "rectangle",
+  rectang: "rectangle",
+
+  text: "text",
+  t: "text",
+  dt: "text",
+
+  hatch: "hatch",
+  h: "hatch",
+  bh: "hatch",
+
+  point: "point",
+  po: "point",
+
+  /* MEASURE */
+  measure: "measure",
+  me: "measure",
+  distance: "measure",
+  dist: "measure",
+
+  dimension: "dimension",
+  dim: "dimension",
+
+  area: "area",
+  ar: "area",
+
+  volume: "volume",
+  vol: "volume",
+
+  quickmeasure: "quickMeasure",
+  quick: "quickMeasure",
+  qm: "quickMeasure",
+
+  angulardimension: "angularDimension",
+  ang: "angularDimension",
+
+  radiusdimension: "radiusDimension",
+  rad: "radiusDimension",
+
+  diameterdimension: "diameterDimension",
+  dia: "diameterDimension",
+
+  /* MODIFY */
+  move: "move",
+  m: "move",
+  mv: "move",
+
+  copy: "copy",
+  co: "copy",
+  cp: "copy",
+
+  rotate: "rotate",
+  ro: "rotate",
+
+  trim: "trim",
+  tr: "trim",
+
+  extend: "extend",
+  ex: "extend",
+  ext: "extend",
+
+  stretch: "stretch",
+  st: "stretch",
+
+  offset: "offset",
+  o: "offset",
+  of: "offset",
+
+  mirror: "mirror",
+  mi: "mirror",
+
+  scale: "scale",
+  sc: "scale",
+
+  fillet: "fillet",
+  f: "fillet",
+
+  chamfer: "chamfer",
+  cha: "chamfer",
+
+  array: "array",
+  arr: "array",
+
+  polararray: "polarArray",
+  polar: "polarArray",
+
+  explode: "explode",
+  exp: "explode",
+
+  join: "join",
+  j: "join",
+  jn: "join",
+
+  break: "break",
+  br: "break",
+
+  group: "group",
+  g: "group",
+
+  ungroup: "ungroup",
+  ug: "ungroup",
+
+  /* VIEW */
+  zoomfit: "zoomFit",
+  zf: "zoomFit",
+  ze: "zoomFit",
+
+  zoomin: "zoomIn",
+  zi: "zoomIn",
+
+  zoomout: "zoomOut",
+  zo: "zoomOut",
+};
+
+      if (command === "find") {
+        setCommandText("");
+        openMobilePanel("find");
+        return;
+      }
+
+      /* =========================
+   MOBILE ZOOM COMMANDS
+========================= */
+
+if (
+  command === "zf" ||
+  command === "ze" ||
+  command === "zoomfit"
+) {
+  zoomFit();
+  setCommandText("");
+  return;
+}
+
+if (
+  command === "zi" ||
+  command === "zoomin"
+) {
+  setScale((prevScale) =>
+    Math.min(prevScale * 1.2, 100)
   );
 
-const foundIndex =
-  foundObject
-    ? objects.indexOf(foundObject)
-    : -1;
+  setCommandText("");
+  return;
+}
 
-        if (foundIndex !== -1) {
-          setSelectedIndexes([foundIndex]);
-          setSelectedIndex(foundIndex);
-          changeTool("select");
-        } else {
-          window.alert(
-            `No "${searchText}" object found.`
-          );
-        }
+if (
+  command === "zo" ||
+  command === "zoomout"
+) {
+  setScale((prevScale) =>
+    Math.max(prevScale / 1.2, 0.01)
+  );
+
+  setCommandText("");
+  return;
+}
+
+      const selectedTool =
+        toolMap[command];
+
+      if (!selectedTool) {
+        window.alert(
+          `Unknown command: ${command}`
+        );
+        return;
       }
 
       setCommandText("");
-      return;
-    }
-
-    const selectedTool = toolMap[command];
-
-    if (!selectedTool) {
-      window.alert(
-        `Unknown command: ${command}`
+      selectMobileTool(
+        selectedTool
       );
-      return;
+    }}
+
+    placeholder={
+      showLineInput
+        ? "Length or Length<Angle"
+        : "Type a command"
     }
+  />
 
-    changeTool(selectedTool);
-    setCommandText("");
-  }}
-  placeholder={
-    showLineInput
-      ? "Length or Length<Angle"
-      : "Type a command"
-  }
-/>
 
-  {/* =====================================================
+  {/* =========================
       ENTER
-  ===================================================== */}
+  ========================= */}
 
- <button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
 
-    if (showLineInput) {
-      confirmLineInput();
-      return;
-    }
-
-    const command = commandText
-      .trim()
-      .toLowerCase();
-
-    if (!command) {
-      return;
-    }
-
-    const toolMap = {
-      select: "select",
-      line: "line",
-      circle: "circle",
-      rectangle: "rectangle",
-      polyline: "polyline",
-      arc: "arc",
-      text: "text",
-      measure: "measure",
-      dimension: "dimension",
-      angulardimension: "angularDimension",
-      radiusdimension: "radiusDimension",
-      diameterdimension: "diameterDimension",
-      move: "move",
-      copy: "copy",
-      rotate: "rotate",
-      trim: "trim",
-      extend: "extend",
-      stretch: "stretch",
-      offset: "offset",
-      fillet: "fillet",
-      chamfer: "chamfer",
-      array: "array",
-      mirror: "mirror",
-      scale: "scale",
-      explode: "explode",
-      join: "join",
-      hatch: "hatch",
-    };
-
-    if (command === "find") {
-      const searchText = window.prompt(
-        "Find object:",
-        "line"
-      );
-
-      if (searchText && searchText.trim()) {
-        const query = searchText
-          .trim()
-          .toLowerCase();
-
-       const visibleObjects =
-  getVisibleObjectsForFind();
-
-const foundObject =
-  visibleObjects.find(
-    (object) =>
-      String(object?.type || "")
-        .toLowerCase()
-        .includes(query) ||
-      String(object?.text || "")
-        .toLowerCase()
-        .includes(query)
-  );
-
-const foundIndex =
-  foundObject
-    ? objects.indexOf(foundObject)
-    : -1;
-
-        if (foundIndex !== -1) {
-          setSelectedIndexes([foundIndex]);
-          setSelectedIndex(foundIndex);
-          changeTool("select");
-        } else {
-          window.alert(
-            `No "${searchText}" object found.`
-          );
-        }
+      if (showLineInput) {
+        confirmLineInput();
+        return;
       }
 
-      setCommandText("");
-      return;
-    }
+     runMobileCommand(commandText);
+    }}
+  >
+    {showLineInput
+      ? "✓"
+      : "Enter"}
+  </button>
 
-    const selectedTool = toolMap[command];
-
-    if (!selectedTool) {
-      window.alert(
-        `Unknown command: ${command}`
-      );
-      return;
-    }
-
-    changeTool(selectedTool);
-    setCommandText("");
-  }}
->
-  {showLineInput ? "✓" : "Enter"}
-</button>
 </div>
 
 </div>
 
 {commandText.trim() !== "" && (
   <div className="command-suggestions">
-    {[
-      "Find",
-      "Line",
-      "Circle",
-      "Rectangle",
-      "Polyline",
-      "Arc",
-      "Text",
-      "Measure",
-      "Dimension",
-      "AngularDimension",
-      "RadiusDimension",
-      "DiameterDimension",
-      "Move",
-      "Copy",
-      "Rotate",
-      "Trim",
-      "Extend",
-      "Stretch",
-      "Offset",
-      "Fillet",
-      "Chamfer",
-      "Array",
-      "Mirror",
-      "Scale",
-      "Explode",
-      "Join",
-      "Hatch",
-    ]
-      .filter((command) =>
-        command
+  {[
+  "Find",
+  "Select",
+  "S",
+  "All",
+"SelectAll",
+"Last",
+"SelectLast",
+
+"None",
+"Deselect",
+"Unselect",
+
+  "Erase",
+"E",
+"ER",
+
+  "Undo",
+"U",
+
+"Ortho",
+"F8",
+
+"Polar",
+"Grid",
+"Snap",
+"OSNAP",
+"Dyn",
+"Track",
+
+"F1",
+"F2",
+"F3",
+"F7",
+"F9",
+"F10",
+"F11",
+"F12",
+
+"Properties",
+"Prop",
+"PR",
+"CTRL+SHIFT+U",
+
+"Layers",
+"Layer",
+"LA",
+"CTRL+SHIFT+K",
+
+"CTRL+SHIFT+J",
+
+"CTRL+SHIFT+V",
+"CTRL+SHIFT+W",
+"CTRL+SHIFT+B",
+"CTRL+SHIFT+Q",
+"CTRL+SHIFT+N",
+"CTRL+SHIFT+Y",
+"CTRL+SHIFT+I",
+
+"CTRL+SHIFT+L",
+"CTRL+SHIFT+C",
+"CTRL+SHIFT+R",
+"CTRL+SHIFT+T",
+"CTRL+SHIFT+H",
+
+"CTRL+ALT+M",
+"CTRL+ALT+A",
+"CTRL+ALT+D",
+"CTRL+ALT+G",
+"CTRL+ALT+I",
+"CTRL+ALT+B",
+
+"Save",
+"Open",
+
+"New",
+"N",
+
+"Restore",
+"R",
+
+"ClearAutoSave",
+"CA",
+
+"ExportPNG",
+"PNG",
+"EP",
+
+"ExportSVG",
+"SVG",
+"ES",
+
+"ExportDXF",
+"DXF",
+"ED",
+
+"Redo",
+"Y",
+
+"Esc",
+"Cancel",
+
+"Close",
+
+"Home",
+
+"ZoomFit",
+"ZF",
+"ZE",
+
+"ZoomIn",
+"ZI",
+
+"ZoomOut",
+"ZO",
+
+"Line",
+"L",
+"LN",
+
+"Circle",
+"C",
+"CI",
+
+"Rectangle",
+"REC",
+"RECTANG",
+
+"Text",
+"T",
+"DT",
+
+"Hatch",
+"H",
+"BH",
+
+"Polyline",
+"PL",
+"PLINE",
+
+"Arc",
+"ARC",
+
+"Array",
+"A",
+"ARR", 
+
+ "Measure",
+"ME",
+
+"Distance",
+"Dist",
+"DIST",
+
+"DI",
+
+"Area",
+"AR",
+"AA",
+
+  "Dimension",
+  "DIM",
+  "D",
+
+  "AngularDimension",
+  "ANG",
+  "AD",
+
+  "RadiusDimension",
+  "RAD",
+  "RD",
+
+"DiameterDimension",
+"DIA",
+"DD",
+
+ "Move",
+"M",
+"MV",
+
+"Copy",
+"CO",
+"CP",
+
+"Rotate",
+"RO",
+"RT",
+"RR",
+
+"Trim",
+"TR",
+"TRM",
+
+"Extend",
+"EX",
+"EXT",
+"EXD",
+
+"Stretch",
+"SST",
+"ST",
+
+"Offset",
+"O",
+"OF",
+"OFS",
+
+"Mirror",
+"MI",
+"MR",
+
+"Scale",
+"SC",
+"SL",
+
+"Fillet",
+"F",
+"FIL",
+
+"Chamfer",
+"CHA",
+"CH",
+
+"Explode",
+"X",
+"EXP",
+
+"Join",
+"J",
+"JN",
+]
+  .filter((command) =>
+    command
+      .toLowerCase()
+      .includes(
+        commandText
+          .trim()
           .toLowerCase()
-          .includes(
-            commandText
-              .trim()
-              .toLowerCase()
-          )
       )
-      .map((command) => (
-       <button
-  type="button"
-  key={command}
-  onPointerDown={(e) => {
-    e.stopPropagation();
-  }}
-  onTouchStart={(e) => {
-    e.stopPropagation();
-  }}
-  onClick={(e) => {
-    e.stopPropagation();
+  )
+  .map((command) => (
+    <button
+      type="button"
+      key={command}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
 
-            e.stopPropagation();
+        runMobileCommand(command);
 
-            if (command === "Find") {
-              const searchText = window.prompt(
-                "Find object:",
-                "line"
-              );
-
-              if (
-                searchText &&
-                searchText.trim()
-              ) {
-                const query =
-                  searchText
-                    .trim()
-                    .toLowerCase();
-
-                const foundIndex =
-                  objects.findIndex(
-                    (object) =>
-                      String(
-                        object?.type || ""
-                      )
-                        .toLowerCase()
-                        .includes(query) ||
-                      String(
-                        object?.text || ""
-                      )
-                        .toLowerCase()
-                        .includes(query)
-                  );
-
-                if (foundIndex !== -1) {
-                  setSelectedIndexes([
-                    foundIndex,
-                  ]);
-
-                  setSelectedIndex(
-                    foundIndex
-                  );
-
-                  changeTool("select");
-                } else {
-                  window.alert(
-                    `No "${searchText}" object found.`
-                  );
-                }
-              }
-
-              setCommandText("");
-              return;
-            }
-
-            const toolMap = {
-              Line: "line",
-              Circle: "circle",
-              Rectangle: "rectangle",
-              Polyline: "polyline",
-              Arc: "arc",
-              Text: "text",
-              Measure: "measure",
-              Dimension: "dimension",
-              AngularDimension:
-                "angularDimension",
-              RadiusDimension:
-                "radiusDimension",
-              DiameterDimension:
-                "diameterDimension",
-              Move: "move",
-              Copy: "copy",
-              Rotate: "rotate",
-              Trim: "trim",
-              Extend: "extend",
-              Stretch: "stretch",
-              Offset: "offset",
-              Fillet: "fillet",
-              Chamfer: "chamfer",
-              Array: "array",
-              Mirror: "mirror",
-              Scale: "scale",
-              Explode: "explode",
-              Join: "join",
-              Hatch: "hatch",
-            };
-
-            const selectedTool =
-              toolMap[command];
-
-            if (selectedTool) {
-              changeTool(selectedTool);
-            }
-
-            setCommandText("");
-          }}
-        >
-          {command}
-        </button>
-      ))}
+        setCommandText("");
+      }}
+    >
+      {command}
+    </button>
+  ))}
   </div>
 )}
 
-      </div>
+</div>
 
-    {showMobileProperties &&
+{showMobileProperties &&
   selectedObject && (
     <div
       onPointerDown={(e) => {
@@ -39226,6 +49838,10 @@ const foundIndex =
         touchAction: "pan-y",
       }}
     >
+      {/* =========================
+          HEADER
+      ========================= */}
+
       <div
         style={{
           display: "flex",
@@ -39240,7 +49856,8 @@ const foundIndex =
 
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             setShowMobileProperties(false);
           }}
         >
@@ -39248,96 +49865,27 @@ const foundIndex =
         </button>
       </div>
 
-      <label>Color</label>
+      {/* =========================
+          OBJECT COLOR
+      ========================= */}
 
-      {selectedObject?.type === "hatch" && (
-  <>
-    <label>Hatch Spacing</label>
-    <input
-      type="number"
-      min="2"
-      value={selectedObject.hatchSpacing || 12}
-      onChange={(e) => {
-        const value = Math.max(
-          2,
-          Number(e.target.value) || 2
-        );
-
-        setObjects((prev) =>
-          prev.map((object, index) =>
-            index === selectedIndex
-              ? {
-                  ...object,
-                  hatchSpacing: value,
-                }
-              : object
-          )
-        );
-      }}
-      style={{
-        width: "100%",
-        marginBottom: "10px",
-      }}
-    />
-
-    <label>Hatch Angle</label>
-    <input
-      type="number"
-      value={selectedObject.hatchAngle ?? 45}
-      onChange={(e) => {
-        const value =
-          Number(e.target.value) || 0;
-
-        setObjects((prev) =>
-          prev.map((object, index) =>
-            index === selectedIndex
-              ? {
-                  ...object,
-                  hatchAngle: value,
-                }
-              : object
-          )
-        );
-      }}
-      style={{
-        width: "100%",
-        marginBottom: "10px",
-      }}
-    />
-  </>
-)}
-
-<label>Hatch Color</label>
-
-<input
-  type="color"
-  value={
-    selectedObject.hatchColor ||
-    "#00aaff"
-  }
-  onChange={(e) => {
-    setObjects((prev) =>
-      prev.map((object, index) =>
-        index === selectedIndex
-          ? {
-              ...object,
-              hatchColor:
-                e.target.value,
-            }
-          : object
-      )
-    );
-  }}
-  style={{
-    width: "100%",
-    height: "42px",
-    marginBottom: "12px",
-  }}
-/>
+      <label
+        style={{
+          display: "block",
+          marginBottom: "5px",
+          fontSize: "12px",
+          color: "#aaa",
+        }}
+      >
+        Color
+      </label>
 
       <input
         type="color"
-        value={selectedObject.color || "#ffffff"}
+        value={
+          selectedObject.color ||
+          "#ffffff"
+        }
         onChange={(event) => {
           updateSelectedObject(
             "color",
@@ -39351,147 +49899,457 @@ const foundIndex =
         }}
       />
 
-      <label>Line Width</label>
+      {/* =========================
+          HATCH PROPERTIES
+      ========================= */}
+
+      {selectedObject.type === "hatch" && (
+        <>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Hatch Spacing
+          </label>
+
+          <input
+            type="number"
+            min="4"
+            value={
+              selectedObject.hatchSpacing ??
+              12
+            }
+            onChange={(event) => {
+              const value = Math.max(
+                4,
+                Number(
+                  event.target.value
+                ) || 4
+              );
+
+              updateSelectedObject(
+                "hatchSpacing",
+                value
+              );
+            }}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              minHeight: "42px",
+              marginBottom: "12px",
+              padding: "8px",
+              background: "#222",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: "6px",
+            }}
+          />
+
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Hatch Angle
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            max="360"
+            value={
+              selectedObject.hatchAngle ??
+              45
+            }
+            onChange={(event) => {
+              let value =
+                Number(
+                  event.target.value
+                );
+
+              if (!Number.isFinite(value)) {
+                value = 45;
+              }
+
+              value = Math.max(
+                0,
+                Math.min(360, value)
+              );
+
+              updateSelectedObject(
+                "hatchAngle",
+                value
+              );
+            }}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              minHeight: "42px",
+              marginBottom: "12px",
+              padding: "8px",
+              background: "#222",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: "6px",
+            }}
+          />
+
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Hatch Color
+          </label>
+
+          <input
+            type="color"
+            value={
+              selectedObject.hatchColor ||
+              "#00aaff"
+            }
+            onChange={(event) => {
+              updateSelectedObject(
+                "hatchColor",
+                event.target.value
+              );
+            }}
+            style={{
+              width: "100%",
+              height: "42px",
+              marginBottom: "12px",
+            }}
+          />
+        </>
+      )}
+
+      {/* =========================
+          LINE WIDTH
+      ========================= */}
+
+      <label
+        style={{
+          display: "block",
+          marginBottom: "5px",
+          fontSize: "12px",
+          color: "#aaa",
+        }}
+      >
+        Line Width
+      </label>
 
       <input
         type="number"
         min="1"
         max="20"
-        value={selectedObject.strokeWidth || 2}
+        value={
+          selectedObject.strokeWidth ||
+          2
+        }
         onChange={(event) => {
+          const value = Math.max(
+            1,
+            Math.min(
+              20,
+              Number(
+                event.target.value
+              ) || 1
+            )
+          );
+
           updateSelectedObject(
             "strokeWidth",
-            event.target.value
+            value
           );
         }}
         style={{
           width: "100%",
+          boxSizing: "border-box",
           minHeight: "42px",
           marginBottom: "12px",
+          padding: "8px",
+          background: "#222",
+          color: "#fff",
+          border: "1px solid #444",
+          borderRadius: "6px",
         }}
       />
 
-      <label>Rotation</label>
+      {/* =========================
+          ROTATION
+      ========================= */}
+
+      <label
+        style={{
+          display: "block",
+          marginBottom: "5px",
+          fontSize: "12px",
+          color: "#aaa",
+        }}
+      >
+        Rotation
+      </label>
 
       <input
         type="number"
-        value={selectedObject.rotation || 0}
+        value={
+          selectedObject.rotation ||
+          0
+        }
         onChange={(event) => {
           updateSelectedObject(
             "rotation",
-            event.target.value
+            Number(
+              event.target.value
+            ) || 0
           );
         }}
         style={{
           width: "100%",
+          boxSizing: "border-box",
           minHeight: "42px",
           marginBottom: "12px",
+          padding: "8px",
+          background: "#222",
+          color: "#fff",
+          border: "1px solid #444",
+          borderRadius: "6px",
         }}
       />
 
-      {selectedObject.radius !== undefined && (
+      {/* =========================
+          RADIUS
+      ========================= */}
+
+      {selectedObject.radius !==
+        undefined && (
         <>
-          <label>Radius</label>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Radius
+          </label>
 
           <input
             type="number"
             min="1"
-            value={selectedObject.radius}
+            value={
+              selectedObject.radius
+            }
             onChange={(event) => {
+              const value = Math.max(
+                1,
+                Number(
+                  event.target.value
+                ) || 1
+              );
+
               updateSelectedObject(
                 "radius",
-                event.target.value
+                value
               );
             }}
             style={{
               width: "100%",
+              boxSizing: "border-box",
               minHeight: "42px",
               marginBottom: "12px",
+              padding: "8px",
+              background: "#222",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: "6px",
             }}
           />
         </>
       )}
 
-      {selectedObject.width !== undefined && (
+      {/* =========================
+          WIDTH
+      ========================= */}
+
+      {selectedObject.width !==
+        undefined && (
         <>
-          <label>Width</label>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Width
+          </label>
 
           <input
             type="number"
-            min="1"
-            value={selectedObject.width}
+            value={
+              selectedObject.width
+            }
             onChange={(event) => {
               updateSelectedObject(
                 "width",
-                event.target.value
+                Number(
+                  event.target.value
+                ) || 0
               );
             }}
             style={{
               width: "100%",
+              boxSizing: "border-box",
               minHeight: "42px",
               marginBottom: "12px",
+              padding: "8px",
+              background: "#222",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: "6px",
             }}
           />
         </>
       )}
 
-      {selectedObject.height !== undefined && (
+      {/* =========================
+          HEIGHT
+      ========================= */}
+
+      {selectedObject.height !==
+        undefined && (
         <>
-          <label>Height</label>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Height
+          </label>
 
           <input
             type="number"
-            min="1"
-            value={selectedObject.height}
+            value={
+              selectedObject.height
+            }
             onChange={(event) => {
               updateSelectedObject(
                 "height",
-                event.target.value
+                Number(
+                  event.target.value
+                ) || 0
               );
             }}
             style={{
               width: "100%",
+              boxSizing: "border-box",
               minHeight: "42px",
               marginBottom: "12px",
+              padding: "8px",
+              background: "#222",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: "6px",
             }}
           />
         </>
       )}
 
-      {selectedObject.fontSize !== undefined && (
+      {/* =========================
+          FONT SIZE
+      ========================= */}
+
+      {selectedObject.fontSize !==
+        undefined && (
         <>
-          <label>Font Size</label>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "5px",
+              fontSize: "12px",
+              color: "#aaa",
+            }}
+          >
+            Font Size
+          </label>
 
           <input
             type="number"
-            min="1"
-            value={selectedObject.fontSize}
+            min="6"
+            max="200"
+            value={
+              selectedObject.fontSize
+            }
             onChange={(event) => {
+              const value = Math.max(
+                6,
+                Math.min(
+                  200,
+                  Number(
+                    event.target.value
+                  ) || 6
+                )
+              );
+
               updateSelectedObject(
                 "fontSize",
-                event.target.value
+                value
               );
             }}
             style={{
               width: "100%",
+              boxSizing: "border-box",
               minHeight: "42px",
               marginBottom: "12px",
+              padding: "8px",
+              background: "#222",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: "6px",
             }}
           />
         </>
       )}
 
+      {/* =========================
+          DONE
+      ========================= */}
+
       <button
         type="button"
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           setShowMobileProperties(false);
         }}
         style={{
           width: "100%",
           minHeight: "44px",
+          marginTop: "4px",
+          background: "#2d4058",
+          color: "#fff",
+          border: "1px solid #4b6b91",
+          borderRadius: "7px",
+          fontWeight: "600",
+          cursor: "pointer",
         }}
       >
-        ✓ Done
+        Done
       </button>
     </div>
   )}
