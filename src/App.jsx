@@ -18,6 +18,18 @@ import {
 import "./App.css";
 
 function App() {
+  // === VIDEO CLONE: App phases ===
+  const [appPhase, setAppPhase] = useState("splash"); // splash -> preparing -> home -> editor
+  useEffect(() => {
+    if (appPhase === "splash") {
+      const t = setTimeout(() => setAppPhase("preparing"), 1800);
+      return () => clearTimeout(t);
+    }
+    if (appPhase === "preparing") {
+      const t = setTimeout(() => setAppPhase("home"), 2200);
+      return () => clearTimeout(t);
+    }
+  }, [appPhase]);
 
  const [showHome, setShowHome] = useState(false);
 
@@ -106,7 +118,66 @@ const [showMeasureMenu, setShowMeasureMenu] =
 const [measurements, setMeasurements] =
   useState([]);
 
-    /* =========================
+    
+  // === VIDEO CLONE: Early returns for splash/home ===
+  if (appPhase === "splash") {
+    return (
+      <div className="acad-splash">
+        <div className="acad-splash-center">
+          <div className="acad-big-a">A</div>
+        </div>
+        <div className="acad-splash-bottom">
+          <div className="acad-logo-small"><span>A</span></div>
+          <div className="acad-brand">AUTODESK AutoCAD</div>
+          <div className="acad-loader"></div>
+        </div>
+      </div>
+    );
+  }
+  if (appPhase === "preparing") {
+    return (
+      <div className="acad-preparing">
+        <div className="acad-prep-bg"></div>
+        <div className="acad-loader big blue"></div>
+        <p>Preparing...</p>
+        <div className="acad-splash-bottom">
+          <div className="acad-logo-small"><span>A</span></div>
+          <div className="acad-brand">AUTODESK AutoCAD</div>
+          <div className="acad-loader"></div>
+        </div>
+      </div>
+    );
+  }
+  if (appPhase === "home") {
+    return (
+      <div className="acad-home">
+        <div className="acad-home-top">
+          <div className="avatar">AS</div>
+          <div className="home-brand"><span>A</span> AUTODESK AutoCAD</div>
+        </div>
+        <div className="trial-banner">
+          <span>ⓘ 12 days left in your trial.</span>
+          <button className="buy">Buy Now</button>
+          <span className="close">✕</span>
+        </div>
+        <div className="home-content">
+          <h3>Recent</h3>
+          <p className="muted">Recently opened drawings will appear here as you use AutoCAD on different devices.</p>
+          <div className="recent-card" onClick={() => setAppPhase("editor")}>
+            <div className="dwg-thumb"></div>
+            <div><b>Drawing.dwg</b><br/><small>Monday on Android • AutoCAD Web</small></div>
+          </div>
+          <h3>Sources</h3>
+          <div className="source-item" onClick={() => setAppPhase("editor")}><i>⌂</i> <div>AutoCAD Web<br/><small>ankitshingh202502@gmail.com</small></div><span>⋮</span></div>
+          <div className="source-item" onClick={() => setAppPhase("editor")}><i>📁</i> <div>Open from device</div></div>
+          <div className="source-item"><i>📦</i> <div>Autodesk Projects</div></div>
+          <div className="source-item"><i>☁</i> <div>Add Storage Source...</div></div>
+        </div>
+      </div>
+    );
+  }
+
+/* =========================
    CIRCLE GRIP DRAG
 ========================= */
 
@@ -2631,14 +2702,17 @@ if (
   /* =========================
    CLOSE ACTIVE COMMAND
 ========================= */
-
 if (command === "close") {
+  if (tool === "polyline") {
+    closeActivePolyline();
+    return;
+  }
+
   setLineStart(null);
   setLinePreview(null);
   setPendingLinePoint(null);
   setLineLengthInput("");
   setShowLineInput(false);
-
   setIsDrawing(false);
 
   actionStartRef.current = null;
@@ -2653,7 +2727,6 @@ if (command === "close") {
 
   return;
 }
-
 /* =========================
    HOME PANEL
 ========================= */
@@ -3143,41 +3216,93 @@ if (
 };
 
 /* =========================
-   MOBILE LINE UNDO
+   MOBILE LINE / POLYLINE UNDO
 ========================= */
 
 const undoActiveLineSegment = () => {
   if (
-    tool !== "line" ||
+    (tool !== "line" && tool !== "polyline") ||
     !lineStart ||
     showLineInput
   ) {
     return false;
   }
 
-  const lastObject =
-    objects[objects.length - 1];
+  const lastObject = objects[objects.length - 1];
 
   if (
     !lastObject ||
-    lastObject.type !== "line" ||
     !Array.isArray(lastObject.points) ||
     lastObject.points.length < 4
   ) {
     return false;
   }
 
-  /*
-     Current objects me se last LINE
-     hatne ke baad next start point
-     previous line ka END hoga.
-  */
+  if (
+    tool === "line" &&
+    lastObject.type !== "line"
+  ) {
+    return false;
+  }
 
-  const previousObjects =
-    objects.slice(0, -1);
+  if (
+    tool === "polyline" &&
+    lastObject.type !== "polyline"
+  ) {
+    return false;
+  }
 
-  const previousLine =
-    [...previousObjects]
+  let nextStart;
+
+  /* =========================
+     POLYLINE: REMOVE LAST SEGMENT
+  ========================= */
+
+  if (tool === "polyline") {
+    const points = lastObject.points;
+
+    if (points.length < 6) {
+      return false;
+    }
+
+    const updatedPoints = points.slice(0, -2);
+
+    saveHistory([...objects], [...measurements]);
+
+    setObjects((prev) => {
+      const updated = [...prev];
+      const index = updated.length - 1;
+
+      if (
+        !updated[index] ||
+        updated[index].type !== "polyline"
+      ) {
+        return prev;
+      }
+
+      updated[index] = {
+        ...updated[index],
+        points: updatedPoints,
+        closed: false,
+      };
+
+      return updated;
+    });
+
+    nextStart = {
+      x: updatedPoints[updatedPoints.length - 2],
+      y: updatedPoints[updatedPoints.length - 1],
+    };
+  }
+
+  /* =========================
+     LINE: UNDO LAST LINE
+  ========================= */
+
+  else {
+    const previousObjects = objects.slice(0, -1);
+
+    const previousLine = [...previousObjects]
       .reverse()
       .find(
         (object) =>
@@ -3186,31 +3311,27 @@ const undoActiveLineSegment = () => {
           object.points.length >= 4
       );
 
-  const nextStart = previousLine
-    ? {
-        x:
-          previousLine.points[
+    nextStart = previousLine
+      ? {
+          x: previousLine.points[
             previousLine.points.length - 2
           ],
-        y:
-          previousLine.points[
+          y: previousLine.points[
             previousLine.points.length - 1
           ],
-      }
-    : {
-        x: lastObject.points[0],
-        y: lastObject.points[1],
-      };
+        }
+      : {
+          x: lastObject.points[0],
+          y: lastObject.points[1],
+        };
 
-  /*
-     Normal undo use karo taaki
-     REDO history bhi properly bane.
-  */
-  undo();
+    undo();
+  }
 
-  /*
-     LINE command ko continue rakho.
-  */
+  /* =========================
+     CONTINUE DRAWING
+  ========================= */
+
   setLineStart(nextStart);
 
   setLinePreview({
@@ -3226,6 +3347,76 @@ const undoActiveLineSegment = () => {
   setSnapPoint(null);
   setSnapType("");
   setIsDrawing(true);
+
+  return true;
+};
+
+/* =========================
+   CLOSE ACTIVE POLYLINE
+========================= */
+
+const closeActivePolyline = () => {
+  const lastObject = objects[objects.length - 1];
+
+  if (
+    tool !== "polyline" ||
+    !lastObject ||
+    lastObject.type !== "polyline" ||
+    !Array.isArray(lastObject.points) ||
+    lastObject.points.length < 6
+  ) {
+    return false;
+  }
+
+  const points = [...lastObject.points];
+
+  const firstX = points[0];
+  const firstY = points[1];
+
+  const lastX = points[points.length - 2];
+  const lastY = points[points.length - 1];
+
+  const alreadyClosed =
+    firstX === lastX && firstY === lastY;
+
+  const closedPoints = alreadyClosed
+    ? points
+    : [...points, firstX, firstY];
+
+  saveHistory([...objects], [...measurements]);
+
+  setObjects((prev) => {
+    const updated = [...prev];
+    const index = updated.length - 1;
+
+    if (
+      !updated[index] ||
+      updated[index].type !== "polyline"
+    ) {
+      return prev;
+    }
+
+    updated[index] = {
+      ...updated[index],
+      points: closedPoints,
+      closed: true,
+    };
+
+    return updated;
+  });
+
+  setLineStart(null);
+  setLinePreview(null);
+  setPendingLinePoint(null);
+  setLineLengthInput("");
+  setShowLineInput(false);
+  setIsDrawing(false);
+  setSnapPoint(null);
+  setSnapType("");
+  actionStartRef.current = null;
+  setCommandText("");
+  setMobileCommandPanel("home");
+  changeTool("select");
 
   return true;
 };
@@ -4893,132 +5084,40 @@ if (angleInput !== null) {
     lineStart.y +
     uy * length;
 }
-
 if (tool === "polyline") {
+  const currentPolyline =
+    objects[objects.length - 1];
+
+  if (
+    !currentPolyline ||
+    currentPolyline.type !== "polyline" ||
+    !Array.isArray(currentPolyline.points)
+  ) {
+    return;
+  }
+
   saveHistory(
     [...objects],
     [...measurements]
   );
 
-  if (
-  isDrawing &&
-  !showLineInput
-) {
-  const currentPolyline =
-    objects[objects.length - 1];
-
-  if (
-    currentPolyline?.type === "polyline" &&
-    currentPolyline.points?.length >= 4
-  ) {
-    const firstX =
-      currentPolyline.points[0];
-
-    const firstY =
-      currentPolyline.points[1];
-
-    const distanceToStart =
-      Math.hypot(
-        x - firstX,
-        y - firstY
-      );
-
-    if (
-      distanceToStart <= snapDistance
-    ) {
-      const previousObjects = [
-        ...objects,
-      ];
-
-      setObjects((prev) => {
-        if (prev.length === 0) {
-          return prev;
-        }
-
-        const updated = [...prev];
-        const index = updated.length - 1;
-        const polyline = updated[index];
-
-        if (
-          !polyline ||
-          polyline.type !== "polyline"
-        ) {
-          return prev;
-        }
-
-        const lastX =
-          polyline.points[
-            polyline.points.length - 2
-          ];
-
-        const lastY =
-          polyline.points[
-            polyline.points.length - 1
-          ];
-
-        const alreadyClosed =
-          Math.abs(lastX - firstX) < 0.001 &&
-          Math.abs(lastY - firstY) < 0.001;
-
-        if (alreadyClosed) {
-          return prev;
-        }
-
-        updated[index] = {
-          ...polyline,
-          points: [
-            ...polyline.points,
-            firstX,
-            firstY,
-          ],
-        };
-
-        return updated;
-      });
-
-      saveHistory(
-        previousObjects,
-        [...measurements]
-      );
-
-      setIsDrawing(false);
-      setLineStart(null);
-      setPendingLinePoint(null);
-      setLinePreview(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-      setSnapPoint(null);
-      setSnapType("");
-      actionStartRef.current = null;
-
-      return;
-    }
-  }
-}
-
   setObjects((prev) => {
-    if (prev.length === 0) {
-      return prev;
-    }
-
     const updated = [...prev];
-    const lastIndex =
-      updated.length - 1;
-
-    const lastObject =
-      updated[lastIndex];
+    const index = updated.length - 1;
+    const current = updated[index];
 
     if (
-      !lastObject ||
-      lastObject.type !== "polyline"
+      !current ||
+      current.type !== "polyline" ||
+      !Array.isArray(current.points)
     ) {
       return prev;
     }
 
-    updated[lastIndex] = {
-      ...lastObject,
+    updated[index] = {
+      ...current,
       points: [
-        ...(lastObject.points || []),
+        ...current.points,
         finalX,
         finalY,
       ],
@@ -5036,10 +5135,15 @@ if (tool === "polyline") {
   setLineLengthInput("");
   setShowLineInput(false);
   setLinePreview(null);
+  setSnapPoint(null);
+  setSnapType("");
+
+  setIsDrawing(true);
+
+  actionStartRef.current = null;
 
   if (
-    document.activeElement instanceof
-    HTMLElement
+    document.activeElement instanceof HTMLElement
   ) {
     document.activeElement.blur();
   }
@@ -10156,6 +10260,8 @@ const finishPolyline = () => {
 ========================= */
 
 const handleKeyDown = (e) => {
+  console.log("KEYBOARD EVENT:", e.key);
+  
 
   const target = e.target;
 
@@ -10179,101 +10285,30 @@ const handleKeyDown = (e) => {
   const key =
     e.key.toLowerCase();
 
-    // =========================
-// U = UNDO LAST POLYLINE SEGMENT
-// =========================
+
+/* =========================
+   U = UNDO LAST POLYLINE SEGMENT
+========================= */
+
 if (
   key === "u" &&
   !e.ctrlKey &&
+  !e.metaKey &&
+  !e.shiftKey &&
   tool === "polyline" &&
-  isDrawing &&
+  lineStart &&
   !showLineInput
 ) {
   e.preventDefault();
+  window.alert("U shortcut triggered");
 
-  const lastIndex =
-    objects.length - 1;
-
-  const lastObject =
-    objects[lastIndex];
-
-  if (
-    !lastObject ||
-    lastObject.type !== "polyline" ||
-    !Array.isArray(lastObject.points)
-  ) {
+  if (undoActiveLineSegment()) {
     return;
   }
-
-  if (lastObject.points.length <= 2) {
-    return;
-  }
-
-  const previousObjects = [
-    ...objects,
-  ];
-
-  setObjects((prev) => {
-    if (prev.length === 0) {
-      return prev;
-    }
-
-    const updated = [...prev];
-    const index = updated.length - 1;
-    const polyline = updated[index];
-
-    if (
-      !polyline ||
-      polyline.type !== "polyline" ||
-      polyline.points.length <= 2
-    ) {
-      return prev;
-    }
-
-    updated[index] = {
-      ...polyline,
-      points:
-        polyline.points.slice(
-          0,
-          -2
-        ),
-    };
-
-    return updated;
-  });
-
-  saveHistory(
-    previousObjects,
-    [...measurements]
-  );
-
-  const newLastObject =
-    objects[lastIndex];
-
-  if (
-    newLastObject?.points?.length >= 4
-  ) {
-    const newLastX =
-      newLastObject.points[
-        newLastObject.points.length - 4
-      ];
-
-    const newLastY =
-      newLastObject.points[
-        newLastObject.points.length - 3
-      ];
-
-    setLineStart({
-      x: newLastX,
-      y: newLastY,
-    });
-  }
-
-  setPendingLinePoint(null);
-  setLinePreview(null);
 
   return;
 }
+
 
 // =========================
 // U = UNDO LAST LINE SEGMENT
@@ -36245,21 +36280,9 @@ if (
   setLinePreview(null);
   setIsDrawing(false);
 }
+  
   setTool(newTool);
-  if (newTool === "line") {
-  const selectedUnit = window.prompt(
-    "Line unit choose karo:\nmm = millimeter\ninch = inch\nft-in = feet + inch",
-    unit
-  );
 
-  if (
-    selectedUnit === "mm" ||
-    selectedUnit === "inch" ||
-    selectedUnit === "ft-in"
-  ) {
-    setUnit(selectedUnit);
-  }
-}
 
   const drawingTools = [
   "line",
@@ -49028,135 +49051,82 @@ if (e.key === "ArrowDown") {
 
 {(tool === "line" || tool === "polyline") &&
   lineStart && (
-  <button
-    type="button"
+    <button
+      type="button"
     onClick={(e) => {
-      e.stopPropagation();
+  e.stopPropagation();
 
-      setLineStart(null);
-      setLinePreview(null);
-      setPendingLinePoint(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
+  if (tool === "polyline") {
+    closeActivePolyline();
+    return;
+  }
 
-      setIsDrawing(false);
-
-      actionStartRef.current = null;
-
-      setSnapPoint(null);
-      setSnapType("");
-
-      setCommandText("");
-      setMobileCommandPanel("home");
-
-      changeTool("select");
-    }}
-  >
-    Close
-  </button>
+  setLineStart(null);
+  setLinePreview(null);
+  setPendingLinePoint(null);
+  setLineLengthInput("");
+  setShowLineInput(false);
+  setIsDrawing(false);
+  setSnapPoint(null);
+  setSnapType("");
+  actionStartRef.current = null;
+  setCommandText("");
+  setMobileCommandPanel("home");
+  changeTool("select");
+}}
+    >
+      Close
+    </button>
 )}
 
-  {/* =========================
-      UNDO
-  ========================= */}
 
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation();
 
-      /* POLYLINE — REMOVE LAST SEGMENT */
-      if (
-        tool === "polyline" &&
-        isDrawing &&
-        !showLineInput
-      ) {
-        const lastObject =
-          objects[objects.length - 1];
+{/* =========================
+    UNDO
+========================= */}
 
-        if (
-          lastObject &&
-          lastObject.type === "polyline" &&
-          Array.isArray(lastObject.points) &&
-          lastObject.points.length >= 4
-        ) {
-          saveHistory(
-            [...objects],
-            [...measurements]
-          );
+<button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
 
-          setObjects((prev) => {
-            const updated = [...prev];
-            const index = updated.length - 1;
-            const current = updated[index];
-
-            if (
-              !current ||
-              current.type !== "polyline" ||
-              !Array.isArray(current.points) ||
-              current.points.length < 4
-            ) {
-              return prev;
-            }
-
-            updated[index] = {
-              ...current,
-              points: current.points.slice(0, -2),
-            };
-
-            return updated;
-          });
-
-          const newLength =
-            lastObject.points.length - 2;
-
-          setLineStart({
-            x:
-              lastObject.points[
-                newLength - 2
-              ],
-            y:
-              lastObject.points[
-                newLength - 1
-              ],
-          });
-
-          setLinePreview(null);
-          setPendingLinePoint(null);
-          setLineLengthInput("");
-          setShowLineInput(false);
-          setSnapPoint(null);
-          setSnapType("");
-
-          return;
-        }
-      }
-
-      /* LINE — REMOVE LAST SEGMENT */
-      if (undoActiveLineSegment()) {
-        return;
-      }
-
-      /* NORMAL UNDO */
-      try {
-        undo();
-      } catch (error) {
-        console.error(
-          "Undo failed:",
-          error
-        );
-      }
-    }}
-    disabled={
-      tool === "line"
-        ? false
-        : tool === "polyline" && isDrawing
-          ? false
-          : past.length === 0
+    /* LINE — REMOVE LAST SEGMENT */
+    if (
+      tool === "line" &&
+      undoActiveLineSegment()
+    ) {
+      return;
     }
-  >
-    ↶ Undo
-  </button>
+
+   
+/* POLYLINE — REMOVE LAST SEGMENT */
+
+if (
+  tool === "polyline" &&
+  undoActiveLineSegment()
+) {
+  return;
+}
+
+
+
+    /* NORMAL UNDO */
+    try {
+      undo();
+    } catch (error) {
+      console.error("Undo failed:", error);
+    }
+  }}
+  disabled={
+    tool === "line"
+      ? false
+      : tool === "polyline" && isDrawing
+        ? false
+        : past.length === 0
+  }
+>
+  ↶ Undo
+</button>
 
     {/* =========================
       REDO
@@ -49182,50 +49152,56 @@ if (e.key === "ArrowDown") {
   </button>
 
 
-  {/* =========================
-      ESC
-  ========================= */}
-
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation();
-
-      setLineStart(null);
-      setLinePreview(null);
-      setPendingLinePoint(null);
-      setLineLengthInput("");
-      setShowLineInput(false);
-
-      setIsDrawing(false);
-
-      setMeasureStart(null);
-      setAnglePoints([]);
-
-      setSnapType("");
-      setSnapPoint(null);
-
-      setSelectedIndex(null);
-      setSelectedIndexes([]);
-
-      setSelectedMeasurementIndex(null);
-      setCommandFirstIndex(null);
-
-      actionStartRef.current = null;
-      moveStartRef.current = null;
-      stretchStartRef.current = null;
-
-      setShowMobileProperties(false);
-      setShowMobileLayers(false);
-
-      setCommandText("");
-      setMobileCommandPanel("home");
-
-      changeTool("select");
-    }}
-  >
+{/* =========================
     ESC
-  </button>
+========================= */}
+
+<button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+
+    // CLEAR ACTIVE LINE / POLYLINE
+    setLineStart(null);
+    setLinePreview(null);
+    setPendingLinePoint(null);
+    setLineLengthInput("");
+    setShowLineInput(false);
+    setIsDrawing(false);
+
+    // CLEAR MEASUREMENTS
+    setMeasureStart(null);
+    setAnglePoints([]);
+
+    // CLEAR SNAP
+    setSnapType("");
+    setSnapPoint(null);
+
+    // CLEAR SELECTION
+    setSelectedIndex(null);
+    setSelectedIndexes([]);
+    setSelectedMeasurementIndex(null);
+    setCommandFirstIndex(null);
+
+    // CLEAR ACTIVE ACTIONS
+    actionStartRef.current = null;
+    moveStartRef.current = null;
+    stretchStartRef.current = null;
+
+    // CLOSE MOBILE PANELS
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+
+    // RESET COMMAND
+    setCommandText("");
+    setMobileCommandPanel("home");
+
+    // RETURN TO SELECT
+    changeTool("select");
+  }}
+>
+  ESC
+</button>
 
 
   {/* =========================
@@ -49437,6 +49413,7 @@ if (e.key === "ArrowDown") {
   zo: "zoomOut",
 };
 
+     
       if (command === "find") {
         setCommandText("");
         openMobilePanel("find");
@@ -49444,45 +49421,48 @@ if (e.key === "ArrowDown") {
       }
 
       /* =========================
-   MOBILE ZOOM COMMANDS
-========================= */
+         MOBILE ZOOM COMMANDS
+      ========================= */
 
-if (
-  command === "zf" ||
-  command === "ze" ||
-  command === "zoomfit"
-) {
-  zoomFit();
-  setCommandText("");
-  return;
-}
+      if (
+        command === "zf" ||
+        command === "ze" ||
+        command === "zoomfit"
+      ) {
+        zoomFit();
+        setCommandText("");
+        return;
+      }
 
-if (
-  command === "zi" ||
-  command === "zoomin"
-) {
-  setScale((prevScale) =>
-    Math.min(prevScale * 1.2, 100)
-  );
+      if (
+        command === "zi" ||
+        command === "zoomin"
+      ) {
+        setScale((prevScale) =>
+          Math.min(prevScale * 1.2, 100)
+        );
 
-  setCommandText("");
-  return;
-}
+        setCommandText("");
+        return;
+      }
 
-if (
-  command === "zo" ||
-  command === "zoomout"
-) {
-  setScale((prevScale) =>
-    Math.max(prevScale / 1.2, 0.01)
-  );
+      if (
+        command === "zo" ||
+        command === "zoomout"
+      ) {
+        setScale((prevScale) =>
+          Math.max(prevScale / 1.2, 0.01)
+        );
 
-  setCommandText("");
-  return;
-}
+        setCommandText("");
+        return;
+      }
 
-      const selectedTool =
-        toolMap[command];
+      /* =========================
+         EXECUTE CAD COMMAND
+      ========================= */
+
+      const selectedTool = toolMap[command];
 
       if (!selectedTool) {
         window.alert(
@@ -49492,9 +49472,8 @@ if (
       }
 
       setCommandText("");
-      selectMobileTool(
-        selectedTool
-      );
+      selectMobileTool(selectedTool);
+    
     }}
 
     placeholder={
