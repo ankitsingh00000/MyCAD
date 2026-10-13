@@ -118,64 +118,7 @@ const [showMeasureMenu, setShowMeasureMenu] =
 const [measurements, setMeasurements] =
   useState([]);
 
-    
-  // === VIDEO CLONE: Early returns for splash/home ===
-  if (appPhase === "splash") {
-    return (
-      <div className="acad-splash">
-        <div className="acad-splash-center">
-          <div className="acad-big-a">A</div>
-        </div>
-        <div className="acad-splash-bottom">
-          <div className="acad-logo-small"><span>A</span></div>
-          <div className="acad-brand">AUTODESK AutoCAD</div>
-          <div className="acad-loader"></div>
-        </div>
-      </div>
-    );
-  }
-  if (appPhase === "preparing") {
-    return (
-      <div className="acad-preparing">
-        <div className="acad-prep-bg"></div>
-        <div className="acad-loader big blue"></div>
-        <p>Preparing...</p>
-        <div className="acad-splash-bottom">
-          <div className="acad-logo-small"><span>A</span></div>
-          <div className="acad-brand">AUTODESK AutoCAD</div>
-          <div className="acad-loader"></div>
-        </div>
-      </div>
-    );
-  }
-  if (appPhase === "home") {
-    return (
-      <div className="acad-home">
-        <div className="acad-home-top">
-          <div className="avatar">AS</div>
-          <div className="home-brand"><span>A</span> AUTODESK AutoCAD</div>
-        </div>
-        <div className="trial-banner">
-          <span>ⓘ 12 days left in your trial.</span>
-          <button className="buy">Buy Now</button>
-          <span className="close">✕</span>
-        </div>
-        <div className="home-content">
-          <h3>Recent</h3>
-          <p className="muted">Recently opened drawings will appear here as you use AutoCAD on different devices.</p>
-          <div className="recent-card" onClick={() => setAppPhase("editor")}>
-            <div className="dwg-thumb"></div>
-            <div><b>Drawing.dwg</b><br/><small>Monday on Android • AutoCAD Web</small></div>
-          </div>
-          <h3>Sources</h3>
-          <div className="source-item" onClick={() => setAppPhase("editor")}><i>⌂</i> <div>AutoCAD Web<br/><small>ankitshingh202502@gmail.com</small></div><span>⋮</span></div>
-          <div className="source-item" onClick={() => setAppPhase("editor")}><i>📁</i> <div>Open from device</div></div>
-          <div className="source-item"><i>📦</i> <div>Autodesk Projects</div></div>
-          <div className="source-item"><i>☁</i> <div>Add Storage Source...</div></div>
-        </div>
-      </div>
-    );
-  }
+ 
 
 /* =========================
    CIRCLE GRIP DRAG
@@ -36360,11 +36303,71 @@ setArcPoints([]);
         ]
       : null;
 
+     
+  // === VIDEO CLONE: Early returns for splash/home ===
+  if (appPhase === "splash") {
+    return (
+      <div className="acad-splash">
+        <div className="acad-splash-center">
+          <div className="acad-big-a">A</div>
+        </div>
+        <div className="acad-splash-bottom">
+          <div className="acad-logo-small"><span>A</span></div>
+          <div className="acad-brand">AUTODESK AutoCAD</div>
+          <div className="acad-loader"></div>
+        </div>
+      </div>
+    );
+  }
+  if (appPhase === "preparing") {
+    return (
+      <div className="acad-preparing">
+        <div className="acad-prep-bg"></div>
+        <div className="acad-loader big blue"></div>
+        <p>Preparing...</p>
+        <div className="acad-splash-bottom">
+          <div className="acad-logo-small"><span>A</span></div>
+          <div className="acad-brand">AUTODESK AutoCAD</div>
+          <div className="acad-loader"></div>
+        </div>
+      </div>
+    );
+  }
+  if (appPhase === "home") {
+    return (
+      <div className="acad-home">
+        <div className="acad-home-top">
+          <div className="avatar">AS</div>
+          <div className="home-brand"><span>A</span> AUTODESK AutoCAD</div>
+        </div>
+        <div className="trial-banner">
+          <span>ⓘ 12 days left in your trial.</span>
+          <button className="buy">Buy Now</button>
+          <span className="close">✕</span>
+        </div>
+        <div className="home-content">
+          <h3>Recent</h3>
+          <p className="muted">Recently opened drawings will appear here as you use AutoCAD on different devices.</p>
+          <div className="recent-card" onClick={() => setAppPhase("editor")}>
+            <div className="dwg-thumb"></div>
+            <div><b>Drawing.dwg</b><br/><small>Monday on Android • AutoCAD Web</small></div>
+          </div>
+          <h3>Sources</h3>
+          <div className="source-item" onClick={() => setAppPhase("editor")}><i>⌂</i> <div>AutoCAD Web<br/><small>ankitshingh202502@gmail.com</small></div><span>⋮</span></div>
+          <div className="source-item" onClick={() => setAppPhase("editor")}><i>📁</i> <div>Open from device</div></div>
+          <div className="source-item"><i>📦</i> <div>Autodesk Projects</div></div>
+          <div className="source-item"><i>☁</i> <div>Add Storage Source...</div></div>
+        </div>
+      </div>
+    );
+  }
+
       /* =====================================================
    HOME / RECENT SCREEN
 ===================================================== */
 
 if (showHome) {
+  
   return (
     <div className="cad-home">
 
