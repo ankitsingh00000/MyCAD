@@ -5074,6 +5074,8 @@ if (tool === "polyline") {
     y: finalY,
   });
 
+  setCommandText("Tap");
+
   setPendingLinePoint(null);
   setLineLengthInput("");
   setShowLineInput(false);
@@ -5118,8 +5120,8 @@ if (tool === "polyline") {
     newLine,
   ]);
  
- /* =========================
-   CONTINUE LINE FROM END
+  /* =========================
+   CONTINUE LINE FROM ENDPOINT
 ========================= */
 
 setLineStart({
@@ -5127,11 +5129,6 @@ setLineStart({
   y: finalY,
 });
 
-setPendingLinePoint(null);
-setLineLengthInput("");
-setShowLineInput(false);
-
-/* NEXT LINE PREVIEW STARTS IMMEDIATELY */
 setLinePreview({
   x1: finalX,
   y1: finalY,
@@ -5139,10 +5136,16 @@ setLinePreview({
   y2: finalY,
 });
 
+setPendingLinePoint(null);
+setLineLengthInput("");
+setShowLineInput(false);
+
+setIsDrawing(true);
+
 setSnapPoint(null);
 setSnapType("");
 
-setIsDrawing(true);
+setCommandText("");
 
 actionStartRef.current = null;
 
@@ -5152,7 +5155,8 @@ if (
   document.activeElement.blur();
 }
 
-return;}
+return;
+}
 
 /* =========================
    CHECK LAYER LOCK
@@ -5178,6 +5182,13 @@ const isLayerLocked = (layerId) => {
   ========================= */
 
   const handleMouseDown = (e) => {
+    /* =========================
+   LOCK CANVAS DURING INPUT
+========================= */
+
+if (showLineInput) {
+  return;
+}
     console.log(
   "MOUSEDOWN:",
   tool,
@@ -7246,367 +7257,6 @@ setMousePosition({
 
 return;
     }
-    
-    /* =========================
-   AREA MEASUREMENT
-========================= */
-
-if (tool === "area") {
-  let nearestObject = null;
-  let nearestIndex = -1;
-  let nearestDistance = Infinity;
-
-  objects.forEach((object, index) => {
-    if (
-      object?.hidden ||
-      isObjectLocked(index)
-    ) {
-      return;
-    }
-
-    const objectLayer = layers.find(
-  (layer) =>
-    layer.id ===
-    (object.layerId || "layer-0")
-);
-
-if (
-  objectLayer &&
-  !objectLayer.visible
-) {
-  return;
-}
-
-    let distance = Infinity;
-
-    if (
-      object.type === "rectangle"
-    ) {
-      const left = object.x;
-      const right =
-        object.x + object.width;
-
-      const top = object.y;
-      const bottom =
-        object.y + object.height;
-
-      const closestX =
-        Math.max(
-          left,
-          Math.min(x, right)
-        );
-
-      const closestY =
-        Math.max(
-          top,
-          Math.min(y, bottom)
-        );
-
-      distance = Math.hypot(
-        x - closestX,
-        y - closestY
-      );
-    }
-
-    if (
-      object.type === "circle"
-    ) {
-      distance =
-        Math.abs(
-          Math.hypot(
-            x - object.x,
-            y - object.y
-          ) - object.radius
-        );
-    }
-
-/* =========================
-   ELLIPSE AREA PICKING
-========================= */
-
-if (
-  object.type === "ellipse" &&
-  Number.isFinite(object.x) &&
-  Number.isFinite(object.y)
-) {
-  const rx = Math.abs(
-    Number(object.radiusX) || 0
-  );
-
-  const ry = Math.abs(
-    Number(object.radiusY) || 0
-  );
-
-  if (rx > 0 && ry > 0) {
-    const rotation =
-      (Number(object.rotation) || 0) *
-      (Math.PI / 180);
-
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
-
-    const steps = 72;
-
-    for (let i = 0; i < steps; i++) {
-      const a1 =
-        (i / steps) * Math.PI * 2;
-
-      const a2 =
-        ((i + 1) / steps) * Math.PI * 2;
-
-      const x1 =
-        object.x +
-        rx * Math.cos(a1) * cos -
-        ry * Math.sin(a1) * sin;
-
-      const y1 =
-        object.y +
-        rx * Math.cos(a1) * sin +
-        ry * Math.sin(a1) * cos;
-
-      const x2 =
-        object.x +
-        rx * Math.cos(a2) * cos -
-        ry * Math.sin(a2) * sin;
-
-      const y2 =
-        object.y +
-        rx * Math.cos(a2) * sin +
-        ry * Math.sin(a2) * cos;
-
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-
-      const lengthSquared =
-        dx * dx + dy * dy;
-
-      const t = lengthSquared > 0
-        ? Math.max(
-            0,
-            Math.min(
-              1,
-              (
-                (x - x1) * dx +
-                (y - y1) * dy
-              ) / lengthSquared
-            )
-          )
-        : 0;
-
-      const px = x1 + t * dx;
-      const py = y1 + t * dy;
-
-      distance = Math.min(
-        distance,
-        Math.hypot(x - px, y - py)
-      );
-    }
-  }
-}
-
-    if (
-      object.type === "polyline" &&
-      Array.isArray(object.points) &&
-      object.points.length >= 6
-    ) {
-      const firstX =
-        object.points[0];
-
-      const firstY =
-        object.points[1];
-
-      const lastX =
-        object.points[
-          object.points.length - 2
-        ];
-
-      const lastY =
-        object.points[
-          object.points.length - 1
-        ];
-
-      const closed =
-        Math.hypot(
-          lastX - firstX,
-          lastY - firstY
-        ) < 0.001;
-
-      if (!closed) {
-        return;
-      }
-
-      for (
-        let i = 0;
-        i < object.points.length - 2;
-        i += 2
-      ) {
-        const x1 =
-          object.points[i];
-
-        const y1 =
-          object.points[i + 1];
-
-        const x2 =
-          object.points[i + 2];
-
-        const y2 =
-          object.points[i + 3];
-
-        const dx =
-          x2 - x1;
-
-        const dy =
-          y2 - y1;
-
-        const lengthSquared =
-          dx * dx + dy * dy;
-
-        if (!lengthSquared) {
-          continue;
-        }
-
-        const t =
-          Math.max(
-            0,
-            Math.min(
-              1,
-              (
-                (x - x1) * dx +
-                (y - y1) * dy
-              ) /
-                lengthSquared
-            )
-          );
-
-        const px =
-          x1 + t * dx;
-
-        const py =
-          y1 + t * dy;
-
-        distance =
-          Math.min(
-            distance,
-            Math.hypot(
-              x - px,
-              y - py
-            )
-          );
-      }
-    }
-
-    if (
-      distance < nearestDistance &&
-      distance <= 30
-    ) {
-      nearestDistance =
-        distance;
-
-      nearestObject =
-        object;
-
-      nearestIndex =
-        index;
-    }
-  });
-
-  if (!nearestObject) {
-    window.alert(
-      "Closed rectangle, circle, ya polyline par tap karo."
-    );
-
-    return;
-  }
-
-  let area = 0;
-
-  if (
-    nearestObject.type ===
-    "rectangle"
-  ) {
-    area =
-      Math.abs(
-        nearestObject.width *
-        nearestObject.height
-      );
-  }
-
-  if (
-    nearestObject.type ===
-    "circle"
-  ) {
-    area =
-      Math.PI *
-      nearestObject.radius *
-      nearestObject.radius;
-  }
-
-  /* =========================
-   ELLIPSE AREA
-========================= */
-
-if (
-  nearestObject.type === "ellipse"
-) {
-  area =
-    Math.PI *
-    Math.abs(Number(nearestObject.radiusX) || 0) *
-    Math.abs(Number(nearestObject.radiusY) || 0);
-}
-
-  if (
-    nearestObject.type ===
-    "polyline"
-  ) {
-    const points =
-      nearestObject.points;
-
-    let sum = 0;
-
-    for (
-      let i = 0;
-      i < points.length - 2;
-      i += 2
-    ) {
-      const x1 = points[i];
-      const y1 =
-        points[i + 1];
-
-      const x2 =
-        points[i + 2];
-
-      const y2 =
-        points[i + 3];
-
-      sum +=
-        x1 * y2 -
-        x2 * y1;
-    }
-
-    area =
-      Math.abs(sum) / 2;
-  }
-
-  setSelectedIndex(
-    nearestIndex
-  );
-
-  setSelectedIndexes([
-    nearestIndex,
-  ]);
-
-  setCommandText(
-  `Area: ${
-    unit === "inch"
-      ? `${(area / (25.4 * 25.4)).toFixed(2)} inch²`
-      : unit === "ft-in"
-        ? `${(area / (304.8 * 304.8)).toFixed(2)} ft²`
-        : `${area.toFixed(2)} mm²`
-  }`
-);
-
-  return;
-}
 
     if (
   tool === "measure" ||
@@ -7881,19 +7531,72 @@ if (nearestEllipse) {
   return;
 }
 
-if (tool === "line") {
-  const stage = e.target.getStage();
+/* =========================
+   LINE — MOBILE
+   TOUCH ONLY SETS CURSOR
+   FIRST TAP WILL BE HANDLED
+   BY THE MOBILE TAP BUTTON
+========================= */
+
+if (
+  tool === "line" &&
+  e.evt?.type?.startsWith("touch")
+) {
+  const stage =
+    e.target.getStage();
 
   if (!stage) {
     return;
   }
 
-  /* =========================
-     GET POINTER
-  ========================= */
+  stage.setPointersPositions(
+    e.evt
+  );
+
+  const pointer =
+    stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
+  const rawX =
+    (pointer.x - position.x) /
+    scale;
+
+  const rawY =
+    (pointer.y - position.y) /
+    scale;
+
+  const snappedPoint =
+    snapToObject(
+      rawX,
+      rawY
+    );
+
+  setMousePosition({
+    x: snappedPoint.x,
+    y: snappedPoint.y,
+  });
+
+  return;
+}
+
+
+/* =========================
+   LINE
+========================= */
+
+if (tool === "line") {
+
+  const stage =
+    e.target.getStage();
+
+  if (!stage) {
+    return;
+  }
 
   stage.setPointersPositions(e.evt);
- 
 
   const pointer =
     stage.getPointerPosition();
@@ -7908,27 +7611,25 @@ if (tool === "line") {
   const rawY =
     (pointer.y - position.y) / scale;
 
-  /* =========================
-     SNAP POINT
-  ========================= */
-
   const snappedPoint =
     snapToObject(
       rawX,
       rawY
     );
 
-  const x =
+  let finalX =
     snappedPoint.x;
 
-  const y =
+  let finalY =
     snappedPoint.y;
+  
 
   /* =========================
      FIRST CLICK
   ========================= */
 
   if (!lineStart) {
+
     actionStartRef.current = {
       objects: [...objects],
       measurements: [...measurements],
@@ -7940,26 +7641,73 @@ if (tool === "line") {
     });
 
     setIsDrawing(true);
-
     setLinePreview(null);
-
     setPendingLinePoint(null);
 
     return;
   }
 
-  /* =========================
-     SECOND CLICK
+    /* =========================
+     AUTO STRAIGHT LOCK
+     FINAL LINE — ZOOM INDEPENDENT
   ========================= */
 
-  let finalX = x;
-  let finalY = y;
+  if (
+    !orthoEnabled &&
+    !polarEnabled
+  ) {
+    const dx =
+      finalX - lineStart.x;
+
+    const dy =
+      finalY - lineStart.y;
+
+    const distance =
+      Math.hypot(dx, dy);
+
+    if (distance > 0) {
+      const angle =
+        Math.atan2(dy, dx) *
+        (180 / Math.PI);
+
+      const normalizedAngle =
+        (angle + 360) % 360;
+
+      const horizontal =
+        normalizedAngle <= 6 ||
+        normalizedAngle >= 354 ||
+        (
+          normalizedAngle >= 174 &&
+          normalizedAngle <= 186
+        );
+
+      const vertical =
+        (
+          normalizedAngle >= 84 &&
+          normalizedAngle <= 96
+        ) ||
+        (
+          normalizedAngle >= 264 &&
+          normalizedAngle <= 276
+        );
+
+      if (horizontal) {
+        finalY = lineStart.y;
+      }
+
+      if (vertical) {
+        finalX = lineStart.x;
+      }
+    }
+  }
+
 
   /* =========================
      ORTHO
   ========================= */
 
   if (orthoEnabled) {
+
     const orthoPoint =
       applyOrtho(
         lineStart.x,
@@ -7975,11 +7723,13 @@ if (tool === "line") {
       orthoPoint.y;
   }
 
+
   /* =========================
      POLAR
   ========================= */
 
   if (polarEnabled) {
+
     const polarPoint =
       applyPolar(
         lineStart.x,
@@ -7995,11 +7745,64 @@ if (tool === "line") {
       polarPoint.y;
   }
 
+
+  /* =========================
+     ZERO LENGTH
+  ========================= */
+
+  if (
+    lineStart.x === finalX &&
+    lineStart.y === finalY
+  ) {
+    return;
+  }
+
+    /* =========================
+     ASK FOR LINE LENGTH
+  ========================= */
+
+  const requestedDistance = Math.hypot(
+    finalX - lineStart.x,
+    finalY - lineStart.y
+  );
+
+  if (
+    !Number.isFinite(requestedDistance) ||
+    requestedDistance <= 0
+  ) {
+    return;
+  }
+
+  let requestedAngle =
+    Math.atan2(
+      finalY - lineStart.y,
+      finalX - lineStart.x
+    ) * (180 / Math.PI);
+
+  if (requestedAngle < 0) {
+    requestedAngle += 360;
+  }
+
+  setPendingLinePoint({
+    x: finalX,
+    y: finalY,
+  });
+
+  setLineLengthInput(
+    `${requestedDistance.toFixed(2)}<${requestedAngle.toFixed(1)}`
+  );
+
+  setShowLineInput(true);
+
+  return;
+
+
   /* =========================
      CREATE LINE
   ========================= */
 
   const newLine = {
+
     type: "line",
 
     points: [
@@ -8015,16 +7818,31 @@ if (tool === "line") {
 
     strokeWidth: 2,
 
-    layerId: activeLayerId,
+    layerId:
+      activeLayerId,
   };
+
+
+  /* =========================
+     SAVE PREVIOUS STATE
+  ========================= */
 
   const previousObjects =
     [...objects];
+
+  const previousMeasurements =
+    [...measurements];
+
+
+  /* =========================
+     ADD LINE
+  ========================= */
 
   setObjects((prev) => [
     ...prev,
     newLine,
   ]);
+
 
   /* =========================
      HISTORY
@@ -8032,14 +7850,18 @@ if (tool === "line") {
 
   saveHistory(
     previousObjects,
-    [...measurements]
+    previousMeasurements
   );
 
+
   /* =========================
-     RESET LINE
+     CONTINUE LINE
   ========================= */
 
-  setLineStart(null);
+  setLineStart({
+    x: finalX,
+    y: finalY,
+  });
 
   setLinePreview(null);
 
@@ -8049,27 +7871,18 @@ if (tool === "line") {
 
   setShowLineInput(false);
 
-  setIsDrawing(false);
+  setIsDrawing(true);
 
   setSnapPoint(null);
 
   setSnapType("");
 
-  actionStartRef.current = null;
+  actionStartRef.current =
+    null;
 
   return;
 }
-
-    /* =========================
-       START DRAWING
-    ========================= */
-
-    actionStartRef.current = {
-      objects: [...objects],
-      measurements: [...measurements],
-    };
-
-    setIsDrawing(true);
+  }
 
     if (tool === "circle") {
       setObjects((prev) => [
@@ -8230,14 +8043,20 @@ if (tool === "hatch") {
   return;
 }
 
-  };
-
 
   /* =========================
      MOUSE MOVE
   ========================= */
 
   const handleMouseMove = (e) => {
+
+    /* =========================
+   FREEZE CANVAS DURING INPUT
+========================= */
+
+if (showLineInput) {
+  return;
+}
 
       /* =========================
      COPY = DRAG COPIED OBJECT
@@ -8533,6 +8352,7 @@ if (
   (tool === "line" ||
     tool === "polyline") &&
   lineStart &&
+  isDrawing &&
   !showLineInput
 ) {
   let previewX =
@@ -8663,21 +8483,19 @@ if (
       polarPoint.y;
   }
 
-  setLinePreview({
-    x1:
-      lineStart.x,
+ setLinePreview({
+  x1: lineStart.x,
+  y1: lineStart.y,
+  x2: previewX,
+  y2: previewY,
+});
 
-    y1:
-      lineStart.y,
+setPendingLinePoint({
+  x: previewX,
+  y: previewY,
+});
 
-    x2:
-      previewX,
-
-    y2:
-      previewY,
-  });
-
-  return;
+return;
 }
 
 if (
@@ -15824,10 +15642,8 @@ if (
           object.color ||
           "#ffffff"
         }
-        strokeWidth={
-          (object.strokeWidth || 2) /
-          scale
-        }
+       strokeWidth={object.strokeWidth || 2}
+strokeScaleEnabled={false}
         lineCap="round"
         lineJoin="round"
         tension={0.5}
@@ -29350,14 +29166,230 @@ const handleTouchStart = (e) => {
       return;
     }
 
-    /* =========================
-       LINE — START DRAWING
-    ========================= */
+/* =========================
+   LINE — MOBILE
+   AUTOCAD STYLE
+========================= */
 
-    if (tool === "line") {
-      handleMouseDown(e);
-      return;
-    }
+if (tool === "line") {
+  const stage = e.target.getStage();
+
+  if (!stage) {
+    return;
+  }
+
+  stage.setPointersPositions(e.evt);
+
+  const pointer =
+    stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
+  const rawX =
+    (pointer.x - position.x) / scale;
+
+  const rawY =
+    (pointer.y - position.y) / scale;
+
+  const snappedPoint =
+    snapToObject(
+      rawX,
+      rawY
+    );
+
+  let x =
+    snappedPoint.x;
+
+  let y =
+    snappedPoint.y;
+
+  /* =========================
+     FIRST TAP
+  ========================= */
+
+  if (!lineStart) {
+    actionStartRef.current = {
+      objects: [...objects],
+      measurements: [...measurements],
+    };
+
+    setLineStart({
+      x,
+      y,
+    });
+
+    setIsDrawing(true);
+
+    setLinePreview({
+      x1: x,
+      y1: y,
+      x2: x,
+      y2: y,
+    });
+
+    setPendingLinePoint(null);
+
+    setLineLengthInput("");
+
+    setShowLineInput(false);
+
+    setMousePosition({
+      x,
+      y,
+    });
+
+    setSnapPoint({
+      x,
+      y,
+    });
+
+    return;
+  }
+
+  /* =========================
+     SECOND / NEXT TAP
+  ========================= */
+
+  let finalX = x;
+  let finalY = y;
+
+  /* =========================
+     ORTHO
+  ========================= */
+
+  if (orthoEnabled) {
+    const orthoPoint =
+      applyOrtho(
+        lineStart.x,
+        lineStart.y,
+        finalX,
+        finalY
+      );
+
+    finalX =
+      orthoPoint.x;
+
+    finalY =
+      orthoPoint.y;
+  }
+
+  /* =========================
+     POLAR
+  ========================= */
+
+  if (polarEnabled) {
+    const polarPoint =
+      applyPolar(
+        lineStart.x,
+        lineStart.y,
+        finalX,
+        finalY
+      );
+
+    finalX =
+      polarPoint.x;
+
+    finalY =
+      polarPoint.y;
+  }
+
+  /* =========================
+     IGNORE ZERO LENGTH
+  ========================= */
+
+  if (
+    lineStart.x === finalX &&
+    lineStart.y === finalY
+  ) {
+    return;
+  }
+
+  /* =========================
+     CREATE LINE
+  ========================= */
+
+  const newLine = {
+    type: "line",
+
+    points: [
+      lineStart.x,
+      lineStart.y,
+      finalX,
+      finalY,
+    ],
+
+    rotation: 0,
+
+    color: "#ffffff",
+
+    strokeWidth: 2,
+
+    layerId: activeLayerId,
+  };
+
+  /* =========================
+     SAVE HISTORY
+  ========================= */
+
+  const previousObjects =
+    [...objects];
+
+  const previousMeasurements =
+    [...measurements];
+
+  setObjects((prev) => [
+    ...prev,
+    newLine,
+  ]);
+
+  saveHistory(
+    previousObjects,
+    previousMeasurements
+  );
+
+  /* =========================
+     CONTINUE LINE
+     NEXT SEGMENT STARTS HERE
+  ========================= */
+
+  setLineStart({
+    x: finalX,
+    y: finalY,
+  });
+
+  setLinePreview({
+    x1: finalX,
+    y1: finalY,
+    x2: finalX,
+    y2: finalY,
+  });
+
+  setPendingLinePoint(null);
+
+  setLineLengthInput("");
+
+  setShowLineInput(false);
+
+  setIsDrawing(true);
+
+  setSnapPoint({
+    x: finalX,
+    y: finalY,
+  });
+
+  setSnapType("");
+
+  setMousePosition({
+    x: finalX,
+    y: finalY,
+  });
+
+  actionStartRef.current = null;
+
+  return;
+}
 
     /* =========================
        OFFSET — SELECT OBJECT
@@ -29577,30 +29609,168 @@ if (
       return;
     }
 
-    /* LINE / OTHER DRAWING TOOLS */
+    /* =========================
+   MOBILE LINE PREVIEW
+   FINGER MOVE = CURSOR + PREVIEW
+========================= */
 
-    handleMouseMove(e);
+if (tool === "line") {
+  const stage =
+    e.target.getStage();
+
+  if (!stage) {
+    return;
+  }
+
+  stage.setPointersPositions(
+    e.evt
+  );
+
+  const pointer =
+    stage.getPointerPosition();
+
+  if (!pointer) {
+    return;
+  }
+
+  const rawX =
+    (pointer.x - position.x) /
+    scale;
+
+  const rawY =
+    (pointer.y - position.y) /
+    scale;
+
+  const snappedPoint =
+    snapToObject(
+      rawX,
+      rawY
+    );
+
+  let previewX =
+    snappedPoint.x;
+
+  let previewY =
+    snappedPoint.y;
+
+  /* =========================
+     ORTHO PREVIEW
+  ========================= */
+
+  if (lineStart && orthoEnabled) {
+    const orthoPoint =
+      applyOrtho(
+        lineStart.x,
+        lineStart.y,
+        previewX,
+        previewY
+      );
+
+    previewX =
+      orthoPoint.x;
+
+    previewY =
+      orthoPoint.y;
+  }
+
+  /* =========================
+     POLAR PREVIEW
+  ========================= */
+
+  if (lineStart && polarEnabled) {
+    const polarPoint =
+      applyPolar(
+        lineStart.x,
+        lineStart.y,
+        previewX,
+        previewY
+      );
+
+    previewX =
+      polarPoint.x;
+
+    previewY =
+      polarPoint.y;
+  }
+
+  setMousePosition({
+    x: previewX,
+    y: previewY,
+  });
+
+  /* =========================
+     LIVE LINE PREVIEW
+  ========================= */
+
+  if (lineStart) {
+    setLinePreview({
+      x1: lineStart.x,
+      y1: lineStart.y,
+      x2: previewX,
+      y2: previewY,
+    });
+
+    setPendingLinePoint({
+      x: previewX,
+      y: previewY,
+    });
+  }
+
+  return;
+}
+
+/* =========================
+   OTHER DRAWING TOOLS
+========================= */
+
+handleMouseMove(e);
 
   }
 };
+
 const handleTouchEnd = (e) => {
   e.evt.preventDefault();
 
-  const touches = e.evt.touches;
+  const touches =
+    e.evt.touches;
 
   /* =========================
      ONE FINGER REMAINS
      AFTER PINCH
   ========================= */
 
-  if (touches && touches.length === 1) {
+  if (
+    touches &&
+    touches.length === 1
+  ) {
     touchStateRef.current = {
       lastDistance: null,
       lastCenter: null,
     };
 
     setIsPanning(false);
-    panStartRef.current = null;
+
+    panStartRef.current =
+      null;
+
+    return;
+  }
+
+  /* =========================
+     LINE TOUCH FINISHED
+     DO NOT CALL MOUSEUP
+  ========================= */
+
+  if (tool === "line") {
+    touchStateRef.current = {
+      lastDistance: null,
+      lastCenter: null,
+    };
+
+    setIsPanning(false);
+
+    panStartRef.current =
+      null;
 
     return;
   }
@@ -29615,7 +29785,9 @@ const handleTouchEnd = (e) => {
   };
 
   setIsPanning(false);
-  panStartRef.current = null;
+
+  panStartRef.current =
+    null;
 
   handleMouseUp(e);
 };
@@ -38734,10 +38906,10 @@ for (
         x,
         bottom,
       ]}
-      stroke="#202a35"
-      strokeWidth={
-        0.7 / scale
-      }
+      stroke="#303b4a"
+strokeWidth={
+  1 / scale
+}
       listening={false}
     />
   );
@@ -38762,10 +38934,10 @@ for (
         right,
         y,
       ]}
-      stroke="#202a35"
-      strokeWidth={
-        0.7 / scale
-      }
+      stroke="#303b4a"
+strokeWidth={
+  1 / scale
+}
       listening={false}
     />
   );
@@ -38808,10 +38980,10 @@ for (
         x,
         bottom,
       ]}
-      stroke="#303b4a"
-      strokeWidth={
-        1 / scale
-      }
+    stroke="#222a33"
+strokeWidth={
+  0.7 / scale
+}
       listening={false}
     />
   );
@@ -38836,10 +39008,10 @@ for (
         right,
         y,
       ]}
-      stroke="#303b4a"
-      strokeWidth={
-        1 / scale
-      }
+      stroke="#222a33"
+strokeWidth={
+  0.7 / scale
+}
       listening={false}
     />
   );
@@ -40210,19 +40382,20 @@ if (
 {linePreview &&
   (tool === "line" || tool === "polyline") &&
   !showLineInput && (
-   <Line
-  points={[
-    linePreview.x1,
-    linePreview.y1,
-    linePreview.x2,
-    linePreview.y2,
-  ]}
-  stroke="#00ff66"
-  strokeWidth={1}
-  strokeScaleEnabled={false}
-  dash={[8, 6]}
-  listening={false}
-/>
+    <Line
+      points={[
+        linePreview.x1,
+        linePreview.y1,
+        linePreview.x2,
+        linePreview.y2,
+      ]}
+      stroke="#d0d6df"
+      strokeWidth={0.9}
+      strokeScaleEnabled={false}
+      dash={[1 / scale, 3 / scale]}
+      lineCap="round"
+      listening={false}
+    />
 )}
 
 {viewportSize.width > 768 &&
@@ -40336,16 +40509,19 @@ if (
   tool === "quickMeasure"
 ) && (
   <>
-    {/* SMALL HORIZONTAL CROSSHAIR */}
-  <Line
+  {/* =========================
+   MOBILE AUTOCAD CROSSHAIR
+========================= */}
+
+<Line
   points={[
-    mousePosition.x - 10 / scale,
+    mousePosition.x - 32 / scale,
     mousePosition.y,
-    mousePosition.x + 10 / scale,
+    mousePosition.x + 32 / scale,
     mousePosition.y,
   ]}
   stroke="#808080"
-  strokeWidth={1}
+  strokeWidth={0.5}
   strokeScaleEnabled={false}
   listening={false}
 />
@@ -40353,12 +40529,12 @@ if (
 <Line
   points={[
     mousePosition.x,
-    mousePosition.y - 10 / scale,
+    mousePosition.y - 32 / scale,
     mousePosition.x,
-    mousePosition.y + 10 / scale,
+    mousePosition.y + 32 / scale,
   ]}
   stroke="#808080"
-  strokeWidth={1}
+  strokeWidth={0.5}
   strokeScaleEnabled={false}
   listening={false}
 />
@@ -40385,6 +40561,256 @@ if (
     listening={false}
   />
 )}
+
+{/* =========================
+   MOBILE LINE TAP BUTTON
+========================= */}
+
+{viewportSize.width <= 768 &&
+  tool === "line" &&
+  !showLineInput && (
+    <Group
+      x={mousePosition.x + 28 / scale}
+      y={mousePosition.y - 30 / scale}
+      onTouchStart={(e) => {
+        e.cancelBubble = true;
+
+        const stage =
+          e.target.getStage();
+
+        if (!stage) {
+          return;
+        }
+
+        stage.setPointersPositions(
+          e.evt
+        );
+
+        const pointer =
+          stage.getPointerPosition();
+
+        if (!pointer) {
+          return;
+        }
+
+        const rawX =
+          (pointer.x - position.x) /
+          scale;
+
+        const rawY =
+          (pointer.y - position.y) /
+          scale;
+
+        const snappedPoint =
+          snapToObject(
+            rawX,
+            rawY
+          );
+
+        const x =
+          snappedPoint.x;
+
+        const y =
+          snappedPoint.y;
+
+        /* =========================
+           FIRST TAP
+        ========================= */
+
+        if (!lineStart) {
+          actionStartRef.current = {
+            objects: [...objects],
+            measurements: [...measurements],
+          };
+
+          setLineStart({
+            x,
+            y,
+          });
+          setCommandText("Tap");
+
+          setIsDrawing(true);
+
+          setLinePreview({
+            x1: x,
+            y1: y,
+            x2: x,
+            y2: y,
+          });
+
+          setPendingLinePoint(null);
+
+          setLineLengthInput("");
+
+          setShowLineInput(false);
+
+          return;
+        }
+
+        /* =========================
+           SECOND TAP
+        ========================= */
+
+        let finalX = x;
+        let finalY = y;
+
+        /* ORTHO */
+
+        if (orthoEnabled) {
+          const orthoPoint =
+            applyOrtho(
+              lineStart.x,
+              lineStart.y,
+              finalX,
+              finalY
+            );
+
+          finalX =
+            orthoPoint.x;
+
+          finalY =
+            orthoPoint.y;
+        }
+
+        /* POLAR */
+
+        if (polarEnabled) {
+          const polarPoint =
+            applyPolar(
+              lineStart.x,
+              lineStart.y,
+              finalX,
+              finalY
+            );
+
+          finalX =
+            polarPoint.x;
+
+          finalY =
+            polarPoint.y;
+        }
+
+          /* =========================
+     ASK FOR LINE LENGTH
+  ========================= */
+
+  const requestedDistance = Math.hypot(
+    finalX - lineStart.x,
+    finalY - lineStart.y
+  );
+
+  if (
+    !Number.isFinite(requestedDistance) ||
+    requestedDistance <= 0
+  ) {
+    return;
+  }
+
+  let requestedAngle =
+    Math.atan2(
+      finalY - lineStart.y,
+      finalX - lineStart.x
+    ) * (180 / Math.PI);
+
+  if (requestedAngle < 0) {
+    requestedAngle += 360;
+  }
+
+  setPendingLinePoint({
+    x: finalX,
+    y: finalY,
+  });
+
+  setLineLengthInput(
+    `${requestedDistance.toFixed(2)}<${requestedAngle.toFixed(1)}`
+  );
+
+  setShowLineInput(true);
+
+  return;
+
+        /* =========================
+           CREATE LINE
+        ========================= */
+
+        const newLine = {
+          type: "line",
+
+          points: [
+            lineStart.x,
+            lineStart.y,
+            finalX,
+            finalY,
+          ],
+
+          rotation: 0,
+
+          color: "#ffffff",
+
+          strokeWidth: 2,
+
+          layerId: activeLayerId,
+        };
+
+        const previousObjects =
+          [...objects];
+
+        setObjects((prev) => [
+          ...prev,
+          newLine,
+        ]);
+
+        /* =========================
+           HISTORY
+        ========================= */
+
+        saveHistory(
+          previousObjects,
+          [...measurements]
+        );
+
+        /* =========================
+           RESET
+        ========================= */
+
+        setLineStart(null);
+
+        setLinePreview(null);
+
+        setPendingLinePoint(null);
+
+        setLineLengthInput("");
+
+        setShowLineInput(false);
+
+        setIsDrawing(false);
+
+        setSnapPoint(null);
+
+        setSnapType("");
+
+        actionStartRef.current = null;
+      }}
+    >
+      <Rect
+        width={48 / scale}
+        height={30 / scale}
+        fill="#111"
+        stroke="#777"
+        strokeWidth={1 / scale}
+        cornerRadius={5 / scale}
+      />
+
+      <Text
+        x={8 / scale}
+        y={7 / scale}
+        text="Tap"
+        fontSize={14 / scale}
+        fill="#ffffff"
+        listening={false}
+      />
+    </Group>
+  )}
   </>
 )}
 
@@ -42883,18 +43309,14 @@ if (
         : object.color ||
           "#ffffff"
   }
-  strokeWidth={
-    Math.max(
-      2,
-      (
-        joinSelected
-          ? 4
-          : selected
-            ? 3
-            : (object.strokeWidth || 2)
-      ) / scale
-    )
-  }
+strokeWidth={
+  joinSelected
+    ? 1.2
+    : selected
+      ? 1.1
+      : 0.9
+}
+strokeScaleEnabled={false}
   hitStrokeWidth={
     tool === "join"
       ? 40
@@ -50657,5 +51079,6 @@ if (
     </div>
   );
 }
+
 
 export default App;
