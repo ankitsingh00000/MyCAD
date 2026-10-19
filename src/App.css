@@ -2925,3 +2925,375 @@ button:disabled {
 
 /* Grid darker like video */
 .grid { opacity:0.6; }
+
+
+/* =====================================================
+   FINAL — SEPARATE DESKTOP AND MOBILE INTERFACE
+===================================================== */
+
+/* DESKTOP: 769px and wider */
+@media (min-width: 769px) {
+  .topbar {
+    display: flex !important;
+  }
+
+  .toolbar {
+    display: flex !important;
+  }
+
+  .statusbar {
+    display: flex !important;
+  }
+
+  .mobile-topbar,
+  .mobile-command-bar {
+    display: none !important;
+  }
+}
+
+/* PHONE: 768px and below */
+@media (max-width: 768px) {
+  /* Hide desktop header */
+  .topbar {
+    display: none !important;
+  }
+
+  /* Hide desktop left toolbar */
+  .toolbar {
+    display: none !important;
+  }
+
+  /* Show phone topbar */
+  .mobile-topbar {
+    display: flex !important;
+  }
+
+  /* Show phone's own bottom panel */
+  .mobile-command-bar {
+    display: flex !important;
+  }
+
+  .mobile-command-bar > .mobile-quick-actions {
+    display: flex !important;
+  }
+
+  .mobile-command-bar > .mobile-command-controls {
+    display: flex !important;
+  }
+
+  /* Hide desktop status bar */
+  .statusbar {
+    display: none !important;
+  }
+}
+
+/* =========================================
+   MOBILE COMMAND INPUT — REFERENCE STYLE
+========================================= */
+
+@media (max-width: 768px) {
+  .mobile-command-controls {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 8px 18px !important;
+    height: 64px !important;
+    min-height: 64px !important;
+    max-height: 64px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Hide extra buttons in this row.
+     Undo/Redo are already in the top bar. */
+  .mobile-command-controls > button:not(.mobile-command-esc):not(.mobile-command-enter) {
+    display: none !important;
+  }
+
+  /* ESC and ENTER */
+  .mobile-command-controls > .mobile-command-esc,
+  .mobile-command-controls > .mobile-command-enter {
+    display: flex !important;
+    flex: 0 0 84px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 64px !important;
+    min-height: 48px !important;
+    padding: 8px !important;
+    border: none !important;
+    border-radius: 4px !important;
+    background: #f4f4f4 !important;
+    color: #999999 !important;
+    font-size: 15px !important;
+    font-weight: 400 !important;
+    box-shadow: none !important;
+  }
+
+  /* COMMAND INPUT */
+  .mobile-command-controls > input {
+    display: block !important;
+    flex: 1 1 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 64px !important;
+    min-height: 48px !important;
+    padding: 0 12px !important;
+    border: none !important;
+    border-radius: 4px !important;
+    background: #d5d5d5 !important;
+    color: #333333 !important;
+    font-size: 16px !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-command-controls > input::placeholder {
+    color: #666666 !important;
+    opacity: 1 !important;
+  }
+
+  /* Small phones */
+  @media (max-width: 380px) {
+    .mobile-command-controls {
+      gap: 6px !important;
+      padding: 6px !important;
+    }
+
+    .mobile-command-controls > .mobile-command-esc,
+    .mobile-command-controls > .mobile-command-enter {
+      flex-basis: 66px !important;
+    }
+
+    .mobile-command-controls > input {
+      padding: 0 8px !important;
+      font-size: 14px !important;
+    }
+  }
+}
+
+/* =====================================
+   MOBILE RIGHT TOOLBAR — 1. PROPERTIES
+===================================== */
+
+.mobile-right-toolbar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-right-toolbar {
+    position: fixed;
+    top: 49%;
+    right: 10px;
+    z-index: 1200002;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    gap: 2px;
+    padding: 5px;
+
+    background: #f3f3f3;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
+    pointer-events: auto;
+  }
+
+  .mobile-right-tool-button {
+    width: 52px;
+    height: 54px;
+    min-width: 52px;
+    min-height: 54px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 5px;
+    margin: 0;
+
+    color: #555555;
+    background: transparent;
+    border: none;
+    border-radius: 2px;
+
+    box-shadow: none;
+    touch-action: manipulation;
+  }
+
+  .mobile-right-tool-button svg {
+    display: block;
+    width: 36px;
+    height: 36px;
+  }
+
+  .mobile-right-tool-button.is-active {
+    color: #258fc3;
+    background: #e5f3fa;
+  }
+}
+
+/* =====================================
+   MOBILE TRACE — RIGHT TOOL ICON
+===================================== */
+
+@media (max-width: 768px) {
+  .mobile-right-tool-button {
+    flex-shrink: 0;
+    touch-action: manipulation;
+  }
+
+  .mobile-right-tool-button.is-active {
+    color: #258fc3;
+    background: #e5f3fa;
+  }
+}
+
+/* =====================================
+   MOBILE RIGHT TOOLBAR COLLAPSE
+===================================== */
+
+.mobile-right-toolbar-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-right-toolbar-toggle {
+    display: flex !important;
+    flex: 0 0 44px !important;
+
+    width: 52px !important;
+    height: 44px !important;
+    min-width: 52px !important;
+    min-height: 44px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    padding: 4px !important;
+    margin: 0 !important;
+
+    background: transparent !important;
+    color: #666666 !important;
+    border: none !important;
+    border-top: 1px solid #dddddd !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+
+    touch-action: manipulation;
+  }
+
+  .mobile-right-toolbar-toggle svg {
+    display: block;
+  }
+
+  .mobile-right-toolbar.is-collapsed {
+    top: auto !important;
+    bottom: 180px !important;
+
+    gap: 0 !important;
+    padding: 3px !important;
+  }
+
+  .mobile-right-toolbar.is-collapsed
+    .mobile-right-tool-button {
+    display: none !important;
+  }
+}
+
+/* =====================================
+   SELECT MENU — REFERENCE STYLE
+===================================== */
+
+@media (max-width: 768px) {
+  .mobile-command-status.mobile-select-status {
+    flex: 0 0 48px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    max-height: 48px !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    gap: 3px !important;
+
+    padding: 3px 18px !important;
+    box-sizing: border-box !important;
+
+    background: #f1f1f1 !important;
+    color: #888888 !important;
+    border: none !important;
+
+    text-align: left !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+  }
+
+  .mobile-command-status.mobile-select-status > div {
+    font-size: 12px !important;
+    line-height: 15px !important;
+    color: #888888 !important;
+  }
+
+  .mobile-command-status.mobile-select-status > strong {
+    display: block !important;
+    width: 100% !important;
+
+    color: #333333 !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    line-height: 20px !important;
+
+    text-align: left !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .mobile-command-bar > .mobile-quick-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+
+    gap: 10px !important;
+    padding: 8px 18px !important;
+    box-sizing: border-box !important;
+
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .mobile-command-bar > .mobile-quick-actions > button {
+    flex: 0 0 150px !important;
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
+
+    height: 70px !important;
+    min-height: 70px !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    padding: 8px !important;
+    box-sizing: border-box !important;
+
+    background: #ffffff !important;
+    color: #333333 !important;
+    border: 1px solid #eeeeee !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+
+    font-size: 16px !important;
+    white-space: nowrap !important;
+    touch-action: manipulation !important;
+  }
+}

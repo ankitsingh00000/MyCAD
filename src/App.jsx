@@ -1979,6 +1979,122 @@ const [objectSnapEnabled, setObjectSnapEnabled] =
   const [showMobileProperties, setShowMobileProperties] = useState(false);
 
   /* =========================
+   MOBILE BLOCKS PANEL
+========================= */
+
+const [showMobileBlocks, setShowMobileBlocks] =
+  useState(false);
+
+  /* =========================
+   MOBILE ATTACHMENTS
+========================= */
+
+const [showMobileAttachments, setShowMobileAttachments] =
+  useState(false);
+
+  /* =========================
+   MOBILE SETTINGS PANEL
+========================= */
+
+const [showMobileSettings, setShowMobileSettings] =
+  useState(false);
+
+  const [
+  mobileRightToolbarCollapsed,
+  setMobileRightToolbarCollapsed,
+] = useState(false);
+
+const [mobileAttachments, setMobileAttachments] =
+  useState(() => {
+    try {
+      const saved = localStorage.getItem("mycadMobileAttachments");
+      const parsed = JSON.parse(saved || "[]");
+
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+const attachmentInputRef = useRef(null);
+
+useEffect(() => {
+  try {
+    localStorage.setItem(
+      "mycadMobileAttachments",
+      JSON.stringify(mobileAttachments)
+    );
+  } catch (error) {
+    console.warn("Attachments save nahi ho paye:", error);
+  }
+}, [mobileAttachments]);
+
+  /* =========================
+   MOBILE VIEWS PANEL
+========================= */
+
+const [showMobileViews, setShowMobileViews] =
+  useState(false);
+
+
+  /* =========================
+   MOBILE TRACE
+========================= */
+
+const [showMobileTrace, setShowMobileTrace] =
+  useState(false);
+
+const [mobileTraceList, setMobileTraceList] =
+  useState(() => {
+    try {
+      const saved =
+        localStorage.getItem("mycadMobileTraces");
+
+      const parsed = JSON.parse(saved || "[]");
+
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+const [activeTraceId, setActiveTraceId] =
+  useState(null);
+
+const [traceEditMode, setTraceEditMode] =
+  useState(false);
+
+const [currentTracePoints, setCurrentTracePoints] =
+  useState([]);
+
+const traceDrawingRef = useRef(false);
+
+useEffect(() => {
+  try {
+    localStorage.setItem(
+      "mycadMobileTraces",
+      JSON.stringify(mobileTraceList)
+    );
+  } catch (error) {
+    console.warn("Trace save failed:", error);
+  }
+}, [mobileTraceList]);
+
+  const [saveMessage, setSaveMessage] = useState("");
+
+useEffect(() => {
+  if (!saveMessage) return;
+
+  const timer = window.setTimeout(() => {
+    setSaveMessage("");
+  }, 2500);
+
+  return () => window.clearTimeout(timer);
+}, [saveMessage]);
+
+  const [showMobileFileMenu, setShowMobileFileMenu] = useState(false);
+
+  /* =========================
    MOBILE COMMAND PANEL
 ========================= */
 
@@ -2000,6 +2116,60 @@ const openMobilePanel = (panel) => {
 const closeMobilePanel = () => {
   setCommandText("");
   setMobileCommandPanel("home");
+};
+
+/* =========================
+   ATTACH IMAGE / PDF
+========================= */
+
+const handleMobileAttachment = (event) => {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  const isImage = file.type.startsWith("image/");
+  const isPdf = file.type === "application/pdf";
+
+  if (!isImage && !isPdf) {
+    window.alert("Filhaal sirf image aur PDF attach kar sakte ho.");
+    event.target.value = "";
+    return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    window.alert("File 2 MB se chhoti honi chahiye.");
+    event.target.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    if (typeof reader.result !== "string") {
+      window.alert("File read nahi ho payi.");
+      return;
+    }
+
+    const attachment = {
+      id: `attachment-${Date.now()}`,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      dataUrl: reader.result,
+    };
+
+    setMobileAttachments((previous) => [
+      attachment,
+      ...previous,
+    ]);
+  };
+
+  reader.onerror = () => {
+    window.alert("File attach nahi ho payi.");
+  };
+
+  reader.readAsDataURL(file);
+  event.target.value = "";
 };
 
 const selectMobileTool = (nextTool) => {
@@ -2027,6 +2197,316 @@ const selectMobileTool = (nextTool) => {
   }
   changeTool(nextTool);
 };
+
+/* =========================
+   TRACE — CREATE / OPEN / EDIT
+========================= */
+
+const createMobileTrace = () => {
+  const id = `trace-${Date.now()}`;
+
+  const newTrace = {
+    id,
+    name: `Trace ${mobileTraceList.length + 1}`,
+    strokes: [],
+  };
+
+  setMobileTraceList((previous) => [
+    ...previous,
+    newTrace,
+  ]);
+
+  setActiveTraceId(id);
+  setTraceEditMode(true);
+  setCurrentTracePoints([]);
+  traceDrawingRef.current = false;
+
+  setShowMobileTrace(true);
+  setShowMobileLayers(false);
+  setShowMobileProperties(false);
+
+  setMobileCommandPanel("home");
+  setCommandText("");
+};
+
+const openMobileTrace = (trace) => {
+  setActiveTraceId(trace.id);
+  setTraceEditMode(false);
+  setCurrentTracePoints([]);
+  traceDrawingRef.current = false;
+  setShowMobileTrace(true);
+};
+
+const editMobileTrace = (trace) => {
+  setActiveTraceId(trace.id);
+  setTraceEditMode(true);
+  setCurrentTracePoints([]);
+  traceDrawingRef.current = false;
+  setShowMobileTrace(true);
+
+  setShowMobileLayers(false);
+  setShowMobileProperties(false);
+};
+
+const finishMobileTrace = () => {
+  setTraceEditMode(false);
+  setCurrentTracePoints([]);
+  traceDrawingRef.current = false;
+};
+
+const closeMobileTracePanel = () => {
+  setShowMobileTrace(false);
+  finishMobileTrace();
+};
+
+const deleteMobileTrace = (traceId) => {
+  const traceToDelete = mobileTraceList.find(
+    (trace) => trace.id === traceId
+  );
+
+  if (!traceToDelete) return;
+
+  const confirmed = window.confirm(
+    `Delete "${traceToDelete.name}"?`
+  );
+
+  if (!confirmed) return;
+
+  setMobileTraceList((previous) =>
+    previous.filter((trace) => trace.id !== traceId)
+  );
+
+  if (activeTraceId === traceId) {
+    setActiveTraceId(null);
+    setTraceEditMode(false);
+    setCurrentTracePoints([]);
+    traceDrawingRef.current = false;
+  }
+};
+
+
+/* =========================
+   TRACE — CANVAS POINT
+========================= */
+
+const getMobileTracePoint = (e) => {
+  const stage = e?.target?.getStage();
+
+  if (!stage) return null;
+
+  if (e.evt?.touches?.length) {
+    stage.setPointersPositions(e.evt);
+  }
+
+  const pointer = stage.getPointerPosition();
+
+  if (!pointer) return null;
+
+  const safeScale = Number(scale) || 1;
+
+  return {
+    x: (pointer.x - position.x) / safeScale,
+    y: (pointer.y - position.y) / safeScale,
+  };
+};
+
+
+/* =========================
+   TRACE — FREEHAND DRAWING
+========================= */
+
+const startMobileTraceStroke = (e) => {
+  if (e) e.cancelBubble = true;
+
+  if (!traceEditMode || !activeTraceId) return;
+
+  if (e?.evt?.cancelable) {
+    e.evt.preventDefault();
+  }
+
+  const point = getMobileTracePoint(e);
+
+  if (!point) return;
+
+  traceDrawingRef.current = true;
+
+  setCurrentTracePoints([
+    point.x,
+    point.y,
+  ]);
+};
+
+const moveMobileTraceStroke = (e) => {
+  if (e) e.cancelBubble = true;
+
+  if (!traceEditMode || !traceDrawingRef.current) {
+    return;
+  }
+
+  if (e?.evt?.cancelable) {
+    e.evt.preventDefault();
+  }
+
+  const point = getMobileTracePoint(e);
+
+  if (!point) return;
+
+  setCurrentTracePoints((previous) => [
+    ...previous,
+    point.x,
+    point.y,
+  ]);
+};
+
+const finishMobileTraceStroke = (e) => {
+  if (e) e.cancelBubble = true;
+
+  if (!traceDrawingRef.current) return;
+
+  traceDrawingRef.current = false;
+
+  const points = [...currentTracePoints];
+
+  if (
+    activeTraceId &&
+    points.length >= 4
+  ) {
+    const stroke = {
+      id: `stroke-${Date.now()}`,
+      points,
+      color: "#39c5ff",
+    };
+
+    setMobileTraceList((previous) =>
+      previous.map((trace) =>
+        trace.id === activeTraceId
+          ? {
+              ...trace,
+              strokes: [
+                ...(trace.strokes || []),
+                stroke,
+              ],
+            }
+          : trace
+      )
+    );
+  }
+
+  setCurrentTracePoints([]);
+};
+
+{/* =====================================================
+    MOBILE SELECT MENU
+===================================================== */}
+
+{mobileCommandPanel === "select" && (
+  <>
+    {[
+      {
+        label: "Erase",
+        icon: "🖉",
+        action: () => {
+          const hasSelection =
+            selectedIndex !== null ||
+            selectedIndexes.length > 0 ||
+            selectedMeasurementIndex !== null;
+
+          if (!hasSelection) {
+            window.alert(
+              "Pehle canvas par object select karo."
+            );
+            return;
+          }
+
+          deleteSelected();
+        },
+      },
+      {
+        label: "Copy",
+        icon: "📋",
+        action: () => selectMobileTool("copy"),
+      },
+      {
+        label: "Move",
+        icon: "✥",
+        action: () => selectMobileTool("move"),
+      },
+      {
+        label: "Scale",
+        icon: "⤢",
+        action: () => selectMobileTool("scale"),
+      },
+      {
+        label: "Array",
+        icon: "▦",
+        action: () => selectMobileTool("array"),
+      },
+      {
+        label: "Rotate",
+        icon: "🔄",
+        action: () => selectMobileTool("rotate"),
+      },
+      {
+        label: "Mirror",
+        icon: "🪞",
+        action: () => selectMobileTool("mirror"),
+      },
+      {
+        label: "Trim",
+        icon: "✂",
+        action: () => selectMobileTool("trim"),
+      },
+      {
+        label: "Extend",
+        icon: "↔",
+        action: () => selectMobileTool("extend"),
+      },
+      {
+        label: "Stretch",
+        icon: "↔",
+        action: () => selectMobileTool("stretch"),
+      },
+      {
+        label: "Offset",
+        icon: "⬌",
+        action: () => selectMobileTool("offset"),
+      },
+      {
+        label: "Fillet",
+        icon: "◯",
+        action: () => selectMobileTool("fillet"),
+      },
+      {
+        label: "Chamfer",
+        icon: "◇",
+        action: () => selectMobileTool("chamfer"),
+      },
+      {
+        label: "Explode",
+        icon: "💥",
+        action: () => selectMobileTool("explode"),
+      },
+      {
+        label: "Join",
+        icon: "🔗",
+        action: () => selectMobileTool("join"),
+      },
+    ].map((item) => (
+      <button
+        key={item.label}
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          item.action();
+        }}
+      >
+        {item.icon} {item.label}
+      </button>
+    ))}
+  </>
+)}
 
 /* =========================
    MOBILE FIND
@@ -29168,7 +29648,7 @@ const handleTouchStart = (e) => {
 
 /* =========================
    LINE — MOBILE
-   AUTOCAD STYLE
+   TOUCH ONLY MOVES CURSOR
 ========================= */
 
 if (tool === "line") {
@@ -29180,8 +29660,7 @@ if (tool === "line") {
 
   stage.setPointersPositions(e.evt);
 
-  const pointer =
-    stage.getPointerPosition();
+  const pointer = stage.getPointerPosition();
 
   if (!pointer) {
     return;
@@ -29193,200 +29672,20 @@ if (tool === "line") {
   const rawY =
     (pointer.y - position.y) / scale;
 
-  const snappedPoint =
-    snapToObject(
-      rawX,
-      rawY
-    );
-
-  let x =
-    snappedPoint.x;
-
-  let y =
-    snappedPoint.y;
-
-  /* =========================
-     FIRST TAP
-  ========================= */
-
-  if (!lineStart) {
-    actionStartRef.current = {
-      objects: [...objects],
-      measurements: [...measurements],
-    };
-
-    setLineStart({
-      x,
-      y,
-    });
-
-    setIsDrawing(true);
-
-    setLinePreview({
-      x1: x,
-      y1: y,
-      x2: x,
-      y2: y,
-    });
-
-    setPendingLinePoint(null);
-
-    setLineLengthInput("");
-
-    setShowLineInput(false);
-
-    setMousePosition({
-      x,
-      y,
-    });
-
-    setSnapPoint({
-      x,
-      y,
-    });
-
-    return;
-  }
-
-  /* =========================
-     SECOND / NEXT TAP
-  ========================= */
-
-  let finalX = x;
-  let finalY = y;
-
-  /* =========================
-     ORTHO
-  ========================= */
-
-  if (orthoEnabled) {
-    const orthoPoint =
-      applyOrtho(
-        lineStart.x,
-        lineStart.y,
-        finalX,
-        finalY
-      );
-
-    finalX =
-      orthoPoint.x;
-
-    finalY =
-      orthoPoint.y;
-  }
-
-  /* =========================
-     POLAR
-  ========================= */
-
-  if (polarEnabled) {
-    const polarPoint =
-      applyPolar(
-        lineStart.x,
-        lineStart.y,
-        finalX,
-        finalY
-      );
-
-    finalX =
-      polarPoint.x;
-
-    finalY =
-      polarPoint.y;
-  }
-
-  /* =========================
-     IGNORE ZERO LENGTH
-  ========================= */
-
-  if (
-    lineStart.x === finalX &&
-    lineStart.y === finalY
-  ) {
-    return;
-  }
-
-  /* =========================
-     CREATE LINE
-  ========================= */
-
-  const newLine = {
-    type: "line",
-
-    points: [
-      lineStart.x,
-      lineStart.y,
-      finalX,
-      finalY,
-    ],
-
-    rotation: 0,
-
-    color: "#ffffff",
-
-    strokeWidth: 2,
-
-    layerId: activeLayerId,
-  };
-
-  /* =========================
-     SAVE HISTORY
-  ========================= */
-
-  const previousObjects =
-    [...objects];
-
-  const previousMeasurements =
-    [...measurements];
-
-  setObjects((prev) => [
-    ...prev,
-    newLine,
-  ]);
-
-  saveHistory(
-    previousObjects,
-    previousMeasurements
+  const snappedPoint = snapToObject(
+    rawX,
+    rawY
   );
 
-  /* =========================
-     CONTINUE LINE
-     NEXT SEGMENT STARTS HERE
-  ========================= */
-
-  setLineStart({
-    x: finalX,
-    y: finalY,
+  setMousePosition({
+    x: snappedPoint.x,
+    y: snappedPoint.y,
   });
-
-  setLinePreview({
-    x1: finalX,
-    y1: finalY,
-    x2: finalX,
-    y2: finalY,
-  });
-
-  setPendingLinePoint(null);
-
-  setLineLengthInput("");
-
-  setShowLineInput(false);
-
-  setIsDrawing(true);
 
   setSnapPoint({
-    x: finalX,
-    y: finalY,
+    x: snappedPoint.x,
+    y: snappedPoint.y,
   });
-
-  setSnapType("");
-
-  setMousePosition({
-    x: finalX,
-    y: finalY,
-  });
-
-  actionStartRef.current = null;
 
   return;
 }
@@ -29848,6 +30147,139 @@ const handleTouchEnd = (e) => {
         error
       );
     }
+  }
+};
+
+/* =========================
+   PLOT TO PDF
+========================= */
+
+const plotToPDF = () => {
+  const stage = stageRef.current;
+
+  if (!stage) {
+    window.alert("Drawing canvas is not ready.");
+    return;
+  }
+
+  let printWindow = null;
+
+  try {
+    const imageData = stage.toDataURL({
+      pixelRatio: 2,
+    });
+
+    printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      window.alert(
+        "PDF preview blocked hai. Browser mein pop-ups allow karke dobara try karo."
+      );
+      return;
+    }
+
+    const orientation =
+      stage.width() >= stage.height()
+        ? "landscape"
+        : "portrait";
+
+    printWindow.document.open();
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+          />
+          <title>MyCAD Plot</title>
+
+          <style>
+            @page {
+              size: ${orientation};
+              margin: 8mm;
+            }
+
+            html,
+            body {
+              margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              background: #ffffff;
+            }
+
+            body {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+
+            img {
+              display: block;
+              width: 100%;
+              height: 100%;
+              object-fit: contain;
+            }
+
+            @media print {
+              html,
+              body {
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+              }
+
+              img {
+                max-width: 100%;
+                max-height: 100%;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <img
+            id="plot-image"
+            src="${imageData}"
+            alt="MyCAD drawing"
+          />
+
+          <script>
+            const image = document.getElementById("plot-image");
+
+            function printDrawing() {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+              }, 350);
+            }
+
+            if (image.complete) {
+              printDrawing();
+            } else {
+              image.onload = printDrawing;
+            }
+
+            window.onafterprint = () => {
+              window.close();
+            };
+          <\/script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  } catch (error) {
+    console.error("Plot to PDF failed:", error);
+
+    if (printWindow) {
+      printWindow.close();
+    }
+
+    window.alert("PDF preview open nahi ho paya.");
   }
 };
 
@@ -34311,49 +34743,33 @@ useEffect(() => {
   activeLayerId,
 ]);
 
-    /* =========================
-     SAVE / OPEN DRAWING
-  ========================= */
+ /* =========================
+   SAVE DRAWING
+========================= */
 
-  const saveDrawing = () => {
+const saveDrawing = () => {
+  try {
     const drawingData = {
-      objects: objects,
-      measurements: measurements,
-      layers: layers,
-      activeLayerId: activeLayerId,
+      objects,
+      measurements,
+      layers,
+      activeLayerId,
+      savedAt: Date.now(),
+      drawingName: "Drawing1.dwg",
     };
 
-    const json = JSON.stringify(
-      drawingData,
-      null,
-      2
+    localStorage.setItem(
+      "mycad-autosave",
+      JSON.stringify(drawingData)
     );
 
-    const blob = new Blob(
-      [json],
-      {
-        type: "application/json",
-      }
-    );
+    setSaveMessage("Drawing1.dwg saved.");
+  } catch (error) {
+    console.error("Save failed:", error);
 
-    const url =
-      URL.createObjectURL(blob);
-
-    const link =
-      document.createElement("a");
-
-    link.href = url;
-    link.download =
-      "mycad-drawing.json";
-
-    document.body.appendChild(link);
-
-    link.click();
-
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-  };
+    setSaveMessage("Save failed. Try again.");
+  }
+};
 
  const importDXF = (event) => {
   const file =
@@ -36762,51 +37178,53 @@ if (showHome) {
   </div>
 
 {/* UNDO */}
+
 <button
   type="button"
-  onPointerDown={(e) =>
-    e.stopPropagation()
-  }
-  onTouchStart={(e) =>
-    e.stopPropagation()
-  }
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
   onClick={(e) => {
     e.stopPropagation();
 
-    if (undoActiveLineSegment()) {
-      return;
-    }
-
     try {
+      if (undoActiveLineSegment()) {
+        return;
+      }
+
       undo();
     } catch (error) {
-      console.error(
-        "Undo failed:",
-        error
-      );
+      console.error("Undo failed:", error);
+      window.alert("Undo nahi ho paya.");
     }
   }}
+  title="Undo"
+  aria-label="Undo"
 >
   ↶
 </button>
 
-  {/* REDO */}
-  <button
-    type="button"
-    onPointerDown={(e) => e.stopPropagation()}
-    onTouchStart={(e) => e.stopPropagation()}
-    onClick={(e) => {
-      e.stopPropagation();
+{/* REDO */}
 
-      try {
-        redo();
-      } catch (error) {
-        console.error("Redo failed:", error);
-      }
-    }}
-  >
-    ↷
-  </button>
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    try {
+      redo();
+    } catch (error) {
+      console.error("Redo failed:", error);
+      window.alert("Redo nahi ho paya.");
+    }
+  }}
+  disabled={future.length === 0}
+  title="Redo"
+  aria-label="Redo"
+>
+  ↷
+</button>
 
   {/* SAVE */}
   <button
@@ -36865,42 +37283,655 @@ if (showHome) {
     ⛶
   </button>
 
-{/* MORE / PROPERTIES */}
+{/* MORE — SEND COPY / PLOT PDF */}
+
 <button
   type="button"
-  disabled={
-    !selectedObject ||
-    selectedIndex === null
-  }
-  onPointerDown={(e) =>
-    e.stopPropagation()
-  }
-  onTouchStart={(e) =>
-    e.stopPropagation()
-  }
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
   onClick={(e) => {
     e.stopPropagation();
 
-    if (
-      !selectedObject ||
-      selectedIndex === null
-    ) {
-      return;
-    }
-
+    setShowMobileProperties(false);
     setShowMobileLayers(false);
-    setMobileCommandPanel("home");
-    setCommandText("");
 
-    setShowMobileProperties(
-      (prev) => !prev
-    );
+    setShowMobileFileMenu((prev) => !prev);
   }}
-  title="More / Properties"
+  title="More options"
 >
   ⋮
 </button>
 
+{/* =========================
+   THREE-DOT MENU
+========================= */}
+
+{showMobileFileMenu && (
+  <div
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+    style={{
+      position: "fixed",
+      top: "58px",
+      right: "8px",
+      width: "220px",
+      padding: "6px",
+      background: "#202020",
+      color: "#ffffff",
+      border: "1px solid #414141",
+      borderRadius: "10px",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+      zIndex: 2000000,
+      boxSizing: "border-box",
+    }}
+  >
+    {/* SEND A COPY */}
+
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+
+        setShowMobileFileMenu(false);
+
+        void shareDrawing();
+      }}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        padding: "13px 12px",
+        border: "none",
+        borderRadius: "7px",
+        background: "transparent",
+        color: "#ffffff",
+        textAlign: "left",
+        fontSize: "14px",
+        cursor: "pointer",
+      }}
+    >
+      <span>↗</span>
+      <span>Send a Copy</span>
+    </button>
+
+    {/* PLOT TO PDF */}
+
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+
+        setShowMobileFileMenu(false);
+
+        plotToPDF();
+      }}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        padding: "13px 12px",
+        border: "none",
+        borderRadius: "7px",
+        background: "transparent",
+        color: "#ffffff",
+        textAlign: "left",
+        fontSize: "14px",
+        cursor: "pointer",
+      }}
+    >
+      <span>▤</span>
+      <span>Plot to PDF</span>
+    </button>
+  </div>
+)}
+
+{/* SAVE STATUS MESSAGE */}
+
+{saveMessage && (
+  <div
+    role="status"
+    style={{
+      position: "fixed",
+      left: "16px",
+      bottom: "26%",
+      zIndex: 3000000,
+      background: "#eeeeee",
+      color: "#555555",
+      padding: "8px 12px",
+      borderRadius: "4px",
+      fontSize: "14px",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+      pointerEvents: "none",
+    }}
+  >
+    {saveMessage}
+  </div>
+)}
+
+</div>
+
+{/* MOBILE RIGHT TOOLBAR — 1. PROPERTIES */}
+
+<div
+  className={`mobile-right-toolbar ${
+    mobileRightToolbarCollapsed ? "is-collapsed" : ""
+  }`}
+>
+  <button
+    type="button"
+    className={`mobile-right-tool-button ${
+      showMobileProperties ? "is-active" : ""
+    }`}
+    title="Properties"
+    aria-label="Properties"
+
+    onPointerDown={(e) => {
+      e.stopPropagation();
+    }}
+
+    onTouchStart={(e) => {
+      e.stopPropagation();
+    }}
+
+    onClick={(e) => {
+      e.stopPropagation();
+
+      setShowMobileSettings(false);
+
+       setShowMobileBlocks(false);
+
+      setShowMobileLayers(false);
+      setMobileCommandPanel("home");
+      setCommandText("");
+
+      setShowMobileProperties(
+        (previous) => !previous
+      );
+    }}
+  >
+    <svg
+      viewBox="0 0 32 36"
+      width="36"
+      height="36"
+      aria-hidden="true"
+    >
+      <rect
+        x="5"
+        y="3"
+        width="22"
+        height="29"
+        rx="1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+
+      <rect
+        x="9"
+        y="7"
+        width="14"
+        height="7"
+        fill="none"
+        stroke="#279bce"
+        strokeWidth="1.8"
+      />
+
+      <path
+        d="M8 19 H24 M8 24 H24 M8 29 H24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+
+      <circle cx="13" cy="19" r="1.5" fill="#279bce" />
+      <circle cx="19" cy="24" r="1.5" fill="#279bce" />
+      <circle cx="14" cy="29" r="1.5" fill="#279bce" />
+    </svg>
+  </button>
+
+  {/* 2. TRACE */}
+
+<button
+  type="button"
+  className={`mobile-right-tool-button ${
+    showMobileTrace ? "is-active" : ""
+  }`}
+  title="Trace"
+  aria-label="Trace"
+
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileSettings(false);
+
+    setShowMobileBlocks(false);
+    if (showMobileTrace) {
+      closeMobileTracePanel();
+    } else {
+      setShowMobileTrace(true);
+      setShowMobileLayers(false);
+      setShowMobileProperties(false);
+      setMobileCommandPanel("home");
+      setCommandText("");
+    }
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="36"
+    height="36"
+    aria-hidden="true"
+  >
+    <rect
+      x="4"
+      y="3"
+      width="24"
+      height="29"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+
+    <rect
+      x="9"
+      y="7"
+      width="23"
+      height="24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+
+    <path
+      d="M11 21 C14 12, 17 28, 21 18 S27 15, 29 20"
+      fill="none"
+      stroke="#279bce"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </svg>
+</button>
+
+{/* 3. VIEWS — MODEL / LAYOUTS */}
+
+<button
+  type="button"
+  className={`mobile-right-tool-button ${
+    showMobileViews ? "is-active" : ""
+  }`}
+  title="Views"
+  aria-label="Views"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileSettings(false);
+
+    setShowMobileBlocks(false);
+
+    setShowMobileViews((previous) => !previous);
+
+    setShowMobileLayers(false);
+    setShowMobileProperties(false);
+    setShowMobileTrace(false);
+    setCommandText("");
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="36"
+    height="36"
+    aria-hidden="true"
+  >
+    <rect
+      x="3"
+      y="5"
+      width="30"
+      height="26"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+
+    <path
+      d="M5 18 Q18 5 31 18 Q18 31 5 18 Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    />
+
+    <circle
+      cx="18"
+      cy="18"
+      r="4"
+      fill="none"
+      stroke="#279bce"
+      strokeWidth="2"
+    />
+  </svg>
+</button>
+{/* 4. LAYERS */}
+
+<button
+  type="button"
+  className={`mobile-right-tool-button ${
+    showMobileLayers ? "is-active" : ""
+  }`}
+  title="Layers"
+  aria-label="Layers"
+
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileSettings(false);
+
+    setShowMobileBlocks(false);
+
+    const shouldOpen = !showMobileLayers;
+
+    setShowMobileLayers(shouldOpen);
+    setShowMobileProperties(false);
+    setShowMobileTrace(false);
+    setShowMobileViews(false);
+
+    setMobileCommandPanel("home");
+    setCommandText("");
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="36"
+    height="36"
+    aria-hidden="true"
+  >
+    <path
+      d="M18 3 L32 11 L18 19 L4 11 Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+
+    <path
+      d="M4 17 L18 25 L32 17"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+
+    <path
+      d="M4 23 L18 31 L32 23"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+    />
+  </svg>
+</button>
+
+{/* 5. BLOCKS */}
+
+<button
+  type="button"
+  className={`mobile-right-tool-button ${
+    showMobileBlocks ? "is-active" : ""
+  }`}
+  title="Blocks"
+  aria-label="Blocks"
+
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileSettings(false);
+
+    setShowMobileBlocks((previous) => !previous);
+
+    setShowMobileLayers(false);
+    setShowMobileProperties(false);
+    setShowMobileTrace(false);
+    setShowMobileViews(false);
+
+    setMobileCommandPanel("home");
+    setCommandText("");
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="36"
+    height="36"
+    aria-hidden="true"
+  >
+    <rect
+      x="4"
+      y="4"
+      width="21"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+
+    <circle
+      cx="26"
+      cy="27"
+      r="8"
+      fill="#f3f3f3"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+
+    <path
+      d="M4 10 H25"
+      fill="none"
+      stroke="#279bce"
+      strokeWidth="1.5"
+    />
+  </svg>
+</button>
+
+{/* 6. ATTACHMENTS / REFERENCES */}
+
+<button
+  type="button"
+  className={`mobile-right-tool-button ${
+    showMobileAttachments ? "is-active" : ""
+  }`}
+  title="Attachments / References"
+  aria-label="Attachments"
+
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileSettings(false);
+
+    setShowMobileAttachments((previous) => !previous);
+
+    setShowMobileBlocks(false);
+    setShowMobileLayers(false);
+    setShowMobileProperties(false);
+    setShowMobileTrace(false);
+    setShowMobileViews(false);
+
+    setMobileCommandPanel("home");
+    setCommandText("");
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="36"
+    height="36"
+    aria-hidden="true"
+  >
+    <path
+      d="M5 10 H22 L31 19 V32 H5 Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+
+    <path
+      d="M22 10 V19 H31"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+
+    <path
+      d="M15 10 V7
+         C15 3 9 3 9 8 V23
+         C9 29 18 29 18 23 V12"
+      fill="none"
+      stroke="#279bce"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </svg>
+</button>
+
+{/* 7. SETTINGS */}
+
+<button
+  type="button"
+  className={`mobile-right-tool-button ${
+    showMobileSettings ? "is-active" : ""
+  }`}
+  title="Settings"
+  aria-label="Settings"
+
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileSettings((previous) => !previous);
+
+    setShowMobileAttachments(false);
+    setShowMobileBlocks(false);
+    setShowMobileLayers(false);
+    setShowMobileProperties(false);
+    setShowMobileTrace(false);
+    setShowMobileViews(false);
+
+    setMobileCommandPanel("home");
+    setCommandText("");
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="36"
+    height="36"
+    aria-hidden="true"
+  >
+    <path
+      d="M15 3 H21 L22 7
+         Q24 8 26 9
+         L30 7 L33 12 L30 15
+         Q31 18 30 21
+         L33 24 L30 29 L26 27
+         Q24 29 22 29 L21 33 H15
+         L14 29 Q12 29 10 27
+         L6 29 L3 24 L6 21
+         Q5 18 6 15 L3 12 L6 7
+         L10 9 Q12 8 14 7 Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+
+    <circle
+      cx="18"
+      cy="18"
+      r="6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    />
+
+    <circle
+      cx="18"
+      cy="18"
+      r="2"
+      fill="#279bce"
+    />
+  </svg>
+</button>
+
+{/* COLLAPSE / EXPAND RIGHT TOOLBAR */}
+
+<button
+  type="button"
+  className="mobile-right-toolbar-toggle"
+  title={
+    mobileRightToolbarCollapsed
+      ? "Expand toolbar"
+      : "Collapse toolbar"
+  }
+  aria-label={
+    mobileRightToolbarCollapsed
+      ? "Expand toolbar"
+      : "Collapse toolbar"
+  }
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setMobileRightToolbarCollapsed(
+      (previous) => !previous
+    );
+  }}
+>
+  <svg
+    viewBox="0 0 36 36"
+    width="28"
+    height="28"
+    aria-hidden="true"
+  >
+    {mobileRightToolbarCollapsed ? (
+      <path
+        d="M10 18 L18 10 L26 18 M10 26 L18 18 L26 26"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ) : (
+      <path
+        d="M10 10 L18 18 L26 10 M10 18 L18 26 L26 18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    )}
+  </svg>
+</button>
 
 </div>
       <header className="topbar">
@@ -40575,43 +41606,13 @@ if (
       onTouchStart={(e) => {
         e.cancelBubble = true;
 
-        const stage =
-          e.target.getStage();
+       const snappedPoint = snapToObject(
+  mousePosition.x,
+  mousePosition.y
+);
 
-        if (!stage) {
-          return;
-        }
-
-        stage.setPointersPositions(
-          e.evt
-        );
-
-        const pointer =
-          stage.getPointerPosition();
-
-        if (!pointer) {
-          return;
-        }
-
-        const rawX =
-          (pointer.x - position.x) /
-          scale;
-
-        const rawY =
-          (pointer.y - position.y) /
-          scale;
-
-        const snappedPoint =
-          snapToObject(
-            rawX,
-            rawY
-          );
-
-        const x =
-          snappedPoint.x;
-
-        const y =
-          snappedPoint.y;
+const x = snappedPoint.x;
+const y = snappedPoint.y;
 
         /* =========================
            FIRST TAP
@@ -46032,6 +47033,85 @@ const y = snappedPoint.y;
 
 </Layer>
 
+{/* =========================
+    MOBILE TRACE OVERLAY
+========================= */}
+
+<Layer listening={traceEditMode}>
+  <Group
+    x={position.x}
+    y={position.y}
+    scaleX={scale}
+    scaleY={scale}
+  >
+    {(
+      mobileTraceList.find(
+        (trace) => trace.id === activeTraceId
+      )?.strokes || []
+    ).map((stroke) => (
+      <Line
+        key={stroke.id}
+        points={stroke.points}
+        stroke={stroke.color || "#39c5ff"}
+        strokeWidth={3 / (scale || 1)}
+        lineCap="round"
+        lineJoin="round"
+        listening={false}
+      />
+    ))}
+
+    {traceEditMode &&
+      currentTracePoints.length >= 4 && (
+        <Line
+          points={currentTracePoints}
+          stroke="#39c5ff"
+          strokeWidth={3 / (scale || 1)}
+          lineCap="round"
+          lineJoin="round"
+          listening={false}
+        />
+      )}
+
+    {traceEditMode && (
+      <Rect
+        x={
+          -position.x / (scale || 1)
+        }
+        y={
+          -position.y / (scale || 1)
+        }
+        width={
+          (
+            viewportSize.width <= 768
+              ? viewportSize.width
+              : viewportSize.width - 298
+          ) / (scale || 1)
+        }
+        height={
+          (
+            viewportSize.width <= 768
+              ? viewportSize.height - 87 - 64
+              : viewportSize.height - 87
+          ) / (scale || 1)
+        }
+        fill="rgba(0,0,0,0.001)"
+        strokeEnabled={false}
+        listening={true}
+
+        onMouseDown={startMobileTraceStroke}
+        onMouseMove={moveMobileTraceStroke}
+        onMouseUp={finishMobileTraceStroke}
+        onMouseLeave={finishMobileTraceStroke}
+
+        onTouchStart={startMobileTraceStroke}
+        onTouchMove={moveMobileTraceStroke}
+        onTouchEnd={finishMobileTraceStroke}
+      />
+    )}
+  </Group>
+</Layer>
+
+
 </Stage>
 {/* =========================
     CURSOR COORDINATES
@@ -47075,9 +48155,22 @@ if (e.key === "ArrowDown") {
   </div>
 )}
 
-<div className="mobile-command-status">
+<div
+  className={`mobile-command-status ${
+    mobileCommandPanel === "select"
+      ? "mobile-select-status"
+      : ""
+  }`}
+>
 
-  {tool === "line" ? (
+ {mobileCommandPanel === "select" ? (
+  <>
+    <div>Command:</div>
+    <strong>
+      Select and modify: Tap or drag on the canvas to select
+    </strong>
+  </>
+) : tool === "line" ? (
     <>
       <div>
         Command: _LINE
@@ -47558,59 +48651,69 @@ if (e.key === "ArrowDown") {
   {mobileCommandPanel === "home" && (
     <>
 
-      {/* SELECT */}
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
+     {/* SELECT */}
 
-          setShowMobileProperties(false);
-          setShowMobileLayers(false);
-          setCommandText("");
+<button
+  type="button"
+  title="Select objects"
+  aria-label="Select objects"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
 
-          selectMobileTool("select");
-        }}
-      >
-        🎯 Select
-      </button>
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+    setCommandText("");
+    setMobileCommandPanel("home");
 
-      {/* FIND */}
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
+    selectMobileTool("select");
+  }}
+>
+  🎯 Select
+</button>
 
-          setShowMobileProperties(false);
-          setShowMobileLayers(false);
-          setCommandText("");
+    {/* FIND — WORKING */}
 
-          openMobilePanel("find");
-        }}
-      >
-        🔍 Find
-      </button>
+<button
+  type="button"
+  title="Find objects"
+  aria-label="Find objects"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
 
-      {/* MEASURE */}
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+    setCommandText("");
 
-          setShowMobileProperties(false);
-          setShowMobileLayers(false);
-          setCommandText("");
+    openMobilePanel("find");
+  }}
+>
+  🔍 Find
+</button>
 
-          openMobilePanel("measure");
-        }}
-      >
-        📏 Measure
-      </button>
+  {/* MEASURE — WORKING */}
+
+<button
+  type="button"
+  title="Measurement tools"
+  aria-label="Measurement tools"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={(e) => {
+    e.stopPropagation();
+
+    setShowMobileProperties(false);
+    setShowMobileLayers(false);
+    setCommandText("");
+
+    openMobilePanel("measure");
+  }}
+>
+  📏 Measure
+</button>
 
       {/* DRAW */}
       <button
@@ -48150,19 +49253,55 @@ if (e.key === "ArrowDown") {
         🧹 Clear Layer
       </button>
 
-      {/* RESET VIEW */}
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
+   {/* FULLSCREEN / EXPAND VIEW */}
 
-          resetView();
-        }}
-      >
-        ⛶ Reset View
-      </button>
+<button
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onTouchStart={(e) => e.stopPropagation()}
+  onClick={async (e) => {
+    e.stopPropagation();
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      const target = document.documentElement;
+
+      if (target.requestFullscreen) {
+        await target.requestFullscreen();
+      } else if (target.webkitRequestFullscreen) {
+        target.webkitRequestFullscreen();
+      } else {
+        window.alert("Fullscreen supported nahi hai.");
+      }
+    } catch (error) {
+      console.error("Fullscreen failed:", error);
+      window.alert("Fullscreen open nahi hua.");
+    }
+  }}
+  title="Fullscreen / Expand View"
+  aria-label="Fullscreen / Expand View"
+>
+  <svg
+    width="22"
+    height="22"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+    <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+    <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+    <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+  </svg>
+</button>
 
       {/* ZOOM FIT */}
       <button
@@ -49583,6 +50722,7 @@ if (
 
 <button
   type="button"
+  className="mobile-command-esc"
   onClick={(e) => {
     e.stopPropagation();
 
@@ -49914,8 +51054,9 @@ if (
   ========================= */}
 
   <button
-    type="button"
-    onClick={(e) => {
+  type="button"
+  className="mobile-command-enter"
+  onClick={(e) => {
       e.stopPropagation();
 
       if (showLineInput) {
@@ -50202,6 +51343,1036 @@ if (
 )}
 
 </div>
+
+{/* PROPERTIES — NO OBJECT SELECTED */}
+
+{showMobileProperties && !selectedObject && (
+  <div
+    style={{
+      position: "fixed",
+      left: "10px",
+      right: "10px",
+      bottom: "180px",
+      zIndex: 1200000,
+
+      background: "#171717",
+      color: "#ffffff",
+      border: "1px solid #444444",
+      borderRadius: "10px",
+      padding: "14px",
+      boxSizing: "border-box",
+    }}
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+  >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "12px",
+      }}
+    >
+      <strong>Properties</strong>
+
+      <button
+        type="button"
+        onClick={() => setShowMobileProperties(false)}
+      >
+        ✕
+      </button>
+    </div>
+
+    <p style={{ color: "#bbbbbb", fontSize: "14px" }}>
+      Select an object to view its properties.
+    </p>
+  </div>
+)}
+
+{/* =========================
+    MOBILE TRACE PANEL
+========================= */}
+
+{showMobileTrace && (
+  <div
+    onPointerDown={(e) => e.stopPropagation()}
+    onPointerUp={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onTouchMove={(e) => e.stopPropagation()}
+    onTouchEnd={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+
+    style={{
+      position: "fixed",
+      left: "10px",
+      right: "10px",
+      bottom: "180px",
+      zIndex: 1200003,
+
+      maxHeight: "55vh",
+      overflowY: "auto",
+      boxSizing: "border-box",
+      padding: "12px",
+
+      background: "#171717",
+      color: "#fff",
+      border: "1px solid #444",
+      borderRadius: "10px",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+
+      pointerEvents: "auto",
+      touchAction: "pan-y",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: "8px",
+      }}
+    >
+      <strong>Trace</strong>
+
+      <button
+        type="button"
+        onClick={closeMobileTracePanel}
+      >
+        ✕
+      </button>
+    </div>
+
+    <p
+      style={{
+        color: "#bbb",
+        fontSize: "13px",
+        margin: "6px 0 12px",
+      }}
+    >
+      Add markup without changing the original drawing.
+    </p>
+
+    <button
+      type="button"
+      onClick={createMobileTrace}
+      style={{
+        width: "100%",
+        minHeight: "42px",
+        marginBottom: "12px",
+        background: "#1976a8",
+        color: "#fff",
+        border: "none",
+        borderRadius: "5px",
+      }}
+    >
+      ＋ New Trace
+    </button>
+
+    {traceEditMode && (
+      <div
+        style={{
+          padding: "10px",
+          marginBottom: "12px",
+          background: "#183344",
+          borderRadius: "6px",
+        }}
+      >
+        <div style={{ marginBottom: "8px" }}>
+          Editing:{" "}
+          {mobileTraceList.find(
+            (trace) => trace.id === activeTraceId
+          )?.name || "Trace"}
+        </div>
+
+        <div
+          style={{
+            fontSize: "12px",
+            color: "#b9dff3",
+            marginBottom: "10px",
+          }}
+        >
+          Finger se canvas par draw karo.
+        </div>
+
+        <button
+          type="button"
+          onClick={finishMobileTrace}
+          style={{
+            width: "100%",
+            minHeight: "40px",
+            background: "#238751",
+            color: "#fff",
+            border: "none",
+            borderRadius: "5px",
+          }}
+        >
+          ✓ Finish Trace
+        </button>
+      </div>
+    )}
+
+    {mobileTraceList.length === 0 && (
+      <div
+        style={{
+          color: "#aaa",
+          fontSize: "13px",
+          padding: "8px 0",
+        }}
+      >
+        Abhi koi trace nahi hai. New Trace dabao.
+      </div>
+    )}
+
+    {mobileTraceList.map((trace) => (
+      <div
+        key={trace.id}
+        style={{
+          padding: "10px",
+          marginBottom: "8px",
+          background: "#242424",
+          border: "1px solid #444",
+          borderRadius: "6px",
+        }}
+      >
+        <strong>{trace.name}</strong>
+
+        <div
+          style={{
+            fontSize: "12px",
+            color: "#aaa",
+            marginTop: "4px",
+            marginBottom: "8px",
+          }}
+        >
+          {(trace.strokes || []).length} markup stroke(s)
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "6px",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => openMobileTrace(trace)}
+          >
+            View
+          </button>
+
+          <button
+            type="button"
+            onClick={() => editMobileTrace(trace)}
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            onClick={() => deleteMobileTrace(trace.id)}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+
+{/* =========================
+    MOBILE VIEWS PANEL
+========================= */}
+
+{showMobileViews && (
+  <div
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+    style={{
+      position: "fixed",
+      left: "10px",
+      right: "10px",
+      bottom: "180px",
+      zIndex: 1200004,
+
+      padding: "14px",
+      boxSizing: "border-box",
+      background: "#171717",
+      color: "#ffffff",
+      border: "1px solid #444444",
+      borderRadius: "10px",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+
+      maxHeight: "55vh",
+      overflowY: "auto",
+      pointerEvents: "auto",
+    }}
+  >
+    {/* PANEL HEADER */}
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: "12px",
+      }}
+    >
+      <strong>Views</strong>
+
+      <button
+        type="button"
+        onClick={() => setShowMobileViews(false)}
+      >
+        ✕
+      </button>
+    </div>
+
+    {/* CURRENT MODEL SPACE */}
+
+    <button
+      type="button"
+      onClick={() => {
+        setShowMobileViews(false);
+      }}
+      style={{
+        width: "100%",
+        minHeight: "48px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 12px",
+        marginBottom: "8px",
+
+        color: "#ffffff",
+        background: "#183344",
+        border: "1px solid #279bce",
+        borderRadius: "6px",
+        textAlign: "left",
+      }}
+    >
+      <span>▦ Model Space</span>
+      <span style={{ color: "#62c8f5" }}>✓ Current</span>
+    </button>
+
+    {/* PAPER SPACE STATUS */}
+
+    <div
+      style={{
+        padding: "12px",
+        background: "#242424",
+        border: "1px solid #444444",
+        borderRadius: "6px",
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: "6px" }}>
+        ▱ Paper Layouts
+      </div>
+
+      <div
+        style={{
+          color: "#b5b5b5",
+          fontSize: "13px",
+          lineHeight: 1.5,
+        }}
+      >
+        Layout 1 / Layout 2 abhi MyCAD mein implement nahi
+        hue hain. Inke liye alag paper-space canvas aur
+        viewport system banana hoga.
+      </div>
+    </div>
+  </div>
+)}
+
+{/* =========================
+    MOBILE BLOCKS PANEL
+========================= */}
+
+{showMobileBlocks && (
+  <div
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+    style={{
+      position: "fixed",
+      left: "10px",
+      right: "10px",
+      bottom: "180px",
+      zIndex: 1200005,
+
+      padding: "12px",
+      boxSizing: "border-box",
+      background: "#171717",
+      color: "#fff",
+      border: "1px solid #444",
+      borderRadius: "10px",
+      maxHeight: "55vh",
+      overflowY: "auto",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+      pointerEvents: "auto",
+    }}
+  >
+    {/* HEADER */}
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: "12px",
+      }}
+    >
+      <strong>Blocks</strong>
+
+      <button
+        type="button"
+        onClick={() => setShowMobileBlocks(false)}
+      >
+        ✕
+      </button>
+    </div>
+
+    {/* CREATE BLOCK FROM SELECTION */}
+
+    <button
+      type="button"
+      onClick={() => {
+        const pickedIndexes =
+          selectedIndexes.length > 0
+            ? [...selectedIndexes]
+            : selectedIndex !== null
+              ? [selectedIndex]
+              : [];
+
+        const validIndexes = pickedIndexes.filter(
+          (index) =>
+            index >= 0 &&
+            index < objects.length &&
+            objects[index]
+        );
+
+        if (validIndexes.length === 0) {
+          window.alert(
+            "Pehle canvas par object select karo."
+          );
+          return;
+        }
+
+        const lockedIndex = validIndexes.find(
+          (index) => isObjectLocked(index)
+        );
+
+        if (lockedIndex !== undefined) {
+          window.alert(
+            "Selected objects mein locked object hai."
+          );
+          return;
+        }
+
+        const suggestedName =
+          `Block ${Array.from(
+            new Set(
+              objects
+                .map((object) => object?.blockId)
+                .filter(Boolean)
+            )
+          ).length + 1}`;
+
+        const enteredName = window.prompt(
+          "Block ka naam:",
+          suggestedName
+        );
+
+        if (enteredName === null) return;
+
+        const blockName =
+          enteredName.trim() || suggestedName;
+
+        const blockId =
+          `block-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 7)}`;
+
+        saveHistory(
+          [...objects],
+          [...measurements]
+        );
+
+        setObjects((previous) =>
+          previous.map((object, index) =>
+            validIndexes.includes(index)
+              ? {
+                  ...object,
+                  blockId,
+                  blockName,
+                  groupId: blockId,
+                }
+              : object
+          )
+        );
+
+        setSelectedIndexes(validIndexes);
+        setSelectedIndex(
+          validIndexes[validIndexes.length - 1]
+        );
+        setFuture([]);
+      }}
+      style={{
+        width: "100%",
+        minHeight: "44px",
+        marginBottom: "12px",
+        background: "#1976a8",
+        color: "#fff",
+        border: "none",
+        borderRadius: "5px",
+      }}
+    >
+      ＋ Create Block from Selection
+    </button>
+
+    {/* EXISTING BLOCKS */}
+
+    {Array.from(
+      new Set(
+        objects
+          .map((object) => object?.blockId)
+          .filter(Boolean)
+      )
+    ).map((blockId) => {
+      const members = objects.filter(
+        (object) => object?.blockId === blockId
+      );
+
+      const firstObject = members[0];
+
+      const blockName =
+        firstObject?.blockName || "Unnamed Block";
+
+      const selectThisBlock = () => {
+        const indexes = objects
+          .map((object, index) =>
+            object?.blockId === blockId
+              ? index
+              : -1
+          )
+          .filter((index) => index >= 0);
+
+        setSelectedIndexes(indexes);
+        setSelectedIndex(
+          indexes.length > 0
+            ? indexes[indexes.length - 1]
+            : null
+        );
+
+        changeTool("select");
+        setShowMobileBlocks(false);
+      };
+
+      const renameThisBlock = () => {
+        const nextName = window.prompt(
+          "Block ka naya naam:",
+          blockName
+        );
+
+        if (nextName === null) return;
+
+        const trimmedName = nextName.trim();
+
+        if (!trimmedName) {
+          window.alert("Block ka naam khali nahi ho sakta.");
+          return;
+        }
+
+        saveHistory(
+          [...objects],
+          [...measurements]
+        );
+
+        setObjects((previous) =>
+          previous.map((object) =>
+            object?.blockId === blockId
+              ? {
+                  ...object,
+                  blockName: trimmedName,
+                }
+              : object
+          )
+        );
+
+        setFuture([]);
+      };
+
+      const deleteThisBlock = () => {
+        const confirmed = window.confirm(
+          `Block "${blockName}" ke objects delete karne hain?`
+        );
+
+        if (!confirmed) return;
+
+        saveHistory(
+          [...objects],
+          [...measurements]
+        );
+
+        setObjects((previous) =>
+          previous.filter(
+            (object) => object?.blockId !== blockId
+          )
+        );
+
+        setSelectedIndex(null);
+        setSelectedIndexes([]);
+        setFuture([]);
+      };
+
+      return (
+        <div
+          key={blockId}
+          style={{
+            padding: "10px",
+            marginBottom: "8px",
+            background: "#242424",
+            border: "1px solid #444",
+            borderRadius: "6px",
+          }}
+        >
+          <strong>{blockName}</strong>
+
+          <div
+            style={{
+              color: "#aaa",
+              fontSize: "12px",
+              marginTop: "4px",
+              marginBottom: "9px",
+            }}
+          >
+            {members.length} object(s)
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              flexWrap: "wrap",
+            }}
+          >
+            <button type="button" onClick={selectThisBlock}>
+              Select
+            </button>
+
+            <button type="button" onClick={renameThisBlock}>
+              Rename
+            </button>
+
+            <button type="button" onClick={deleteThisBlock}>
+              Delete
+            </button>
+          </div>
+        </div>
+      );
+    })}
+
+    {!objects.some((object) => object?.blockId) && (
+      <div
+        style={{
+          color: "#aaa",
+          fontSize: "13px",
+          lineHeight: 1.5,
+        }}
+      >
+        Abhi koi block nahi hai. Pehle canvas par objects
+        select karke “Create Block from Selection” dabao.
+      </div>
+    )}
+  </div>
+)}
+
+{/* =========================
+    MOBILE ATTACHMENTS PANEL
+========================= */}
+
+{showMobileAttachments && (
+  <div
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+    style={{
+      position: "fixed",
+      left: "10px",
+      right: "10px",
+      bottom: "180px",
+      zIndex: 1200006,
+
+      padding: "12px",
+      boxSizing: "border-box",
+      background: "#171717",
+      color: "#fff",
+      border: "1px solid #444",
+      borderRadius: "10px",
+      maxHeight: "55vh",
+      overflowY: "auto",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+      pointerEvents: "auto",
+    }}
+  >
+    {/* HEADER */}
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: "12px",
+      }}
+    >
+      <strong>Attachments / References</strong>
+
+      <button
+        type="button"
+        onClick={() => setShowMobileAttachments(false)}
+      >
+        ✕
+      </button>
+    </div>
+
+    {/* HIDDEN FILE INPUT */}
+
+    <input
+      ref={attachmentInputRef}
+      type="file"
+      accept="image/*,application/pdf"
+      onChange={handleMobileAttachment}
+      style={{ display: "none" }}
+    />
+
+    {/* ATTACH BUTTON */}
+
+    <button
+      type="button"
+      onClick={() => attachmentInputRef.current?.click()}
+      style={{
+        width: "100%",
+        minHeight: "44px",
+        marginBottom: "12px",
+        background: "#1976a8",
+        color: "#fff",
+        border: "none",
+        borderRadius: "5px",
+      }}
+    >
+      📎 Attach Image / PDF
+    </button>
+
+    {/* EMPTY STATE */}
+
+    {mobileAttachments.length === 0 && (
+      <div
+        style={{
+          color: "#aaa",
+          fontSize: "13px",
+          lineHeight: 1.5,
+        }}
+      >
+        Abhi koi file attach nahi hai. Upar wale button
+        se image ya PDF select karo.
+      </div>
+    )}
+
+    {/* ATTACHMENT LIST */}
+
+    {mobileAttachments.map((attachment) => (
+      <div
+        key={attachment.id}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px",
+          marginBottom: "8px",
+          background: "#242424",
+          border: "1px solid #444",
+          borderRadius: "6px",
+          minWidth: 0,
+        }}
+      >
+        {attachment.type.startsWith("image/") ? (
+          <img
+            src={attachment.dataUrl}
+            alt=""
+            style={{
+              width: "48px",
+              height: "48px",
+              objectFit: "cover",
+              borderRadius: "4px",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              background: "#343434",
+              borderRadius: "4px",
+              color: "#80ccf2",
+              fontSize: "14px",
+            }}
+          >
+            PDF
+          </div>
+        )}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: "13px",
+              overflowWrap: "anywhere",
+              marginBottom: "4px",
+            }}
+          >
+            {attachment.name}
+          </div>
+
+          <div style={{ fontSize: "11px", color: "#aaa" }}>
+            {(attachment.size / 1024).toFixed(0)} KB
+          </div>
+
+          <a
+            href={attachment.dataUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-block",
+              marginTop: "6px",
+              color: "#63c4f3",
+              fontSize: "13px",
+            }}
+          >
+            Open file
+          </a>
+        </div>
+
+        <button
+          type="button"
+          title="Remove attachment"
+          onClick={() => {
+            const confirmed = window.confirm(
+              `"${attachment.name}" attachment remove karein?`
+            );
+
+            if (!confirmed) return;
+
+            setMobileAttachments((previous) =>
+              previous.filter(
+                (item) => item.id !== attachment.id
+              )
+            );
+          }}
+        >
+          🗑
+        </button>
+      </div>
+    ))}
+  </div>
+)}
+
+{/* =========================
+    MOBILE SETTINGS PANEL
+========================= */}
+
+{showMobileSettings && (
+  <div
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
+    onClick={(e) => e.stopPropagation()}
+    style={{
+      position: "fixed",
+      left: "10px",
+      right: "10px",
+      bottom: "180px",
+      zIndex: 1200007,
+
+      padding: "14px",
+      boxSizing: "border-box",
+      background: "#171717",
+      color: "#fff",
+      border: "1px solid #444",
+      borderRadius: "10px",
+      maxHeight: "55vh",
+      overflowY: "auto",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+      pointerEvents: "auto",
+    }}
+  >
+    {/* HEADER */}
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: "14px",
+      }}
+    >
+      <strong>Drawing Settings</strong>
+
+      <button
+        type="button"
+        onClick={() => setShowMobileSettings(false)}
+      >
+        ✕
+      </button>
+    </div>
+
+    {/* SETTINGS TOGGLE */}
+
+    {[
+      {
+        label: "Grid",
+        description: "Canvas grid show / hide",
+        enabled: gridEnabled,
+        toggle: () =>
+          setGridEnabled((previous) => !previous),
+      },
+      {
+        label: "Grid Snap",
+        description: "Cursor ko grid points par snap karo",
+        enabled: gridSnapEnabled,
+        toggle: () =>
+          setGridSnapEnabled((previous) => !previous),
+      },
+      {
+        label: "Ortho",
+        description: "Straight horizontal / vertical drawing",
+        enabled: orthoEnabled,
+        toggle: () =>
+          setOrthoEnabled((previous) => !previous),
+      },
+      {
+        label: "Polar Tracking",
+        description: "Fixed angles par drawing guide",
+        enabled: polarEnabled,
+        toggle: () =>
+          setPolarEnabled((previous) => !previous),
+      },
+      {
+        label: "Dynamic Input",
+        description: "Drawing ke dauran live input",
+        enabled: dynamicInputEnabled,
+        toggle: () =>
+          setDynamicInputEnabled((previous) => !previous),
+      },
+      {
+        label: "Object Snap Tracking",
+        description: "Object snap points se alignment",
+        enabled: objectSnapTrackingEnabled,
+        toggle: () =>
+          setObjectSnapTrackingEnabled((previous) => !previous),
+      },
+    ].map((setting) => (
+      <div
+        key={setting.label}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          padding: "11px 0",
+          borderBottom: "1px solid #353535",
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "14px", fontWeight: 600 }}>
+            {setting.label}
+          </div>
+
+          <div
+            style={{
+              color: "#aaa",
+              fontSize: "11px",
+              marginTop: "4px",
+              lineHeight: 1.4,
+            }}
+          >
+            {setting.description}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          aria-pressed={setting.enabled}
+          onClick={setting.toggle}
+          style={{
+            minWidth: "66px",
+            minHeight: "34px",
+            padding: "6px 10px",
+            border: "none",
+            borderRadius: "18px",
+            background: setting.enabled
+              ? "#1976a8"
+              : "#444",
+            color: "#fff",
+            fontSize: "12px",
+            fontWeight: 600,
+          }}
+        >
+          {setting.enabled ? "ON" : "OFF"}
+        </button>
+      </div>
+    ))}
+
+    {/* POLAR ANGLE */}
+
+    <div
+      style={{
+        marginTop: "14px",
+        padding: "10px",
+        background: "#242424",
+        borderRadius: "6px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "14px",
+          fontWeight: 600,
+          marginBottom: "8px",
+        }}
+      >
+        Polar Angle Step
+      </div>
+
+      <div style={{ display: "flex", gap: "6px" }}>
+        {[15, 30, 45, 90].map((angle) => (
+          <button
+            key={angle}
+            type="button"
+            onClick={() => setPolarAngleStep(angle)}
+            style={{
+              flex: 1,
+              minHeight: "38px",
+              border: "1px solid #555",
+              borderRadius: "5px",
+              background:
+                polarAngleStep === angle
+                  ? "#1976a8"
+                  : "#333",
+              color: "#fff",
+            }}
+          >
+            {angle}°
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
+
 
 {showMobileProperties &&
   selectedObject && (
