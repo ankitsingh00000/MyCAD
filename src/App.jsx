@@ -48651,7 +48651,7 @@ if (e.key === "ArrowDown") {
   {mobileCommandPanel === "home" && (
     <>
 
-     {/* SELECT */}
+  {/* SELECT */}
 
 <button
   type="button"
@@ -48664,10 +48664,16 @@ if (e.key === "ArrowDown") {
 
     setShowMobileProperties(false);
     setShowMobileLayers(false);
-    setCommandText("");
-    setMobileCommandPanel("home");
+    setShowMobileTrace(false);
+    setShowMobileViews(false);
+    setShowMobileBlocks(false);
+    setShowMobileAttachments(false);
+    setShowMobileSettings(false);
 
-    selectMobileTool("select");
+    setCommandText("");
+
+    changeTool("select");
+    setMobileCommandPanel("select");
   }}
 >
   🎯 Select
@@ -49683,6 +49689,194 @@ if (e.key === "ArrowDown") {
       </button>
     </>
   )}
+
+  {/* =====================================================
+    MOBILE SELECT MENU
+===================================================== */}
+
+{mobileCommandPanel === "select" && (
+  <>
+    {/* 1. ERASE */}
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+
+        const hasSelection =
+          selectedIndex !== null ||
+          selectedIndexes.length > 0 ||
+          selectedMeasurementIndex !== null;
+
+        if (!hasSelection) {
+          window.alert(
+            "Pehle canvas par object select karo."
+          );
+          return;
+        }
+
+        deleteSelected();
+      }}
+    >
+      🖉 Erase
+    </button>
+
+    {/* 2. COPY */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("copy");
+      }}
+    >
+      📋 Copy
+    </button>
+
+    {/* 3. MOVE */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("move");
+      }}
+    >
+      ✥ Move
+    </button>
+
+    {/* 4. SCALE */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("scale");
+      }}
+    >
+      ⤢ Scale
+    </button>
+
+    {/* 5. ARRAY */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("array");
+      }}
+    >
+      ▦ Array
+    </button>
+
+    {/* 6. ROTATE */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("rotate");
+      }}
+    >
+      🔄 Rotate
+    </button>
+
+    {/* 7. MIRROR */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("mirror");
+      }}
+    >
+      🪞 Mirror
+    </button>
+
+    {/* 8. TRIM */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("trim");
+      }}
+    >
+      ✂ Trim
+    </button>
+
+    {/* 9. EXTEND */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("extend");
+      }}
+    >
+      ↔ Extend
+    </button>
+
+    {/* 10. STRETCH */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("stretch");
+      }}
+    >
+      ↔ Stretch
+    </button>
+
+    {/* 11. OFFSET */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("offset");
+      }}
+    >
+      ⬌ Offset
+    </button>
+
+    {/* 12. FILLET */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("fillet");
+      }}
+    >
+      ◯ Fillet
+    </button>
+
+    {/* 13. CHAMFER */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("chamfer");
+      }}
+    >
+      ◇ Chamfer
+    </button>
+
+    {/* 14. EXPLODE */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("explode");
+      }}
+    >
+      💥 Explode
+    </button>
+
+    {/* 15. JOIN */}
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        selectMobileTool("join");
+      }}
+    >
+      🔗 Join
+    </button>
+  </>
+)}
 
   {/* =====================================================
      MOBILE DRAW
