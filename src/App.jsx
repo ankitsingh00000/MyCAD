@@ -8177,30 +8177,59 @@ if (tool === "line") {
     return;
   }
 
-  /* =========================
-   AUTO 90 DEGREE LOCK
-   FINAL LINE
+ /* =========================
+   AUTO STRAIGHT LOCK
+   FINAL LINE — ZOOM INDEPENDENT
 ========================= */
 
 if (
   !orthoEnabled &&
   !polarEnabled
 ) {
-  const lockedPoint =
-    applyAuto90Lock(
-      lineStart.x,
-      lineStart.y,
-      finalX,
-      finalY
-    );
+  const dx =
+    finalX - lineStart.x;
 
-  finalX =
-    lockedPoint.x;
+  const dy =
+    finalY - lineStart.y;
 
-  finalY =
-    lockedPoint.y;
+  const distance =
+    Math.hypot(dx, dy);
+
+  if (distance > 0) {
+    const angle =
+      Math.atan2(dy, dx) *
+      (180 / Math.PI);
+
+    const normalizedAngle =
+      (angle + 360) % 360;
+
+    const horizontal =
+      normalizedAngle <= 6 ||
+      normalizedAngle >= 354 ||
+      (
+        normalizedAngle >= 174 &&
+        normalizedAngle <= 186
+      );
+
+    const vertical =
+      (
+        normalizedAngle >= 84 &&
+        normalizedAngle <= 96
+      ) ||
+      (
+        normalizedAngle >= 264 &&
+        normalizedAngle <= 276
+      );
+
+    if (horizontal) {
+      finalY = lineStart.y;
+    }
+
+    if (vertical) {
+      finalX = lineStart.x;
+    }
+  }
 }
-
 
   /* =========================
      ORTHO
