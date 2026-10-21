@@ -5092,6 +5092,56 @@ const applyOrtho = (
   };
 };
 
+/* =========================
+   AUTO 90 DEGREE LOCK
+   0 / 90 / 180 / 270
+========================= */
+
+const applyAuto90Lock = (
+  startX,
+  startY,
+  currentX,
+  currentY
+) => {
+  const dx = currentX - startX;
+  const dy = currentY - startY;
+
+  const distance = Math.hypot(dx, dy);
+
+  if (distance <= 0) {
+    return {
+      x: currentX,
+      y: currentY,
+    };
+  }
+
+  const angle =
+    Math.atan2(dy, dx) *
+    (180 / Math.PI);
+
+  const normalizedAngle =
+    (angle + 360) % 360;
+
+  const snappedAngle =
+    Math.round(normalizedAngle / 90) * 90;
+
+  const angleRadians =
+    (snappedAngle % 360) *
+    (Math.PI / 180);
+
+  return {
+    x:
+      startX +
+      Math.cos(angleRadians) *
+        distance,
+
+    y:
+      startY +
+      Math.sin(angleRadians) *
+        distance,
+  };
+};
+
 const applyPolar = (
   startX,
   startY,
@@ -8127,59 +8177,29 @@ if (tool === "line") {
     return;
   }
 
-    /* =========================
-     AUTO STRAIGHT LOCK
-     FINAL LINE — ZOOM INDEPENDENT
-  ========================= */
+  /* =========================
+   AUTO 90 DEGREE LOCK
+   FINAL LINE
+========================= */
 
-  if (
-    !orthoEnabled &&
-    !polarEnabled
-  ) {
-    const dx =
-      finalX - lineStart.x;
+if (
+  !orthoEnabled &&
+  !polarEnabled
+) {
+  const lockedPoint =
+    applyAuto90Lock(
+      lineStart.x,
+      lineStart.y,
+      finalX,
+      finalY
+    );
 
-    const dy =
-      finalY - lineStart.y;
+  finalX =
+    lockedPoint.x;
 
-    const distance =
-      Math.hypot(dx, dy);
-
-    if (distance > 0) {
-      const angle =
-        Math.atan2(dy, dx) *
-        (180 / Math.PI);
-
-      const normalizedAngle =
-        (angle + 360) % 360;
-
-      const horizontal =
-        normalizedAngle <= 6 ||
-        normalizedAngle >= 354 ||
-        (
-          normalizedAngle >= 174 &&
-          normalizedAngle <= 186
-        );
-
-      const vertical =
-        (
-          normalizedAngle >= 84 &&
-          normalizedAngle <= 96
-        ) ||
-        (
-          normalizedAngle >= 264 &&
-          normalizedAngle <= 276
-        );
-
-      if (horizontal) {
-        finalY = lineStart.y;
-      }
-
-      if (vertical) {
-        finalX = lineStart.x;
-      }
-    }
-  }
+  finalY =
+    lockedPoint.y;
+}
 
 
   /* =========================
@@ -29952,6 +29972,30 @@ if (tool === "line") {
   let previewY =
     snappedPoint.y;
 
+    /* =========================
+   AUTO 90 DEGREE LOCK
+========================= */
+
+if (
+  lineStart &&
+  !orthoEnabled &&
+  !polarEnabled
+) {
+  const lockedPoint =
+    applyAuto90Lock(
+      lineStart.x,
+      lineStart.y,
+      previewX,
+      previewY
+    );
+
+  previewX =
+    lockedPoint.x;
+
+  previewY =
+    lockedPoint.y;
+}
+
   /* =========================
      ORTHO PREVIEW
   ========================= */
@@ -41423,7 +41467,7 @@ if (
       stroke="#d0d6df"
       strokeWidth={0.9}
       strokeScaleEnabled={false}
-      dash={[1 / scale, 3 / scale]}
+      dash={[3, 3]}
       lineCap="round"
       listening={false}
     />
