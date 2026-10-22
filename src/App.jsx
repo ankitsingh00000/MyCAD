@@ -7129,23 +7129,23 @@ if (tool === "polyline") {
     const normalizedAngle =
       (angle + 360) % 360;
 
-    const horizontal =
-      normalizedAngle <= 6 ||
-      normalizedAngle >= 354 ||
-      (
-        normalizedAngle >= 174 &&
-        normalizedAngle <= 186
-      );
+   const horizontal =
+  normalizedAngle <= 3 ||
+  normalizedAngle >= 357 ||
+  (
+    normalizedAngle >= 177 &&
+    normalizedAngle <= 183
+  );
 
-    const vertical =
-      (
-        normalizedAngle >= 84 &&
-        normalizedAngle <= 96
-      ) ||
-      (
-        normalizedAngle >= 264 &&
-        normalizedAngle <= 276
-      );
+const vertical =
+  (
+    normalizedAngle >= 87 &&
+    normalizedAngle <= 93
+  ) ||
+  (
+    normalizedAngle >= 267 &&
+    normalizedAngle <= 273
+  );
 
     if (horizontal) {
       finalY = lineStart.y;
@@ -8203,23 +8203,23 @@ if (
     const normalizedAngle =
       (angle + 360) % 360;
 
-    const horizontal =
-      normalizedAngle <= 6 ||
-      normalizedAngle >= 354 ||
-      (
-        normalizedAngle >= 174 &&
-        normalizedAngle <= 186
-      );
+   const horizontal =
+  normalizedAngle <= 3 ||
+  normalizedAngle >= 357 ||
+  (
+    normalizedAngle >= 177 &&
+    normalizedAngle <= 183
+  );
 
-    const vertical =
-      (
-        normalizedAngle >= 84 &&
-        normalizedAngle <= 96
-      ) ||
-      (
-        normalizedAngle >= 264 &&
-        normalizedAngle <= 276
-      );
+const vertical =
+  (
+    normalizedAngle >= 87 &&
+    normalizedAngle <= 93
+  ) ||
+  (
+    normalizedAngle >= 267 &&
+    normalizedAngle <= 273
+  );
 
     if (horizontal) {
       finalY = lineStart.y;
@@ -8939,23 +8939,23 @@ if (
     const normalizedAngle =
       (angle + 360) % 360;
 
-    const horizontal =
-      normalizedAngle <= 6 ||
-      normalizedAngle >= 354 ||
-      (
-        normalizedAngle >= 174 &&
-        normalizedAngle <= 186
-      );
+  const horizontal =
+  normalizedAngle <= 3 ||
+  normalizedAngle >= 357 ||
+  (
+    normalizedAngle >= 177 &&
+    normalizedAngle <= 183
+  );
 
-    const vertical =
-      (
-        normalizedAngle >= 84 &&
-        normalizedAngle <= 96
-      ) ||
-      (
-        normalizedAngle >= 264 &&
-        normalizedAngle <= 276
-      );
+const vertical =
+  (
+    normalizedAngle >= 87 &&
+    normalizedAngle <= 93
+  ) ||
+  (
+    normalizedAngle >= 267 &&
+    normalizedAngle <= 273
+  );
 
     if (horizontal) {
       previewY =
@@ -30001,29 +30001,7 @@ if (tool === "line") {
   let previewY =
     snappedPoint.y;
 
-    /* =========================
-   AUTO 90 DEGREE LOCK
-========================= */
-
-if (
-  lineStart &&
-  !orthoEnabled &&
-  !polarEnabled
-) {
-  const lockedPoint =
-    applyAuto90Lock(
-      lineStart.x,
-      lineStart.y,
-      previewX,
-      previewY
-    );
-
-  previewX =
-    lockedPoint.x;
-
-  previewY =
-    lockedPoint.y;
-}
+ 
 
   /* =========================
      ORTHO PREVIEW
